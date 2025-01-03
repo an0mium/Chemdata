@@ -31,3 +31,4 @@ wheels/
 .vscode/
 .idea/
 
+venv/
