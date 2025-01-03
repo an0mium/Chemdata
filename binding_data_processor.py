@@ -678,12 +678,9 @@ class BindingDataProcessor:
                     # Clean compound name for web searches
                     clean_name = self._clean_name(str(name))
                     
-                    # Get identifiers
-                    identifiers = self.web_client._extract_identifiers(str(name))
-                    clean_name = identifiers[0]
-                    chembl_id = identifiers[1]
-                    cas_number = identifiers[2]
-                    patent_id = identifiers[3]
+                    # Get identifiers using imported function
+                    from web_enrichment.name_utils import extract_identifiers
+                    clean_name, chembl_id, cas_number, patent_id = extract_identifiers(str(name))
                     
                     # If patent example, extract identifiers using LLM
                     if patent_id and llm_api_key:
