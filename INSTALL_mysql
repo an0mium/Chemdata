@@ -1,0 +1,33 @@
+***************************************************************************
+*
+* Name:         INSTALL
+*
+* Purpose:      To describe how to import BindingDB data into an
+*               MySQL database.
+*
+* Date:         12/30/2024
+*
+* Contact:      bindingdb@gmail.com
+*
+***************************************************************************
+*
+* DB Version    BDB-mySQL_All_202501
+* MySQL         8.0.26 ( Tested in 5.6.34 )
+*
+***************************************************************************
+
+Instructions
+------------
+
+1. Log into MySQL database server where you intend to load chembl data and
+   run the following command to create new database:
+
+    mysql> create database bind;
+
+2. Logout of database and run the following command to load data. You will
+   need to replace USERNAME, PASSWORD, HOST and PORT with local settings.
+   Depending on your database setup you may not need the host and port
+   arguments.
+
+    $> mysql -uUSERNAME -pPASSWORD [-hHOST -PPORT] bind < BDB-mySQL_All_202501.dmp
+

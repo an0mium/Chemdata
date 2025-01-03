@@ -3,7 +3,7 @@
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, urljoin
 
 import requests
@@ -11,7 +11,7 @@ from requests.exceptions import RequestException
 
 from cache_manager import CacheManager
 from config import (API_RATE_LIMIT, CIRCUIT_BREAKER, MAX_RETRIES, PUBCHEM_BASE_URL,
-                   RETRY_DELAY)
+                   PUBMED_BASE_URL, RETRY_DELAY, SERP_API_KEY)
 from logger import LogManager
 
 
@@ -187,8 +187,59 @@ class PubChemClient(APIClient):
         Returns:
             Compound data
         """
-        endpoint = f"compound/name/{quote(name)}/JSON"
-        return self._make_request('GET', endpoint)
+        # First get CID
+        endpoint = f"compound/name/{quote(name)}/cids/JSON"
+        response = self._make_request('GET', endpoint)
+        if not response or 'IdentifierList' not in response:
+            return {}
+            
+        cid = str(response['IdentifierList'].get('CID', [None])[0])
+        if not cid:
+            return {}
+            
+        return self.get_compound_by_cid(cid)
+
+    def search_by_cas(self, cas: str) -> Dict[str, Any]:
+        """
+        Search compound by CAS number.
+        
+        Args:
+            cas: CAS registry number
+            
+        Returns:
+            Compound data
+        """
+        endpoint = f"compound/fastidentity/cas/{cas}/cids/JSON"
+        response = self._make_request('GET', endpoint)
+        if not response or 'IdentifierList' not in response:
+            return {}
+            
+        cid = str(response['IdentifierList'].get('CID', [None])[0])
+        if not cid:
+            return {}
+            
+        return self.get_compound_by_cid(cid)
+
+    def search_by_inchikey(self, inchikey: str) -> Dict[str, Any]:
+        """
+        Search compound by InChIKey.
+        
+        Args:
+            inchikey: InChIKey identifier
+            
+        Returns:
+            Compound data
+        """
+        endpoint = f"compound/inchikey/{inchikey}/cids/JSON"
+        response = self._make_request('GET', endpoint)
+        if not response or 'IdentifierList' not in response:
+            return {}
+            
+        cid = str(response['IdentifierList'].get('CID', [None])[0])
+        if not cid:
+            return {}
+            
+        return self.get_compound_by_cid(cid)
 
     def get_compound_by_cid(self, cid: str) -> Dict[str, Any]:
         """
@@ -200,8 +251,42 @@ class PubChemClient(APIClient):
         Returns:
             Compound data
         """
-        endpoint = f"compound/cid/{cid}/JSON"
-        return self._make_request('GET', endpoint)
+        # Get basic properties
+        props_endpoint = f"compound/cid/{cid}/property/IUPACName,MolecularWeight,InChI,InChIKey/JSON"
+        props_response = self._make_request('GET', props_endpoint)
+        
+        # Get synonyms
+        synonyms_endpoint = f"compound/cid/{cid}/synonyms/JSON"
+        synonyms_response = self._make_request('GET', synonyms_endpoint)
+        
+        # Get computed properties
+        computed_endpoint = f"compound/cid/{cid}/property/XLogP,TPSA/JSON"
+        computed_response = self._make_request('GET', computed_endpoint)
+        
+        data = {}
+        
+        # Process properties
+        if props_response and 'PropertyTable' in props_response:
+            props = props_response['PropertyTable'].get('Properties', [])
+            if props:
+                data.update(props[0])
+                
+        # Process synonyms
+        if synonyms_response and 'InformationList' in synonyms_response:
+            info = synonyms_response['InformationList'].get('Information', [])
+            if info and 'Synonym' in info[0]:
+                data['synonyms'] = info[0]['Synonym']
+                
+        # Process computed properties
+        if computed_response and 'PropertyTable' in computed_response:
+            props = computed_response['PropertyTable'].get('Properties', [])
+            if props:
+                data.update(props[0])
+                
+        # Add URLs
+        data['pubchem_url'] = f"https://pubchem.ncbi.nlm.nih.gov/compound/{cid}"
+        
+        return data
 
     def get_compound_properties(
         self,
@@ -236,6 +321,179 @@ class McpError(Exception):
         self.code = code
         self.message = message
         super().__init__(f"{code.name}: {message}")
+
+
+class WebSearchClient(APIClient):
+    """Client for web search operations using SerpAPI."""
+    
+    def __init__(self):
+        """Initialize web search client."""
+        super().__init__("https://serpapi.com", "serp")
+        self.api_key = SERP_API_KEY
+
+    def get_search_results(self, query: str, num_results: int = 50) -> List[Dict[str, str]]:
+        """
+        Get web search results.
+        
+        Args:
+            query: Search query
+            num_results: Maximum number of results to return
+            
+        Returns:
+            List of search results with title, link, and snippet
+        """
+        params = {
+            'api_key': self.api_key,
+            'engine': 'google',
+            'q': query,
+            'num': num_results
+        }
+        
+        response = self._make_request('GET', 'search', params=params)
+        if not response or 'organic_results' not in response:
+            return []
+            
+        return [
+            {
+                'title': result.get('title', ''),
+                'link': result.get('link', ''),
+                'snippet': result.get('snippet', '')
+            }
+            for result in response['organic_results']
+        ]
+
+    def get_search_results_count(self, query: str) -> int:
+        """
+        Get number of search results for a query.
+        
+        Args:
+            query: Search query
+            
+        Returns:
+            Number of results
+        """
+        params = {
+            'api_key': self.api_key,
+            'engine': 'google',
+            'q': query,
+            'num': 1  # We only need result count
+        }
+        
+        response = self._make_request('GET', 'search', params=params)
+        if not response or 'search_information' not in response:
+            return 0
+            
+        return int(response['search_information'].get('total_results', 0))
+
+    def rank_common_names(self, names: list[str]) -> list[tuple[str, int]]:
+        """
+        Rank common names by search result count.
+        
+        Args:
+            names: List of names to rank
+            
+        Returns:
+            List of (name, result_count) tuples, sorted by count
+        """
+        results = []
+        for name in names:
+            count = self.get_search_results_count(name)
+            results.append((name, count))
+            time.sleep(API_RATE_LIMIT)  # Respect rate limits
+            
+        return sorted(results, key=lambda x: x[1], reverse=True)
+
+
+class PubMedClient(APIClient):
+    """Client for PubMed API."""
+    
+    def __init__(self):
+        """Initialize PubMed client."""
+        super().__init__(PUBMED_BASE_URL, "pubmed")
+
+    def get_result_count(self, query: str) -> int:
+        """
+        Get number of PubMed results for a query.
+        
+        Args:
+            query: Search query
+            
+        Returns:
+            Number of results
+        """
+        params = {
+            'term': query,
+            'retmax': 0,  # We only need count
+            'format': 'json'
+        }
+        
+        response = self._make_request('GET', 'esearch.fcgi', params=params)
+        if not response or 'esearchresult' not in response:
+            return 0
+            
+        return int(response['esearchresult'].get('count', 0))
+
+    def get_abstract(self, pmid: str) -> Optional[str]:
+        """
+        Get abstract text for a PubMed ID.
+        
+        Args:
+            pmid: PubMed ID
+            
+        Returns:
+            Abstract text if available, None otherwise
+        """
+        params = {
+            'id': pmid,
+            'rettype': 'abstract',
+            'retmode': 'text'
+        }
+        
+        try:
+            response = self._make_request('GET', 'efetch.fcgi', params=params)
+            if response and isinstance(response, str):
+                return response
+            return None
+        except Exception as e:
+            self.logger.warning(f"Error fetching abstract for {pmid}: {str(e)}")
+            return None
+
+    def get_relevant_pmids(self, query: str, max_results: int = 5) -> List[str]:
+        """
+        Get most relevant PubMed IDs for a query.
+        
+        Args:
+            query: Search query
+            max_results: Maximum number of results to return
+            
+        Returns:
+            List of PubMed IDs
+        """
+        params = {
+            'term': query,
+            'retmax': max_results,
+            'format': 'json'
+        }
+        
+        response = self._make_request('GET', 'esearch.fcgi', params=params)
+        if not response or 'esearchresult' not in response:
+            return []
+            
+        return response['esearchresult'].get('idlist', [])
+
+    def get_binding_relevance(self, compound: str, target: str) -> int:
+        """
+        Get relevance score for compound-target binding.
+        
+        Args:
+            compound: Compound name/identifier
+            target: Target name/identifier
+            
+        Returns:
+            Number of PubMed results
+        """
+        query = f'"{compound}"[Title/Abstract] AND "{target}"[Title/Abstract] AND binding[Title/Abstract]'
+        return self.get_result_count(query)
 
 
 class ErrorCode(Enum):

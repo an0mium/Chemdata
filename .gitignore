@@ -27,7 +27,6 @@ env/
 
 # IDE
 .idea/
-.vscode/
 *.swp
 *.swo
 .project
@@ -52,3 +51,36 @@ Thumbs.db
 cache/
 logs/
 output/
+
+# Large data files
+*.tsv
+*.dmp
+*.zip
+*.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+

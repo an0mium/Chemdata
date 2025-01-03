@@ -4,13 +4,19 @@ import os
 from pathlib import Path
 
 # API Configuration
-PUBCHEM_BASE_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
-BINDINGDB_BASE_URL = "https://bindingdb.org/bind/downloads"
+PUBCHEM_BASE_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/"
+PUBMED_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+CHEMBL_BASE_URL = "https://www.ebi.ac.uk/chembl/api/ws/"
+BINDINGDB_BASE_URL = "https://bindingdb.org/bind/downloads/"
+BINDINGDB_DATA_URL = "https://bindingdb.org/bind/BindingDB_All.tsv"
+
+# API Keys
+SERP_API_KEY = os.getenv('SERP_API_KEY', '')  # Get from environment variable
 
 # Rate Limiting
-API_RATE_LIMIT = 0.2  # seconds between requests
+API_RATE_LIMIT = 2.0  # seconds between requests
 MAX_RETRIES = 3
-RETRY_DELAY = 1.0  # seconds
+RETRY_DELAY = 2.0  # seconds
 
 # Batch Processing
 BATCH_SIZE = 50
@@ -31,15 +37,15 @@ LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 # Data Sources
 DATA_SOURCES = {
-    'bindingdb': {
-        'name': 'BindingDB',
-        'description': 'Binding data and chemical properties',
+    'pubchem': {
+        'name': 'PubChem',
+        'description': 'Chemical identifiers and properties',
         'enabled': True,
         'priority': 1
     },
-    'pubchem': {
-        'name': 'PubChem',
-        'description': 'Additional chemical data and pharmacology',
+    'chembl': {
+        'name': 'ChEMBL',
+        'description': 'Binding data and pharmacology',
         'enabled': True,
         'priority': 2
     },
@@ -64,12 +70,22 @@ DATA_SOURCES = {
 }
 
 # Validation Settings
-REQUIRED_FIELDS = [
+# At least one of these identifiers is required
+IDENTIFIER_FIELDS = [
     'cas',
     'name',
-    'smiles',
+    'smiles'
+]
+
+# Fields that will be populated during processing
+COMPUTED_FIELDS = [
     'inchi_key',
-    'molecular_weight'
+    'molecular_weight',
+    'logp',
+    'hbd',
+    'hba',
+    'tpsa',
+    'rotatable_bonds'
 ]
 
 # Circuit Breaker Settings

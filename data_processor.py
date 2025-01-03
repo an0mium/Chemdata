@@ -1,28 +1,37 @@
 """Data processing with batch operations and parallel execution."""
 
 import concurrent.futures
+from pathlib import Path
 from dataclasses import asdict
-from typing import Dict, List, Optional, Set
-
+from typing import Any, Dict, List, Optional
 import pandas as pd
 from tqdm import tqdm
 
-from api_client import McpError, PubChemClient
+from binding_data_processor import BindingDataProcessor
+from chemical_properties import ChemicalProperties
+from web_enrichment import WebEnrichment
+from api_client import PubChemClient, PubMedClient
 from cache_manager import CacheManager
-from config import BATCH_SIZE, DATA_SOURCES, MAX_WORKERS, REQUIRED_FIELDS
+from config import BATCH_SIZE, DATA_SOURCES, IDENTIFIER_FIELDS, MAX_WORKERS
 from logger import LogManager
 from models import CompoundData, ValidationError
 
 
 class DataProcessor:
     """Handles batch processing and parallel execution of data collection."""
-    
+
     def __init__(self):
         """Initialize data processor."""
         self.logger = LogManager().get_logger("data_processor")
         self.cache = CacheManager()
         self.pubchem = PubChemClient()
+        self.pubmed = PubMedClient()
         
+        # Initialize specialized processors
+        self.binding_processor = BindingDataProcessor(self.pubmed)
+        self.chemical_properties = ChemicalProperties()
+        self.web_enrichment = WebEnrichment()
+
     def validate_compound(self, compound: CompoundData) -> List[str]:
         """
         Validate compound data.
@@ -34,39 +43,25 @@ class DataProcessor:
             List of validation error messages (empty if valid)
         """
         errors = []
-        
-        # Check required fields
-        for field in REQUIRED_FIELDS:
-            value = getattr(compound, field)
-            if value is None or value == "N/A" or value == "":
-                errors.append(f"Missing required field: {field}")
-                
-        # Validate CAS number format if present
-        if compound.cas != "N/A":
-            if not self._validate_cas_format(compound.cas):
-                errors.append(f"Invalid CAS number format: {compound.cas}")
-                
-        # Validate molecular weight is positive
-        if compound.molecular_weight <= 0:
-            errors.append(
-                f"Invalid molecular weight: {compound.molecular_weight}"
-            )
-            
-        return errors
 
-    def _validate_cas_format(self, cas: str) -> bool:
-        """
-        Validate CAS number format.
-        
-        Args:
-            cas: CAS number to validate
-            
-        Returns:
-            True if valid, False otherwise
-        """
-        import re
-        pattern = r'^\d{1,7}-\d{2}-\d$'
-        return bool(re.match(pattern, cas))
+        # Check that at least one identifier is present
+        has_identifier = False
+        for field in IDENTIFIER_FIELDS:
+            value = getattr(compound, field)
+            if value is not None and value != "N/A" and value != "":
+                has_identifier = True
+                break
+
+        if not has_identifier:
+            errors.append("At least one identifier (CAS, name, or SMILES) is required")
+
+        # Validate structure if SMILES present
+        if compound.smiles != "N/A":
+            is_valid, error = self.chemical_properties.validate_structure(compound.smiles)
+            if not is_valid:
+                errors.append(f"Invalid structure: {error}")
+
+        return errors
 
     def process_batch(
         self,
@@ -88,10 +83,10 @@ class DataProcessor:
                 source for source, config in DATA_SOURCES.items()
                 if config['enabled']
             ]
-            
+
         processed = []
         errors = []
-        
+
         # Process compounds in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             future_to_compound = {
@@ -100,7 +95,7 @@ class DataProcessor:
                 ): compound
                 for compound in compounds
             }
-            
+
             for future in concurrent.futures.as_completed(future_to_compound):
                 compound = future_to_compound[future]
                 try:
@@ -112,7 +107,7 @@ class DataProcessor:
                         f"Error processing compound {compound.name}: {str(e)}"
                     )
                     errors.append((compound, str(e)))
-                    
+
         # Log errors summary
         if errors:
             self.logger.warning(
@@ -121,7 +116,7 @@ class DataProcessor:
                     f"- {c.name}: {e}" for c, e in errors
                 )
             )
-            
+
         return processed
 
     def _process_single_compound(
@@ -146,53 +141,53 @@ class DataProcessor:
                 raise ValidationError(
                     f"Validation failed for {compound.name}: {', '.join(errors)}"
                 )
-                
-            # Process each source in priority order
-            for source in sorted(
-                sources,
-                key=lambda s: DATA_SOURCES[s]['priority']
-            ):
-                try:
-                    if source == 'pubchem':
-                        self._enrich_from_pubchem(compound)
-                    # Add other data sources here
-                    
-                except McpError as e:
-                    self.logger.warning(
-                        f"Error enriching {compound.name} from {source}: {str(e)}"
-                    )
-                    
+
+            # Calculate chemical properties if SMILES available
+            if compound.smiles != "N/A":
+                props = self.chemical_properties.calculate_properties(compound.smiles)
+                if props:
+                    for key, value in props.items():
+                        setattr(compound, key, value)
+
+            # Rank common names by search results
+            common_names = self.web_enrichment.get_common_names(compound.name)
+            for i, name_data in enumerate(common_names, 1):
+                setattr(compound, f'common_name_{i}', name_data['name'])
+                setattr(compound, f'common_name_{i}_source', name_data['source'])
+                setattr(compound, f'common_name_{i}_relevance', name_data['relevance'])
+
+            # Sort and enrich binding data
+            self.binding_processor.sort_binding_data(compound)
+
+            # Get legal status
+            legal_status = self.web_enrichment.get_legal_status(compound.name)
+            if legal_status:
+                compound.scheduling.update(
+                    {s['jurisdiction']: s['schedule'] for s in legal_status['scheduling']}
+                )
+                compound.data_sources.update(legal_status['sources'])
+
+            # Get pharmacology
+            pharm_info = self.web_enrichment.get_pharmacology(compound.name)
+            if pharm_info:
+                if pharm_info['mechanism_of_action']:
+                    compound.mechanism_of_action = '; '.join(pharm_info['mechanism_of_action'])
+                if pharm_info['toxicity']:
+                    compound.toxicity = '; '.join(pharm_info['toxicity'])
+                compound.data_sources.update(pharm_info['sources'])
+
+            # Get reference URLs
+            urls = self.web_enrichment.get_reference_urls(compound.name)
+            for key, value in urls.items():
+                setattr(compound, key, value)
+
             return compound
-            
+
         except Exception as e:
             self.logger.error(
                 f"Error processing compound {compound.name}: {str(e)}"
             )
             return None
-
-    def _enrich_from_pubchem(self, compound: CompoundData):
-        """
-        Enrich compound data from PubChem.
-        
-        Args:
-            compound: Compound to enrich
-        """
-        # Try to get PubChem data
-        if compound.pubchem_cid != "N/A":
-            data = self.pubchem.get_compound_by_cid(compound.pubchem_cid)
-        else:
-            data = self.pubchem.get_compound_by_name(compound.name)
-            
-        if not data:
-            return
-            
-        # Update compound with PubChem data
-        compound.pubchem_cid = str(data.get('id', compound.pubchem_cid))
-        compound.iupac_name = data.get('iupac_name', compound.iupac_name)
-        compound.molecular_weight = float(
-            data.get('molecular_weight', compound.molecular_weight)
-        )
-        compound.data_sources.add('PubChem')
 
     def process_file(
         self,
@@ -204,20 +199,28 @@ class DataProcessor:
         Process compounds from input file.
         
         Args:
-            input_file: Input CSV file path
-            output_file: Output CSV file path
+            input_file: Input TSV/CSV file path
+            output_file: Output TSV/CSV file path
             sources: Optional list of data sources to use
             
         Returns:
             Processing statistics
         """
+        # Determine file format from extension
+        input_ext = Path(input_file).suffix.lower()
+        output_ext = Path(output_file).suffix.lower()
+        
         # Read input file
-        df = pd.read_csv(input_file)
+        if input_ext == '.tsv':
+            df = pd.read_csv(input_file, sep='\t')
+        else:
+            df = pd.read_csv(input_file)
+            
         compounds = [
-            CompoundData(**row) 
+            CompoundData(**row)
             for _, row in df.iterrows()
         ]
-        
+
         # Process in batches
         processed = []
         for i in tqdm(
@@ -226,13 +229,18 @@ class DataProcessor:
         ):
             batch = compounds[i:i + BATCH_SIZE]
             processed.extend(self.process_batch(batch, sources))
-            
+
         # Save results
         result_df = pd.DataFrame([
             asdict(compound) for compound in processed
         ])
-        result_df.to_csv(output_file, index=False)
         
+        # Save in appropriate format
+        if output_ext == '.tsv':
+            result_df.to_csv(output_file, sep='\t', index=False)
+        else:
+            result_df.to_csv(output_file, index=False)
+
         # Calculate statistics
         stats = {
             'total_compounds': len(compounds),
@@ -241,22 +249,22 @@ class DataProcessor:
             'sources_used': set().union(*(
                 c.data_sources for c in processed
             )),
-            'missing_required_fields': sum(
+            'missing_identifiers': sum(
                 1 for c in processed
                 if any(
                     getattr(c, f) == "N/A"
-                    for f in REQUIRED_FIELDS
+                    for f in IDENTIFIER_FIELDS
                 )
             )
         }
-        
+
         self.logger.info(
             f"Processing completed:\n"
             f"- Total compounds: {stats['total_compounds']}\n"
             f"- Successfully processed: {stats['processed_compounds']}\n"
             f"- Success rate: {stats['success_rate']:.1f}%\n"
             f"- Sources used: {', '.join(stats['sources_used'])}\n"
-            f"- Missing required fields: {stats['missing_required_fields']}"
+            f"- Missing identifiers: {stats['missing_identifiers']}"
         )
-        
+
         return stats
