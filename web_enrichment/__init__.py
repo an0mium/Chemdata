@@ -18,7 +18,8 @@ from .data_sources import (
     PubChemClient,
     ChEMBLClient,
     RegulatoryClient,
-    CommunityClient
+    CommunityClient,
+    SwissClient
 )
 from .data_sources.web_search import WebSearchClient
 from .llm_utils import analyze_content_with_llm, extract_patent_compound
@@ -67,6 +68,7 @@ class WebEnrichment:
         self.regulatory = RegulatoryClient(self.http)
         self.community = CommunityClient(self.http)
         self.web_search = WebSearchClient(self.http)
+        self.swiss = SwissClient(self.http)
 
     def get_pubchem_data(
         self,
@@ -337,7 +339,11 @@ class WebEnrichment:
         
         return merged
 
-    def get_pharmacology(self, compound_name: str) -> Dict[str, Any]:
+    def get_pharmacology(
+        self,
+        compound_name: str,
+        smiles: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Get pharmacological information from various sources.
         
@@ -360,6 +366,55 @@ class WebEnrichment:
         }
         
         clean_name_str, chembl_id, cas_number, _ = extract_identifiers(compound_name)
+        
+        # Get Swiss* data if SMILES is available
+        if smiles:
+            # Get target predictions
+            target_data = self.swiss.get_target_predictions(smiles)
+            if target_data:
+                info['primary_targets'].extend([
+                    f"{pred['target']} (probability: {pred['probability']:.2f})"
+                    for pred in target_data['predictions'][:5]  # Top 5 predictions
+                ])
+                info['sources'].append('SwissTargetPrediction')
+            
+            # Get ADME properties
+            adme_data = self.swiss.get_adme_properties(smiles)
+            if adme_data:
+                # Add pharmacokinetics data
+                pk_info = []
+                if adme_data['absorption']['gi_absorption']:
+                    pk_info.append(f"GI absorption: {adme_data['absorption']['gi_absorption']}")
+                if adme_data['absorption']['bbb_permeant']:
+                    pk_info.append("BBB permeant")
+                if adme_data['absorption']['pgp_substrate']:
+                    pk_info.append("P-gp substrate")
+                
+                # Add metabolism data
+                cyp_info = []
+                for cyp, is_inhibitor in adme_data['metabolism']['cyp_inhibition'].items():
+                    if is_inhibitor:
+                        cyp_info.append(f"{cyp.upper()} inhibitor")
+                
+                if pk_info:
+                    info['pharmacokinetics'].extend(pk_info)
+                if cyp_info:
+                    info['metabolism'].extend(cyp_info)
+                    
+                info['sources'].append('SwissADME')
+            
+            # Get similar compounds
+            similar_data = self.swiss.search_similar_compounds(
+                smiles,
+                similarity_threshold=0.7,
+                max_results=5
+            )
+            if similar_data:
+                info['similar_compounds'] = [
+                    f"{cmpd['name']} (similarity: {cmpd['similarity']:.2f})"
+                    for cmpd in similar_data['similar_compounds']
+                ]
+                info['sources'].append('SwissSimilarity')
         
         # Try ChEMBL first if available
         if chembl_id:
