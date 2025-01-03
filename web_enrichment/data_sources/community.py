@@ -1012,10 +1012,54 @@ class CommunityClient:
             logger.error(f"Error getting surrounding sentence: {str(e)}")
             return None
 
+    def get_compound_names(
+        self,
+        name: str,
+        cas_number: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get compound names from community sources."""
+        names = []
+        
+        # Try PsychonautWiki
+        try:
+            url = f"https://psychonautwiki.org/wiki/{quote(name)}"
+            response = self.http.make_request(url)
+            if response:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                # Get common names section
+                names_section = soup.find('span', {'id': re.compile('names|aliases', re.I)})
+                if names_section:
+                    for item in names_section.find_next('ul').find_all('li'):
+                        names.append({
+                            'name': item.text.strip(),
+                            'source': 'PsychonautWiki',
+                            'relevance': 80
+                        })
+        except Exception as e:
+            logger.error(f"Error getting PsychonautWiki names: {str(e)}")
+            
+        # Try Erowid
+        try:
+            url = f"https://erowid.org/chemicals/search.php?q={quote(name)}"
+            response = self.http.make_request(url, verify=False)
+            if response:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                # Get names from search results
+                for result in soup.find_all('div', {'class': 'result-title'}):
+                    names.append({
+                        'name': result.text.strip(),
+                        'source': 'Erowid',
+                        'relevance': 75
+                    })
+        except Exception as e:
+            logger.error(f"Error getting Erowid names: {str(e)}")
+            
+        return names
+
     def get_urls(
         self,
         name: str,
-        cas_number: Optional[str]
+        cas_number: Optional[str] = None
     ) -> Dict[str, str]:
         """
         Get URLs for community sources.

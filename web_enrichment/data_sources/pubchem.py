@@ -13,6 +13,7 @@ import time
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import quote
 import re
+from tqdm import tqdm
 
 from bs4 import BeautifulSoup
 from logger import LogManager
@@ -166,7 +167,11 @@ class PubChemClient:
             Dictionary containing PubChem data or None
         """
         try:
+            # Set up progress bar
+            progress = tqdm(total=4, desc="Fetching PubChem data", unit="steps")
+            
             cid = None
+            progress.set_description("Searching by structure")
             
             # Try structure search first (more reliable)
             if smiles:
@@ -179,22 +184,126 @@ class PubChemClient:
             # Try CAS as a fallback
             if not cid and cas:
                 cid = self._search_by_identifier(cas)
+            
+            progress.update(1)
                 
             if cid:
                 # Get basic compound data
+                progress.set_description("Getting compound data")
                 compound_data = self.get_compound(cid)
+                progress.update(1)
+                
                 if compound_data:
                     # Add bioassay data if requested
                     if include_bioassays:
+                        progress.set_description("Getting bioassay data")
                         bioassays = self.get_bioassay_data(cid)
                         if bioassays:
                             compound_data['bioassays'] = bioassays
+                        progress.update(1)
+                        
+                    # Get pharmacology data
+                    progress.set_description("Getting pharmacology data")
+                    pharmacology = self.get_pharmacology(str(cid))
+                    if pharmacology:
+                        compound_data['pharmacology'] = pharmacology
+                    progress.update(1)
+                    
+                    progress.close()
                     return compound_data
                     
         except Exception as e:
             logger.error(f"Error getting PubChem data: {str(e)}")
+            if 'progress' in locals():
+                progress.close()
             
         return None
+
+    def get_bioassay_data(self, cid: str) -> Optional[Dict[str, Any]]:
+        """
+        Get bioassay data for compound.
+        
+        Args:
+            cid: PubChem Compound ID
+            
+        Returns:
+            Dictionary containing bioassay data or None
+        """
+        try:
+            # Get active assays for compound
+            url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/assaysummary/JSON"
+            response = self.http.make_request(url)
+            if not response:
+                return None
+                
+            data = response.json()
+            if 'AssaySummaries' not in data:
+                return None
+                
+            assays = []
+            activities = {
+                'binding': [],
+                'functional': [],
+                'enzymatic': [],
+                'pharmacological': []
+            }
+            
+            # Process assays with progress bar
+            assay_progress = tqdm(
+                data['AssaySummaries'],
+                desc="Processing bioassays",
+                unit="assays"
+            )
+            
+            for summary in assay_progress:
+                aid = summary.get('AID')
+                if not aid:
+                    continue
+                    
+                assay_progress.set_description(f"Processing assay {aid}")
+                
+                # Get detailed assay data
+                assay_data = self._get_assay_details(aid)
+                if assay_data:
+                    assay_type = self._classify_assay(assay_data)
+                    if assay_type:  # Only include relevant assays
+                        activity_type = self._determine_activity_type(
+                            assay_data.get('description', '')
+                        )
+                        
+                        assay_info = {
+                            'aid': aid,
+                            'name': assay_data.get('name', ''),
+                            'description': assay_data.get('description', ''),
+                            'type': assay_type,
+                            'activity_type': activity_type,
+                            'target': assay_data.get('target', ''),
+                            'target_gene': assay_data.get('target_gene', ''),
+                            'target_protein': assay_data.get('target_protein', ''),
+                            'activity': summary.get('ActivityOutcome', ''),
+                            'value': summary.get('ActivityValue'),
+                            'unit': summary.get('ActivityUnit'),
+                            'conditions': assay_data.get('conditions', {}),
+                            'url': f"https://pubchem.ncbi.nlm.nih.gov/bioassay/{aid}"
+                        }
+                        
+                        assays.append(assay_info)
+                        activities[assay_type].append(assay_info)
+            
+            assay_progress.close()
+            return {
+                'assay_count': len(assays),
+                'assays': assays,
+                'activities': activities
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting bioassay data: {str(e)}")
+            if 'assay_progress' in locals():
+                assay_progress.close()
+            
+        return None
+
 
     def _search_by_structure(
         self,
@@ -203,12 +312,41 @@ class PubChemClient:
     ) -> Optional[str]:
         """Search PubChem by chemical structure."""
         try:
-            url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/structure/{structure_type}/cids/JSON"
-            response = self.http.make_request(url, params={structure_type: structure})
+            # Clean and encode structure
+            structure = structure.strip()
+            if structure_type == 'smiles':
+                # Remove any whitespace and escape special characters
+                structure = re.sub(r'\s+', '', structure)
+                # URL encode the structure
+                structure = quote(structure)
+            elif structure_type == 'inchi':
+                # Ensure proper InChI format
+                if not structure.startswith('InChI='):
+                    structure = f"InChI={structure}"
+                # URL encode the structure
+                structure = quote(structure)
+                    
+            # Use POST request for long structures
+            if len(structure) > 1000:
+                url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/structure/cids/JSON"
+                response = self.http.make_request(
+                    url,
+                    method='POST',
+                    data={structure_type: structure}
+                )
+            else:
+                url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/structure/cids/JSON"
+                response = self.http.make_request(
+                    url,
+                    params={structure_type: structure}
+                )
+                
             if response and 'IdentifierList' in response.json():
                 return response.json()['IdentifierList']['CID'][0]
+                
         except Exception as e:
             logger.error(f"Error searching by structure: {str(e)}")
+            
         return None
 
     def _search_by_identifier(self, identifier: str) -> Optional[str]:

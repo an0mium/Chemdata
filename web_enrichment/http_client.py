@@ -47,7 +47,7 @@ class HttpClient:
         verify: bool = True
     ) -> Optional[requests.Response]:
         """
-        Make a rate-limited HTTP request with caching.
+        Make a rate-limited HTTP request with caching and progress bar.
         
         Args:
             url: URL to request
@@ -68,18 +68,40 @@ class HttpClient:
             # Choose appropriate session
             session = self.erowid_session if 'erowid.org' in url else self.session
             
-            # Make request
-            response = session.get(
-                url,
-                params=params,
-                timeout=10,
-                verify=verify
+            # Set up retry progress bar
+            from tqdm import tqdm
+            max_retries = 3
+            retry_progress = tqdm(
+                total=max_retries,
+                desc=f"Requesting {url[:50]}...",
+                unit="tries"
             )
-            response.raise_for_status()
             
-            # Cache successful responses
-            self._cache[cache_key] = response
-            return response
+            # Try request with retries
+            for attempt in range(max_retries):
+                retry_progress.update(1)
+                try:
+                    response = session.get(
+                        url,
+                        params=params,
+                        timeout=10,
+                        verify=verify
+                    )
+                    response.raise_for_status()
+                    
+                    # Cache successful response
+                    self._cache[cache_key] = response
+                    retry_progress.close()
+                    return response
+                    
+                except requests.RequestException as e:
+                    if attempt == max_retries - 1:  # Last attempt
+                        logger.error(f"Error making request to {url}: {str(e)}")
+                        retry_progress.close()
+                        return None
+                    # Wait before retrying
+                    import time
+                    time.sleep(1)
             
         except Exception as e:
             logger.error(f"Error making request to {url}: {str(e)}")

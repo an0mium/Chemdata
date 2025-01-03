@@ -14,6 +14,7 @@ from urllib.parse import quote
 from bs4 import BeautifulSoup
 import re
 import json
+from datetime import datetime
 
 from logger import LogManager
 from ..http_client import HttpClient
@@ -224,40 +225,60 @@ class RegulatoryClient:
 
     def _check_state_scheduling(self, name: str) -> List[Dict[str, Any]]:
         """Check state-level scheduling."""
+        from tqdm import tqdm
+        
         state_info = []
         try:
-            # Check state drug control websites
+            # Check state drug control websites with progress bar
             state_urls = {
                 'California': 'https://www.dhcs.ca.gov',
                 'New York': 'https://www.health.ny.gov',
                 'Florida': 'https://www.flhealthsource.gov',
-                'Texas': 'https://www.dshs.texas.gov'
-                # Add more states as needed
+                'Texas': 'https://www.dshs.texas.gov',
+                'Illinois': 'https://www.dph.illinois.gov',
+                'Pennsylvania': 'https://www.health.pa.gov',
+                'Ohio': 'https://pharmacy.ohio.gov',
+                'Michigan': 'https://www.michigan.gov/lara',
+                'New Jersey': 'https://www.njconsumeraffairs.gov',
+                'Massachusetts': 'https://www.mass.gov/orgs/bureau-of-health-care-safety-and-quality'
             }
             
-            for state, url in state_urls.items():
-                response = self.http.make_request(
-                    f"{url}/controlled-substances/search?q={quote(name)}"
-                )
-                if response:
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    
-                    # Look for scheduling information
-                    schedule_match = None
-                    for schedule, patterns in self.SCHEDULE_PATTERNS.items():
-                        for pattern in patterns:
-                            if soup.find(string=re.compile(pattern, re.I)):
-                                schedule_match = schedule
+            state_progress = tqdm(
+                state_urls.items(),
+                desc="Checking state scheduling",
+                unit="states"
+            )
+            
+            for state, url in state_progress:
+                state_progress.set_description(f"Checking {state}")
+                try:
+                    response = self.http.make_request(
+                        f"{url}/controlled-substances/search?q={quote(name)}",
+                        timeout=5  # Short timeout for state websites
+                    )
+                    if response:
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        
+                        # Look for scheduling information
+                        schedule_match = None
+                        for schedule, patterns in self.SCHEDULE_PATTERNS.items():
+                            for pattern in patterns:
+                                if soup.find(string=re.compile(pattern, re.I)):
+                                    schedule_match = schedule
+                                    break
+                            if schedule_match:
                                 break
+                                
                         if schedule_match:
-                            break
-                            
-                    if schedule_match:
-                        state_info.append({
-                            'state': state,
-                            'schedule': schedule_match,
-                            'source_url': url
-                        })
+                            state_info.append({
+                                'state': state,
+                                'schedule': schedule_match,
+                                'source_url': url,
+                                'date_checked': datetime.now().isoformat()
+                            })
+                except Exception as e:
+                    logger.debug(f"Error checking {state} scheduling: {str(e)}")
+                    continue
                         
         except Exception as e:
             logger.error(f"Error checking state scheduling: {str(e)}")
@@ -869,4 +890,3 @@ class RegulatoryClient:
                 status['control_status'] = 'Under Review'
                 
         return status
-

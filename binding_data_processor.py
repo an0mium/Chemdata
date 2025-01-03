@@ -17,11 +17,14 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from tqdm import tqdm
 
 from logger import LogManager
 from models import CompoundData
 from structure_utils import StructureUtils
 from web_enrichment import WebEnrichment
+
+logger = LogManager().get_logger("binding_data_processor")
 
 
 class BindingDataProcessor:
@@ -210,6 +213,20 @@ class BindingDataProcessor:
             r'complex.?pharmacology',
             r'bitopic',
             r'dual.?mechanism'
+        ],
+        'enzyme_inhibitor': [
+            r'enzyme.?inhibitor',
+            r'inhibits?.?\w+.?enzyme',
+            r'inhibits?.?\w+.?activity',
+            r'reduces?.?enzyme.?activity',
+            r'blocks?.?enzyme.?function'
+        ],
+        'enzyme_inducer': [
+            r'enzyme.?inducer',
+            r'induces?.?\w+.?enzyme',
+            r'increases?.?enzyme.?activity',
+            r'enhances?.?enzyme.?function',
+            r'upregulates?.?enzyme'
         ]
     }
     
@@ -231,6 +248,10 @@ class BindingDataProcessor:
             os.path.dirname(__file__),
             'BindingDB_All.tsv'
         )
+        
+        # Initialize checkpoint manager
+        from checkpoint_manager import CheckpointManager
+        self.checkpoint_manager = CheckpointManager()
 
     def _determine_activity_type(self, text: str) -> str:
         """
@@ -256,21 +277,60 @@ class BindingDataProcessor:
             url = "https://bindingdb.org/bind/downloads/BindingDB_All_202501_tsv.zip"
             zip_path = os.path.join(os.path.dirname(__file__), 'BindingDB_All_202501_tsv.zip')
             
-            # Download zip file
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-            with open(zip_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            
-            # Extract TSV file
-            import zipfile
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(os.path.dirname(__file__))
-            
-            # Remove zip file
-            os.remove(zip_path)
-            self.logger.info("BindingDB TSV file downloaded and extracted.")
+            try:
+                # Download zip file with progress bar
+                response = requests.get(url, stream=True)
+                response.raise_for_status()
+                total_size = int(response.headers.get('content-length', 0))
+                
+                progress = tqdm(
+                    total=total_size,
+                    unit='iB',
+                    unit_scale=True,
+                    desc="Downloading BindingDB data"
+                )
+                
+                with open(zip_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        size = f.write(chunk)
+                        progress.update(size)
+                progress.close()
+                
+                # Extract TSV file with progress
+                self.logger.info("Extracting BindingDB data...")
+                import zipfile
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    # Get list of files to extract
+                    files = zip_ref.namelist()
+                    extract_progress = tqdm(
+                        files,
+                        desc="Extracting files",
+                        unit="files"
+                    )
+                    
+                    for file in extract_progress:
+                        zip_ref.extract(file, os.path.dirname(__file__))
+                        extract_progress.set_description(f"Extracted {file}")
+                
+                # Remove zip file
+                os.remove(zip_path)
+                self.logger.info("BindingDB TSV file downloaded and extracted successfully.")
+                
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Error downloading BindingDB data: {str(e)}")
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                raise
+            except zipfile.BadZipFile as e:
+                self.logger.error(f"Error extracting BindingDB data: {str(e)}")
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                raise
+            except Exception as e:
+                self.logger.error(f"Unexpected error: {str(e)}")
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                raise
 
     def load_bindingdb_data(
         self,
@@ -355,13 +415,71 @@ class BindingDataProcessor:
             self.logger.info("Reading BindingDB TSV file (this may take a few minutes)...")
             total_lines = sum(1 for _ in open(self.bindingdb_path))
             self.logger.info(f"Total lines in TSV file: {total_lines:,}")
-            df = pd.read_csv(
-                self.bindingdb_path,
-                sep='\t',
-                usecols=needed_columns,
-                on_bad_lines='skip',
-                low_memory=False
+            # Read in chunks to handle large file
+            chunk_size = 100000
+            chunks = []
+            total_chunks = 0
+            
+            # Define dtypes for problematic columns
+            dtype_dict = {
+                'Ki (nM)': str,
+                'IC50 (nM)': str,
+                'Kd (nM)': str,
+                'EC50 (nM)': str,
+                'kon (M-1-s-1)': str,
+                'koff (s-1)': str,
+                'pH': str,
+                'Temp (C)': str,
+                'PubChem CID': str,
+                'PubChem SID': str,
+                'PubChem AID': str,
+                'ChEBI ID of Ligand': str,
+                'ChEMBL ID of Ligand': str,
+                'DrugBank ID of Ligand': str,
+                'IUPHAR_GRAC ID of Ligand': str,
+                'KEGG ID of Ligand': str,
+                'ZINC ID of Ligand': str
+            }
+            
+            # Process chunks with progress bar
+            from tqdm import tqdm
+            total_chunks = (total_lines + chunk_size - 1) // chunk_size
+            chunk_progress = tqdm(
+                pd.read_csv(
+                    self.bindingdb_path,
+                    sep='\t',
+                    usecols=needed_columns,
+                    dtype=dtype_dict,
+                    on_bad_lines='skip',
+                    chunksize=chunk_size,
+                    low_memory=False
+                ),
+                desc="Reading BindingDB chunks",
+                total=total_chunks,
+                unit="chunks"
             )
+            
+            for chunk in chunk_progress:
+                chunk_progress.set_description(f"Reading chunk {len(chunks) + 1}/{total_chunks}")
+                chunks.append(chunk)
+                
+            # Combine chunks with progress bar
+            self.logger.info(f"Combining {len(chunks)} chunks...")
+            from tqdm import tqdm
+            concat_progress = tqdm(
+                total=len(chunks),
+                desc="Combining chunks",
+                unit="chunks"
+            )
+            
+            df = pd.concat(
+                chunks,
+                ignore_index=True,
+                copy=False  # Reduce memory usage
+            )
+            concat_progress.update(len(chunks))
+            concat_progress.close()
+            
             self.logger.info("BindingDB TSV file loaded successfully.")
             
             # Search for compound by name and SMILES
@@ -501,6 +619,7 @@ class BindingDataProcessor:
 
 
 
+
     def gather_ligands(self, llm_api_key: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Gather receptor ligands from multiple sources.
@@ -521,7 +640,10 @@ class BindingDataProcessor:
             - patents: List of relevant patents (if llm_api_key provided)
         """
         try:
-            # Read BindingDB data with enhanced columns
+            # Clear any existing checkpoints
+            self.checkpoint_manager.clear_checkpoints()
+            
+            self.logger.info("Reading BindingDB data with enhanced columns...")
             needed_columns = [
                 'BindingDB Ligand Name',
                 'Ligand SMILES',
@@ -575,54 +697,157 @@ class BindingDataProcessor:
             # Download BindingDB TSV file if needed
             self._ensure_bindingdb_file()
             
-            self.logger.info("Reading BindingDB TSV file (this may take a few minutes)...")
-            total_lines = sum(1 for _ in open(self.bindingdb_path))
-            self.logger.info(f"Total lines in TSV file: {total_lines:,}")
-            df = pd.read_csv(
-                self.bindingdb_path,
-                sep='\t',
-                usecols=needed_columns,
-                on_bad_lines='skip',
-                low_memory=False
-            )
-            self.logger.info("BindingDB TSV file loaded successfully.")
+            # Check for BindingDB parsing checkpoint
+            df = None
+            if self.checkpoint_manager.is_step_completed('parse_bindingdb'):
+                self.logger.info("Loading parsed BindingDB data from checkpoint...")
+                df = self.checkpoint_manager.load_step_data('parse_bindingdb')
+            else:
+                self.logger.info("Reading BindingDB TSV file (this may take a few minutes)...")
+                total_lines = sum(1 for _ in open(self.bindingdb_path))
+                self.logger.info(f"Total lines in TSV file: {total_lines:,}")
+                
+                # Read in chunks to handle large file
+                chunk_size = 100000
+                chunks = []
+                total_chunks = 0
+                
+                # Define dtypes for problematic columns
+                dtype_dict = {
+                    'Ki (nM)': str,
+                    'IC50 (nM)': str,
+                    'Kd (nM)': str,
+                    'EC50 (nM)': str,
+                    'kon (M-1-s-1)': str,
+                    'koff (s-1)': str,
+                    'pH': str,
+                    'Temp (C)': str,
+                    'PubChem CID': str,
+                    'PubChem SID': str,
+                    'PubChem AID': str,
+                    'ChEBI ID of Ligand': str,
+                    'ChEMBL ID of Ligand': str,
+                    'DrugBank ID of Ligand': str,
+                    'IUPHAR_GRAC ID of Ligand': str,
+                    'KEGG ID of Ligand': str,
+                    'ZINC ID of Ligand': str
+                }
+                
+                for chunk in pd.read_csv(
+                    self.bindingdb_path,
+                    sep='\t',
+                    usecols=needed_columns,
+                    dtype=dtype_dict,
+                    on_bad_lines='skip',
+                    chunksize=chunk_size,
+                    low_memory=False
+                ):
+                    total_chunks += 1
+                    self.logger.info(f"Processing chunk {total_chunks} ({chunk_size:,} rows per chunk)")
+                    chunks.append(chunk)
+                    
+                self.logger.info(f"Combining {len(chunks)} chunks...")
+                df = pd.concat(chunks, ignore_index=True)
+                self.logger.info("BindingDB TSV file loaded successfully.")
+                
+                # Save parsing checkpoint
+                self.checkpoint_manager.save_checkpoint('parse_bindingdb', df)
             
             # Find 5-HT2 receptor targets
-            self.logger.info("Searching for 5-HT2 receptor targets in BindingDB data...")
-            pattern = '|'.join(self.TARGET_PATTERNS)
+            matches = None
+            if self.checkpoint_manager.is_step_completed('find_targets'):
+                self.logger.info("Loading target matches from checkpoint...")
+                matches = self.checkpoint_manager.load_step_data('find_targets')
+            else:
+                self.logger.info("Searching for 5-HT2 receptor targets in BindingDB data...")
+                pattern = '|'.join(self.TARGET_PATTERNS)
+                
+                # Convert columns to string and handle NaN values
+                self.logger.info("Converting columns to string format...")
+                df['Target Name'] = df['Target Name'].fillna('').astype(str)
+                df['UniProt (SwissProt) Recommended Name of Target Chain'] = df['UniProt (SwissProt) Recommended Name of Target Chain'].fillna('').astype(str)
+                df['UniProt (SwissProt) Primary ID of Target Chain'] = df['UniProt (SwissProt) Primary ID of Target Chain'].fillna('').astype(str)
+                
+                # Compile regex pattern once
+                import re
+                compiled_pattern = re.compile(pattern, re.IGNORECASE)
+                
+                # Search in all relevant columns with enhanced progress tracking
+                from tqdm import tqdm
+                self.logger.info("Searching for 5-HT2 patterns in target columns...")
+                total_rows = len(df)
+                matches_mask = pd.Series(False, index=df.index)
+                
+                columns = ['Target Name', 'UniProt (SwissProt) Recommended Name of Target Chain', 'UniProt (SwissProt) Primary ID of Target Chain']
+                for col in tqdm(columns, desc="Searching columns", unit="col"):
+                    self.logger.info(f"Searching column: {col}")
+                    # Process in chunks with progress bar
+                    chunk_size = 10000
+                    chunks = range(0, total_rows, chunk_size)
+                    with tqdm(total=total_rows, desc=f"Processing {col}", unit="rows") as pbar:
+                        for i in chunks:
+                            chunk = df[col].iloc[i:i + chunk_size]
+                            # Use vectorized operations where possible
+                            chunk_matches = chunk.fillna('').astype(str).apply(lambda x: bool(compiled_pattern.search(x)))
+                            matches_mask.iloc[i:i + chunk_size] |= chunk_matches
+                            pbar.update(len(chunk))
+                
+                matches = df[matches_mask]
+                self.logger.info(f"Found {len(matches):,} initial matches in BindingDB")
+                
+                # Save target matches checkpoint
+                self.checkpoint_manager.save_checkpoint('find_targets', matches)
             
-            # Convert columns to string and handle NaN values
-            self.logger.info("Converting columns to string format...")
-            df['Target Name'] = df['Target Name'].fillna('').astype(str)
-            df['UniProt (SwissProt) Recommended Name of Target Chain'] = df['UniProt (SwissProt) Recommended Name of Target Chain'].fillna('').astype(str)
-            df['UniProt (SwissProt) Primary ID of Target Chain'] = df['UniProt (SwissProt) Primary ID of Target Chain'].fillna('').astype(str)
-            
-            # Search in all relevant columns
-            self.logger.info("Searching for 5-HT2 patterns in target columns...")
-            mask = df['Target Name'].str.contains(pattern, case=False, na=False)
-            mask |= df['UniProt (SwissProt) Recommended Name of Target Chain'].str.contains(pattern, case=False, na=False)
-            mask |= df['UniProt (SwissProt) Primary ID of Target Chain'].str.contains(pattern, case=False, na=False)
-            matches = df[mask]
-            
-            self.logger.info(f"Found {len(matches):,} initial matches in BindingDB")
             self.logger.info("Filtering matches by organism and structure...")
             
-            # Group by compound and combine data
+            # Process compounds with enhanced progress tracking
+            from tqdm import tqdm
             compounds = []
             seen_inchikeys = set()
             processed_count = 0
-            total_compounds = len(matches.groupby('BindingDB Ligand Name'))
+            compound_groups = list(matches.groupby('BindingDB Ligand Name'))
+            total_compounds = len(compound_groups)
             
-            for name, group in matches.groupby('BindingDB Ligand Name'):
+            self.logger.info(f"Processing {total_compounds:,} unique compounds...")
+            progress_bar = tqdm(
+                total=total_compounds,
+                desc="Processing compounds",
+                unit="compounds"
+            )
+            
+            # Check for compound processing checkpoint
+            if self.checkpoint_manager.is_step_completed('process_compounds'):
+                self.logger.info("Loading processed compounds from checkpoint...")
+                compounds = self.checkpoint_manager.load_step_data('process_compounds')
+                processed_count = len(compounds)
+            
+            # Process compounds with progress bar
+            from tqdm import tqdm
+            progress_bar = tqdm(
+                compound_groups,
+                desc="Processing compounds",
+                unit="compounds",
+                total=total_compounds
+            )
+            
+            for name, group in progress_bar:
                 processed_count += 1
-                if processed_count % 10 == 0:
-                    self.logger.info(f"Processing compound {processed_count}/{total_compounds}")
+                progress_bar.set_description(f"Processing {name[:30]}...")
+                
+                # Save intermediate checkpoint every 100 compounds
+                if processed_count % 100 == 0:
+                    self.checkpoint_manager.save_checkpoint(
+                        'process_compounds',
+                        compounds,
+                        metadata={'processed_count': processed_count}
+                    )
                 
                 # Skip if we've seen this compound
                 inchikey = str(group.iloc[0]['Ligand InChI Key'])
                 if pd.notna(inchikey) and inchikey in seen_inchikeys:
                     continue
                 seen_inchikeys.add(inchikey)
+                
                 
                 # Get all affinity values
                 affinities = []
@@ -678,17 +903,45 @@ class BindingDataProcessor:
                     # Clean compound name for web searches
                     clean_name = self._clean_name(str(name))
                     
-                    # Get identifiers using imported function
-                    from web_enrichment.name_utils import extract_identifiers
-                    clean_name, chembl_id, cas_number, patent_id = extract_identifiers(str(name))
+                    # Get identifiers using name utils
+                    from web_enrichment.name_utils import extract_identifiers, clean_name as clean_name_func
+                    
+                    # Try multiple name variations
+                    name_variations = [
+                        str(name),  # Original name
+                        clean_name,  # Cleaned name
+                        str(row.get('BindingDB Ligand Name', '')),  # BindingDB name
+                        str(row.get('ChEMBL ID of Ligand', '')),  # ChEMBL ID
+                        str(row.get('PubChem CID', ''))  # PubChem CID
+                    ]
+                    
+                    # Try each variation until we get identifiers
+                    identifiers = None
+                    for variation in name_variations:
+                        if variation and variation.strip():
+                            try:
+                                clean_name, chembl_id, cas_number, patent_id = extract_identifiers(variation)
+                                if any([chembl_id, cas_number, patent_id]):
+                                    identifiers = (clean_name, chembl_id, cas_number, patent_id)
+                                    break
+                            except Exception as e:
+                                self.logger.debug(f"Error extracting identifiers from {variation}: {str(e)}")
+                                continue
+                    
+                    # If no identifiers found, use cleaned original name
+                    if not identifiers:
+                        clean_name = clean_name_func(clean_name)  # Additional cleaning
+                        identifiers = (clean_name, None, None, None)
+                    else:
+                        clean_name, chembl_id, cas_number, patent_id = identifiers
                     
                     # If patent example, extract identifiers using LLM
                     if patent_id and llm_api_key:
                         example_match = re.search(r'(?:Example|Compound)\s*([A-Za-z0-9-]+)', str(name))
                         if example_match:
                             example_id = f"Example {example_match.group(1)}"
-                            patent_data = self.web_client._extract_patent_compound(
-                                patent_id,
+                            from web_enrichment.llm_utils import extract_patent_compound
+                            patent_data = extract_patent_compound(
                                 example_id,
                                 llm_api_key
                             )
@@ -762,23 +1015,32 @@ class BindingDataProcessor:
                         }
 
                         
-                        # Get common names
-                        self.logger.info("Fetching common names...")
-                        common_names = self.web_client.get_common_names(
-                            clean_name,
-                            chembl_id=chembl_id,
-                            smiles=str(row['Ligand SMILES']),
-                            inchi=str(row['Ligand InChI'])
+                        # Get data from web sources with progress bar
+                        from tqdm import tqdm
+                        web_sources = [
+                            ('common_names', lambda: self.web_client.get_common_names(
+                                clean_name,
+                                chembl_id=chembl_id,
+                                smiles=str(row['Ligand SMILES']),
+                                inchi=str(row['Ligand InChI'])
+                            )),
+                            ('legal_status', lambda: self.web_client.get_legal_status(clean_name)),
+                            ('pharmacology', lambda: self.web_client.get_pharmacology(clean_name))
+                        ]
+                        
+                        web_progress = tqdm(
+                            web_sources,
+                            desc="Fetching web data",
+                            unit="sources"
                         )
-                        compound_data['common_names'] = [name['name'] for name in common_names]
                         
-                        # Get legal status
-                        self.logger.info("Fetching legal status...")
-                        compound_data['legal_status'] = self.web_client.get_legal_status(clean_name)
-                        
-                        # Get pharmacology
-                        self.logger.info("Fetching pharmacology data...")
-                        compound_data['pharmacology'] = self.web_client.get_pharmacology(clean_name)
+                        for source_name, source_func in web_progress:
+                            web_progress.set_description(f"Fetching {source_name}")
+                            if source_name == 'common_names':
+                                data = source_func()
+                                compound_data['common_names'] = [name['name'] for name in data]
+                            else:
+                                compound_data[source_name] = source_func()
                         
                         # Add patent information if API key provided
                         if llm_api_key:
@@ -804,10 +1066,18 @@ class BindingDataProcessor:
             # Add compounds from patents if API key provided
             if llm_api_key:
                 self.logger.info("Searching patents for additional compounds...")
-                patent_compounds = self._extract_compounds_from_patents(
-                    '5-HT2 receptor ligand',
-                    llm_api_key
-                )
+                # Check for patent compounds checkpoint
+                patent_compounds = []
+                if self.checkpoint_manager.is_step_completed('patent_compounds'):
+                    self.logger.info("Loading patent compounds from checkpoint...")
+                    patent_compounds = self.checkpoint_manager.load_step_data('patent_compounds')
+                else:
+                    patent_compounds = self._extract_compounds_from_patents(
+                        '5-HT2 receptor ligand',
+                        llm_api_key
+                    )
+                    # Save patent compounds checkpoint
+                    self.checkpoint_manager.save_checkpoint('patent_compounds', patent_compounds)
                 compounds.extend(patent_compounds)
             
             # Deduplicate by InChI Key
@@ -820,6 +1090,10 @@ class BindingDataProcessor:
                     unique_compounds.append(comp)
             
             self.logger.info(f"Found {len(unique_compounds)} unique compounds")
+            
+            # Save final checkpoint
+            self.checkpoint_manager.save_checkpoint('gather_ligands', unique_compounds)
+            
             return unique_compounds
             
         except Exception as e:
@@ -841,54 +1115,57 @@ class BindingDataProcessor:
         if compounds:
             # Define TSV columns with enhanced fields
             columns = [
-                'name',
-                'chembl_id',
-                'cas_number',
-                'smiles',
-                'inchi',
-                'inchi_key',
-                'common_name_1',
-                'common_name_2',
-                'common_name_3',
-                'target',
-                'target_gene',
-                'affinity_type',
-                'affinity_value',
-                'affinity_unit',
-                'affinity_modifier',
-                'activity_type',
-                'kon',
-                'koff',
-                'pH',
-                'temperature',
-                'species',
-                'pdb_het',
-                'pdb_complexes',
-                'pubchem_cid',
-                'pubchem_sid',
-                'pubchem_aid',
-                'chebi_id',
-                'drugbank_id',
-                'iuphar_id',
-                'kegg_id',
-                'zinc_id',
-                'doi',
-                'pmid',
-                'authors',
-                'institution',
-                'legal_status',
-                'mechanism_of_action',
-                'metabolism',
-                'toxicity',
-                'chembl_url',
-                'pubchem_url',
-                'wikipedia_url',
-                'psychonaut_url',
-                'erowid_url',
-                'bindingdb_ligand_url',
-                'bindingdb_target_url',
-                'bindingdb_pair_url'
+                # Basic identifiers
+                'name', 'chembl_id', 'cas_number', 'smiles', 'inchi', 'inchi_key',
+                'common_name_1', 'common_name_2', 'common_name_3',
+                
+                # Target information
+                'target', 'target_gene', 'target_protein',
+                
+                # Binding data
+                'affinity_type', 'affinity_value', 'affinity_unit', 'affinity_modifier',
+                'activity_type', 'kon', 'koff', 'pH', 'temperature',
+                
+                # Bioassay data (up to 12)
             ]
+            
+            # Add bioassay columns
+            for i in range(1, 13):
+                prefix = f'bioassay_{i}_'
+                columns.extend([
+                    f'{prefix}aid',
+                    f'{prefix}name',
+                    f'{prefix}type',
+                    f'{prefix}activity_type',
+                    f'{prefix}target',
+                    f'{prefix}value',
+                    f'{prefix}unit'
+                ])
+            
+            # Add remaining columns
+            columns.extend([
+                # Species and structure info
+                'species', 'pdb_het', 'pdb_complexes',
+                
+                # Database IDs
+                'pubchem_cid', 'pubchem_sid', 'pubchem_aid',
+                'chebi_id', 'drugbank_id', 'iuphar_id',
+                'kegg_id', 'zinc_id',
+                
+                # References
+                'doi', 'pmid', 'authors', 'institution',
+                
+                # Additional data
+                'legal_status', 'mechanism_of_action',
+                'metabolism', 'toxicity', 'pharmacokinetics',
+                'drug_interactions', 'contraindications',
+                
+                # URLs
+                'chembl_url', 'pubchem_url', 'wikipedia_url',
+                'psychonaut_url', 'erowid_url',
+                'bindingdb_ligand_url', 'bindingdb_target_url',
+                'bindingdb_pair_url'
+            ])
 
             
             self.logger.info("Step 2/5: Converting data to DataFrame...")
@@ -906,12 +1183,17 @@ class BindingDataProcessor:
                 )
             
             self.logger.info("Step 4/5: Processing additional data columns...")
-            # Add legal status and pharmacology columns with progress
-            processed = 0
-            for idx, row in df.iterrows():
-                processed += 1
-                if processed % 100 == 0:
-                    self.logger.info(f"Processed {processed}/{total_compounds} compounds...")
+            # Add legal status and pharmacology columns with progress bar
+            from tqdm import tqdm
+            progress_bar = tqdm(
+                df.iterrows(),
+                total=total_compounds,
+                desc="Processing compound data",
+                unit="compounds"
+            )
+            
+            for idx, row in progress_bar:
+                progress_bar.set_description(f"Processing {row.get('name', '')[:30]}...")
                 
                 # Legal status
                 df.at[idx, 'legal_status'] = '; '.join(
@@ -926,10 +1208,17 @@ class BindingDataProcessor:
                     df.at[idx, 'toxicity'] = '; '.join(row['pharmacology'].get('toxicity', []))
             
             self.logger.info("Step 5/5: Adding reference URLs...")
-            # Add reference URLs with progress
+            # Add reference URLs with progress bar
+            from tqdm import tqdm
             url_types = ['chembl', 'pubchem', 'wikipedia', 'psychonaut', 'erowid']
-            for i, url_type in enumerate(url_types, 1):
-                self.logger.info(f"Processing URL type {i} / {len(url_types)}: {url_type}")
+            url_progress = tqdm(
+                url_types,
+                desc="Processing URL types",
+                unit="type"
+            )
+            
+            for url_type in url_progress:
+                url_progress.set_description(f"Processing {url_type} URLs")
                 df[f'{url_type}_url'] = df.apply(
                     lambda row: row['reference_urls'].get(f'{url_type}_url', '')
                     if isinstance(row['reference_urls'], dict) else '',
@@ -944,13 +1233,23 @@ class BindingDataProcessor:
                 f"Saved {len(compounds)} 5-HT2 receptor ligands to {output_path}"
             )
             
+            # Collect statistics with progress bar
+            from tqdm import tqdm
             sources = set()
             with_cas = 0
             with_patents = 0
             activity_types = {}
             species_counts = {}
             
-            for comp in compounds:
+            stats_progress = tqdm(
+                compounds,
+                desc="Collecting statistics",
+                unit="compounds"
+            )
+            
+            for comp in stats_progress:
+                stats_progress.set_description(f"Analyzing {comp.get('name', '')[:30]}...")
+                
                 if 'source' in comp:
                     sources.add(comp['source'])
                 if comp.get('cas_number', 'N/A') != 'N/A':
@@ -1191,15 +1490,31 @@ class BindingDataProcessor:
             List of dictionaries containing extracted chemical information
         """
         try:
-            # Prepare prompt
-            prompt = f"""Extract chemical compounds from the following text. For each compound, provide:
-            1. Chemical name
-            2. SMILES string (if available)
-            3. Any mentioned activity or properties
+            # Prepare prompt with enhanced instructions
+            prompt = f"""Extract chemical compounds and their properties from the following text. For each compound, provide:
 
-            Text: {text}
+1. Chemical names (IUPAC, common names, and any synonyms)
+2. Chemical structure information:
+   - SMILES string
+   - InChI string (if available)
+   - Molecular formula
+   - Structural features (rings, functional groups)
+3. Biological activity:
+   - Target receptors/proteins
+   - Activity type (agonist, antagonist, etc.)
+   - Binding affinity values (Ki, IC50, etc.)
+4. Physical properties:
+   - Molecular weight
+   - Melting/boiling points
+   - Solubility
+5. Patent-specific information:
+   - Example numbers
+   - Synthesis methods
+   - Claims coverage
 
-            Format the response as a list of JSON objects."""
+Text: {text}
+
+Format the response as a list of JSON objects with these fields. Include any numerical values with their units. For chemical structures, prioritize standardized identifiers (SMILES, InChI) over descriptive text."""
 
             # Make API request
             response = requests.post(

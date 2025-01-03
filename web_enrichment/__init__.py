@@ -68,6 +68,31 @@ class WebEnrichment:
         self.community = CommunityClient(self.http)
         self.web_search = WebSearchClient(self.http)
 
+    def get_pubchem_data(
+        self,
+        cas: Optional[str] = None,
+        smiles: Optional[str] = None,
+        inchi: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Get compound data from PubChem."""
+        try:
+            logger.info("Fetching PubChem data...")
+            data = self.pubchem.get_compound_data(
+                cas=cas,
+                smiles=smiles,
+                inchi=inchi,
+                include_bioassays=True
+            )
+            if data:
+                logger.info("Successfully retrieved PubChem data")
+                return data
+            else:
+                logger.warning("No PubChem data found")
+                return None
+        except Exception as e:
+            logger.error(f"Error getting PubChem data: {str(e)}")
+            return None
+
     def get_reference_urls(
         self,
         compound_name: str,

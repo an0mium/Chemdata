@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chemical Data Browser</title>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://unpkg.com/ketcher-react@2.12.0/dist/ketcher.css">
+    <style>
+        .structure-viewer {
+            width: 300px;
+            height: 300px;
+            border: 1px solid #ccc;
+        }
+        .ketcher-container {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ccc;
+            margin-bottom: 20px;
+        }
+        .url-list {
+            list-style: none;
+            padding: 0;
+        }
+        .url-list li {
+            margin: 5px 0;
+        }
+        .activity-data {
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 0.9em;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .stats-card {
+            margin-bottom: 20px;
+        }
+        .column-group {
+            margin-bottom: 15px;
+        }
+        .column-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .filters-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .progress-section {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <h1 class="mb-4">Chemical Data Browser</h1>
+
+        <!-- Stats Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Compounds</h5>
+                        <p class="card-text display-4">{{ stats.total_compounds }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="card-body">
+                        <h5 class="card-title">With Activity Data</h5>
+                        <p class="card-text display-4">{{ stats.with_activity }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="card-body">
+                        <h5 class="card-title">By Target</h5>
+                        <ul class="list-unstyled">
+                            {% for target, count in stats.by_target.items() %}
+                            <li><strong>{{ target }}:</strong> {{ count }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="card-body">
+                        <h5 class="card-title">By Activity Type</h5>
+                        <ul class="list-unstyled">
+                            {% for type, count in stats.by_activity.items() %}
+                            <li><strong>{{ type }}:</strong> {{ count }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters Section -->
+        <div class="filters-section">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <label class="form-label">Text Search</label>
+                        <input type="text" id="search" class="form-control" placeholder="Search by name, CAS, formula...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Target Type</label>
+                        <select id="target-filter" class="form-select">
+                            <option value="">All Targets</option>
+                            {% for target in target_types %}
+                            <option value="{{ target }}">{{ target }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <label class="form-label">Activity Type</label>
+                        <select id="activity-filter" class="form-select">
+                            <option value="">All Activities</option>
+                            {% for activity in activity_types %}
+                            <option value="{{ activity }}">{{ activity }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Legal Status</label>
+                        <select id="legal-filter" class="form-select">
+                            <option value="">All Statuses</option>
+                            {% for status in legal_statuses %}
+                            <option value="{{ status }}">{{ status }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <label class="form-label">Structure Similarity</label>
+                        <div class="input-group">
+                            <input type="range" id="similarity-threshold" class="form-range" min="0" max="100" value="70">
+                            <span id="similarity-value" class="ms-2">70%</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <button id="draw-structure" class="btn btn-primary">
+                            <i class="bi bi-pencil"></i> Draw Structure
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column Selection -->
+        <div class="mb-4">
+            <h5>Select Columns</h5>
+            {% for group_name, columns in column_groups.items() %}
+            <div class="column-group">
+                <label>{{ group_name|title }}</label>
+                <div class="btn-group" role="group">
+                    {% for column in columns %}
+                    <input type="checkbox" class="btn-check column-toggle" id="btn-{{ column }}" value="{{ column }}" checked>
+                    <label class="btn btn-outline-secondary" for="btn-{{ column }}">
+                        {{ column|replace('_', ' ')|title }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Compounds Table -->
+        <table id="compounds-table" class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Structure</th>
+                    <th>Target</th>
+                    <th>Activity</th>
+                    <th>Properties</th>
+                    <th>Legal Status</th>
+                    <th>References</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Structure Drawing Modal -->
+    <div class="modal fade" id="structure-modal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Structure Editor</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="ketcher-container" class="ketcher-container"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="use-structure">Use Structure</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Section -->
+    <div class="progress-section">
+        <div class="toast" role="alert">
+            <div class="toast-header">
+                <strong class="me-auto">Processing</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body">
+                <div class="progress">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"></div>
+                </div>
+                <small class="text-muted progress-text"></small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js"></script>
+    <script src="https://unpkg.com/ketcher-standalone@2.12.0/dist/ketcher.js"></script>
+
+    <script>
+        // Initialize RDKit
+        window.initRDKitModule().then(function(RDKit) {
+            window.RDKit = RDKit;
+        });
+
+        // Initialize Ketcher
+        const ketcher = new window.ketcher.Ketcher(
+            document.getElementById('ketcher-container')
+        );
+
+        // DataTable initialization
+        $(document).ready(function() {
+            var table = $('#compounds-table').DataTable({
+                serverSide: true,
+                processing: true,
+                ajax: {
+                    url: '/api/compounds',
+                    data: function(d) {
+                        d.search = $('#search').val();
+                        d.target = $('#target-filter').val();
+                        d.activity = $('#activity-filter').val();
+                        d.legal = $('#legal-filter').val();
+                        d.structure = window.currentStructure || '';
+                        d.similarity = $('#similarity-threshold').val() / 100;
+                        d.columns = $('.column-toggle:checked').map(function() {
+                            return $(this).val();
+                        }).get();
+                        d.page = (d.start / d.length) + 1;
+                        d.per_page = d.length;
+                    }
+                },
+                columns: [
+                    { 
+                        data: 'name',
+                        render: function(data, type, row) {
+                            return `<strong>${data}</strong>`;
+                        }
+                    },
+                    {
+                        data: 'smiles',
+                        render: function(data, type, row) {
+                            if (type === 'display' && data) {
+                                return `<img src="/api/structure/${encodeURIComponent(data)}" 
+                                       class="img-fluid" style="max-width: 150px;">`;
+                            }
+                            return data;
+                        }
+                    },
+                    { 
+                        data: 'target_type',
+                        render: function(data, type, row) {
+                            if (type === 'display' && data) {
+                                return `<span class="badge bg-info">${data}</span>`;
+                            }
+                            return data;
+                        }
+                    },
+                    {
+                        data: 'activity_data',
+                        render: function(data, type, row) {
+                            if (type === 'display' && data) {
+                                return `<div class="activity-data">${data}</div>`;
+                            }
+                            return data;
+                        }
+                    },
+                    {
+                        data: null,
+                        render: function(data, type, row) {
+                            if (type === 'display') {
+                                const props = [];
+                                if (row.molecular_weight) props.push(`MW: ${row.molecular_weight}`);
+                                if (row.logp) props.push(`LogP: ${row.logp}`);
+                                if (row.tpsa) props.push(`TPSA: ${row.tpsa}`);
+                                return props.join('<br>');
+                            }
+                            return '';
+                        }
+                    },
+                    {
+                        data: 'legal_status',
+                        render: function(data, type, row) {
+                            if (type === 'display' && data) {
+                                return `<span class="badge bg-warning">${data}</span>`;
+                            }
+                            return data;
+                        }
+                    },
+                    {
+                        data: 'urls',
+                        render: function(data, type, row) {
+                            if (type === 'display') {
+                                var links = [];
+                                for (var key in data) {
+                                    var name = key.replace('_url', '').toUpperCase();
+                                    links.push(
+                                        `<li><a href="${data[key]}" target="_blank">${name}</a></li>`
+                                    );
+                                }
+                                return `<ul class="url-list">${links.join('')}</ul>`;
+                            }
+                            return '';
+                        }
+                    }
+                ],
+                pageLength: 50,
+                order: [[0, 'asc']]
+            });
+
+            // Structure drawing
+            $('#draw-structure').click(function() {
+                $('#structure-modal').modal('show');
+            });
+
+            $('#use-structure').click(function() {
+                ketcher.getSmiles().then(function(smiles) {
+                    window.currentStructure = smiles;
+                    table.ajax.reload();
+                    $('#structure-modal').modal('hide');
+                });
+            });
+
+            // Filter handlers
+            $('#search, #target-filter, #activity-filter, #legal-filter, #similarity-threshold')
+                .on('change', function() {
+                    table.ajax.reload();
+                });
+
+            // Column visibility
+            $('.column-toggle').on('change', function() {
+                table.ajax.reload();
+            });
+
+            // Similarity threshold display
+            $('#similarity-threshold').on('input', function() {
+                $('#similarity-value').text($(this).val() + '%');
+            });
+
+            // Progress handling
+            table.on('processing.dt', function(e, settings, processing) {
+                if (processing) {
+                    $('.toast').toast('show');
+                    $('.progress-bar').css('width', '100%');
+                } else {
+                    $('.toast').toast('hide');
+                    $('.progress-bar').css('width', '0%');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,14 +1,7 @@
-# Data files
-data/
-*.tsv
-*.dmp
-*.zip
-*.csv
-
 # Python
 __pycache__/
 *.py[cod]
-*.class
+*$py.class
 *.so
 .Python
 build/
@@ -27,8 +20,68 @@ wheels/
 .installed.cfg
 *.egg
 
-# IDE
-.vscode/
-.idea/
+# UV
+.venv/
+.uv/
+.uvenv/
+.uv-cache/
 
+# Virtual Environment
 venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.project
+.pydevproject
+.settings/
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# Data files
+data/
+*.tsv
+*.csv
+*.json
+*.zip
+!data/.gitkeep
+checkpoints/
+
+# Environment variables
+.env
+.env.*
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.tox/
+
+# Documentation
+docs/_build/
+site/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Pre-commit
+.pre-commit-config.yaml
+
+# Cache
+__pycache__/
+.cache/

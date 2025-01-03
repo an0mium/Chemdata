@@ -19,9 +19,29 @@ html5lib>=1.1  # For more lenient HTML parsing
 # API interaction
 ratelimit>=2.2.1
 backoff>=2.2.1  # For exponential backoff in retries
+pubchempy>=1.0.4  # PubChem API client
+serpapi>=0.1.0  # For web search
+openai>=1.0.0  # For LLM-powered analysis
 
 # Optional: Progress bars in notebooks
 ipywidgets>=8.1.0  # For Jupyter notebook progress bars
+
+# Web application
+flask>=2.0.0
+jinja2>=3.0.0
+aiohttp>=3.8.0  # For async HTTP requests
+werkzeug>=2.0.0  # Required by Flask
+ketcher-python>=1.0.0  # Structure drawing
+datatables>=0.4.9  # Interactive tables
+bootstrap-flask>=2.0.0  # Bootstrap integration
+
+# Patent search server
+@modelcontextprotocol/sdk>=0.1.0
+fast-xml-parser>=4.0.0
+
+# PDF processing
+pypdf>=3.0.0  # PDF text extraction
+pdfminer.six>=20221105  # Advanced PDF processing
 
 # Development dependencies
 pytest>=7.0.0  # Testing framework
