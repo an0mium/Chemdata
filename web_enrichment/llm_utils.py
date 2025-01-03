@@ -12,7 +12,7 @@ import json
 import re
 from typing import Dict, Any, List, Optional, Tuple
 import requests
-import PyPDF2
+import pypdf
 from io import BytesIO
 
 from logger import LogManager
@@ -233,7 +233,7 @@ def process_pdf_content(
     try:
         # Read PDF content
         pdf_file = BytesIO(pdf_content)
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        pdf_reader = pypdf.PdfReader(pdf_file)
         
         # Extract text from each page
         full_text = ""
