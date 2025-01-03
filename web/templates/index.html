@@ -237,37 +237,46 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js"></script>
     <script src="https://unpkg.com/ketcher-standalone@2.12.0/dist/ketcher.js"></script>
+    <script src="https://unpkg.com/ketcher-react@2.12.0/dist/ketcher.js"></script>
 
     <script>
+        let ketcher;
+
         // Initialize RDKit
         window.initRDKitModule().then(function(RDKit) {
             window.RDKit = RDKit;
         });
 
-        // Initialize Ketcher
-        const ketcher = new window.ketcher.Ketcher(
-            document.getElementById('ketcher-container')
-        );
+        // Initialize Ketcher after modal is shown
+        $('#structure-modal').on('shown.bs.modal', function () {
+            if (!ketcher) {
+                ketcher = new window.ketcher.Ketcher(
+                    document.getElementById('ketcher-container')
+                );
+            }
+        });
 
         // DataTable initialization
         $(document).ready(function() {
             var table = $('#compounds-table').DataTable({
-                serverSide: true,
                 processing: true,
                 ajax: {
                     url: '/api/compounds',
                     data: function(d) {
-                        d.search = $('#search').val();
-                        d.target = $('#target-filter').val();
-                        d.activity = $('#activity-filter').val();
-                        d.legal = $('#legal-filter').val();
-                        d.structure = window.currentStructure || '';
-                        d.similarity = $('#similarity-threshold').val() / 100;
-                        d.columns = $('.column-toggle:checked').map(function() {
-                            return $(this).val();
-                        }).get();
-                        d.page = (d.start / d.length) + 1;
-                        d.per_page = d.length;
+                        return {
+                            search: $('#search').val(),
+                            target: $('#target-filter').val(),
+                            activity: $('#activity-filter').val(),
+                            legal: $('#legal-filter').val(),
+                            structure: window.currentStructure || '',
+                            similarity: $('#similarity-threshold').val() / 100,
+                            columns: $('.column-toggle:checked').map(function() {
+                                return $(this).val();
+                            }).get(),
+                            page: Math.floor(d.start / d.length) + 1,
+                            per_page: d.length,
+                            draw: d.draw
+                        };
                     }
                 },
                 columns: [

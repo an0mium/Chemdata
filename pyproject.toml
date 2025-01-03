@@ -43,13 +43,20 @@ dependencies = [
     "jinja2>=3.0.0",
     "aiohttp>=3.8.0",
     "werkzeug>=2.0.0",
-    "ketcher-python>=1.0.0",
+    "pillow>=10.0.0",  # For structure rendering
     "datatables>=0.4.9",
     "bootstrap-flask>=2.0.0",
     
-    # Patent search
-    "@modelcontextprotocol/sdk>=0.1.0",
-    "fast-xml-parser>=4.0.0",
+    # XML parsing
+    "xmltodict>=0.13.0",  # XML parsing for API responses
+    "defusedxml>=0.7.1",  # Secure XML parsing
+    
+    # Note: The following packages are installed separately via install_special_deps.sh:
+    # - @modelcontextprotocol/sdk (MCP SDK)
+    # - ketcher-python (EPAM's Ketcher)
+    # - rdkit-ketcher (RDKit's Ketcher integration)
+    # - indigo-ketcher (Indigo's Ketcher integration)
+    # - jsme-wrapper (JSME molecular editor)
     
     # PDF processing
     "pypdf>=3.0.0",

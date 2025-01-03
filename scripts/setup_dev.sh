@@ -21,9 +21,20 @@ uv venv -p python3.12 .venv
 # Activate virtual environment
 source .venv/bin/activate
 
-# Install dependencies with uv
-echo "Installing dependencies..."
-uv pip install -e ".[dev]"
+# Install standard dependencies with uv
+echo "Installing standard dependencies..."
+uv pip install -r requirements.txt
+
+# Make special deps script executable
+chmod +x scripts/install_special_deps.sh
+
+# Install special dependencies
+echo "Installing special dependencies..."
+./scripts/install_special_deps.sh
+
+# Install package in development mode
+echo "Installing package in development mode..."
+uv pip install -e .
 
 # Install pre-commit hooks
 echo "Setting up pre-commit hooks..."
