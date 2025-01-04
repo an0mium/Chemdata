@@ -1,0 +1,144 @@
+{
+    "data_dir": "../data",
+    "model_dir": "../models",
+    "cache_dir": "~/.cache/chemdata",
+    "log_dir": "~/.local/share/chemdata/logs",
+    "settings": {
+        "workers": 4,
+        "batch_size": 100,
+        "checkpoint_interval": 1000,
+        "max_retries": 3,
+        "similarity_threshold": 0.7,
+        "confidence_threshold": 0.6
+    },
+    "credentials": {
+        "reddit_client_id": "",
+        "reddit_client_secret": "",
+        "twitter_api_key": "",
+        "twitter_api_secret": "",
+        "discord_token": "",
+        "bluesky_handle": "",
+        "bluesky_password": "",
+        "llm_api_key": ""
+    },
+    "target_patterns": {
+        "serotonin": "5-HT\\d*[A-Z]?|serotonin|SLC6A4|tryptamine",
+        "dopamine": "D\\d+|dopamine|DAT|SLC6A3|phenethylamine",
+        "norepinephrine": "norepinephrine|NET|SLC6A2|adrenergic",
+        "gaba": "GABA[A-Z]?\\d*|SLC6A1|benzodiazepine",
+        "glutamate": "glutamate|NMDA|AMPA|mGluR|GluR|dissociative",
+        "acetylcholine": "acetylcholine|nACh|mACh|cholinergic",
+        "opioid": "[μμκδ]?-?opioid|MOR|KOR|DOR|opiate",
+        "cannabinoid": "cannabinoid|CB[12]|endocannabinoid",
+        "sigma": "sigma[12]?|σ[12]?",
+        "imidazoline": "imidazoline|I[123]",
+        "psychedelic": "psychedelic|hallucinogen|entheogen|lysergamide|tryptamine",
+        "dissociative": "dissociative|NMDA|ketamine|PCP|arylcyclohexylamine",
+        "empathogen": "empathogen|entactogen|MDxx|phenethylamine",
+        "stimulant": "stimulant|amphetamine|cathinone|cocaine",
+        "depressant": "depressant|sedative|hypnotic|barbiturate",
+        "nootropic": "nootropic|cognitive enhancer|smart drug|racetam",
+        "antidepressant": "antidepressant|SSRI|SNRI|MAOI|tricyclic",
+        "anxiolytic": "anxiolytic|anxiolysis|anti-anxiety",
+        "antipsychotic": "antipsychotic|neuroleptic|major tranquilizer"
+    },
+    "web_sources": [
+        "pubchem",
+        "chembl",
+        "drugbank",
+        "bindingdb",
+        "chemspider",
+        "zinc",
+        "wikipedia",
+        "pubmed",
+        "patents",
+        "clinicaltrials",
+        "erowid",
+        "psychonautwiki",
+        "tripsit",
+        "bluelight",
+        "drugs-forum"
+    ],
+    "social_sources": {
+        "subreddits": [
+            "Drugs",
+            "researchchemicals",
+            "DrugNerds",
+            "Nootropics",
+            "psychopharmacology",
+            "Psychedelics",
+            "microdosing",
+            "RationalPsychonaut",
+            "ReagentTesting",
+            "AskDrugNerds"
+        ],
+        "twitter_queries": [
+            "new psychedelic",
+            "new antidepressant",
+            "research chemical",
+            "novel compound",
+            "nootropic",
+            "receptor binding",
+            "pharmacology",
+            "drug discovery",
+            "medicinal chemistry",
+            "psychopharmacology"
+        ],
+        "discord_servers": [
+            "PsychonautWiki",
+            "DrugNerds",
+            "Neuroscience",
+            "MedicinalChemistry"
+        ],
+        "bluesky_tags": [
+            "psychedelics",
+            "pharmacology",
+            "chemistry",
+            "neuroscience",
+            "drugdiscovery"
+        ]
+    },
+    "ml_config": {
+        "activity": {
+            "model_type": "ensemble",
+            "input_size": 2048,
+            "hidden_sizes": [
+                1024,
+                512,
+                256
+            ],
+            "output_size": 128,
+            "dropout": 0.2
+        },
+        "toxicity": {
+            "model_type": "ensemble",
+            "input_size": 2048,
+            "hidden_sizes": [
+                1024,
+                512,
+                256
+            ],
+            "output_size": 64,
+            "dropout": 0.3
+        },
+        "abuse": {
+            "model_type": "ensemble",
+            "input_size": 2048,
+            "hidden_sizes": [
+                1024,
+                512,
+                256
+            ],
+            "output_size": 32,
+            "dropout": 0.3
+        },
+        "binding": {
+            "model_type": "gnn",
+            "node_features": 64,
+            "edge_features": 32,
+            "hidden_size": 128,
+            "num_layers": 4,
+            "dropout": 0.2
+        }
+    }
+}

@@ -1,75 +1,90 @@
 #!/bin/bash
-set -e
+# Run tests and generate coverage reports
 
-# This script runs tests using uv's fast dependency resolution and test caching
+# Set environment variables
+export PYTHONPATH="."
+export PYTHONWARNINGS="ignore::DeprecationWarning"
 
-# Ensure we're in the project root
-cd "$(dirname "$0")/.."
+# Create directories if they don't exist
+mkdir -p reports/coverage
+mkdir -p reports/test-results
 
-# Check if uv is installed
-if ! command -v uv &> /dev/null; then
-    echo "uv is not installed. Installing now..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-fi
+# Clean up previous reports
+rm -rf reports/coverage/*
+rm -rf reports/test-results/*
 
-# Create and activate virtual environment if needed
-if [ ! -d ".venv" ]; then
-    echo "Creating virtual environment..."
-    uv venv -p python3.12 .venv
-fi
-source .venv/bin/activate
+# Run tests with coverage
+echo "Running tests with coverage..."
+pytest \
+    --verbose \
+    --cov=binding_data_processor \
+    --cov=web_enrichment \
+    --cov=web \
+    --cov-report=html:reports/coverage \
+    --cov-report=xml:reports/coverage/coverage.xml \
+    --cov-report=term \
+    --html=reports/test-results/report.html \
+    --self-contained-html \
+    --durations=10 \
+    tests/
 
-# Install test dependencies if needed
-if [ ! -d ".venv/lib/python3.12/site-packages/pytest" ]; then
-    echo "Installing test dependencies..."
-    uv pip install -e ".[dev]"
-fi
-
-# Parse command line arguments
-PYTEST_ARGS=""
-COVERAGE=false
-WATCH=false
-
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --coverage)
-            COVERAGE=true
-            shift
-            ;;
-        --watch)
-            WATCH=true
-            shift
-            ;;
-        *)
-            PYTEST_ARGS="$PYTEST_ARGS $1"
-            shift
-            ;;
-    esac
-done
-
-# Function to run tests
-run_tests() {
-    if [ "$COVERAGE" = true ]; then
-        pytest --cov=chemdata --cov-report=html --cov-report=term $PYTEST_ARGS
-    else
-        pytest $PYTEST_ARGS
-    fi
-}
-
-if [ "$WATCH" = true ]; then
-    # Watch for changes and run tests
-    echo "Watching for changes..."
-    watchmedo shell-command \
-        --patterns="*.py" \
-        --recursive \
-        --command="clear; echo 'Running tests...'; $(declare -f run_tests); run_tests" \
-        .
+# Check test status
+status=$?
+if [ $status -eq 0 ]; then
+    echo "All tests passed!"
 else
-    # Run tests once
-    run_tests
+    echo "Some tests failed!"
+    exit $status
 fi
 
-# If coverage was generated, show the report location
-if [ "$COVERAGE" = true ]; then
-    echo "Coverage report generated in htmlcov/index.html"
-fi
+# Run type checking
+echo "Running type checking..."
+mypy \
+    binding_data_processor \
+    web_enrichment \
+    web \
+    tests \
+    --ignore-missing-imports \
+    --html-report reports/mypy
+
+# Run linting
+echo "Running linting..."
+flake8 \
+    binding_data_processor \
+    web_enrichment \
+    web \
+    tests \
+    --max-line-length=100 \
+    --ignore=E203,W503 \
+    --statistics \
+    --count
+
+# Run code formatting check
+echo "Checking code formatting..."
+black \
+    binding_data_processor \
+    web_enrichment \
+    web \
+    tests \
+    --check \
+    --diff
+
+# Run import sorting check
+echo "Checking import sorting..."
+isort \
+    binding_data_processor \
+    web_enrichment \
+    web \
+    tests \
+    --check-only \
+    --diff
+
+# Print coverage report
+echo "Coverage Report:"
+coverage report
+
+# Print summary
+echo
+echo "Test Results: reports/test-results/report.html"
+echo "Coverage Report: reports/coverage/index.html"
+echo "Type Check Report: reports/mypy/index.html"

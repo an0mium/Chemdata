@@ -1,71 +1,517 @@
 #!/bin/bash
 set -e
 
-# Install uv if not already installed
-if ! command -v uv &> /dev/null; then
-    echo "Installing uv package manager..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-fi
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-# Add uv to PATH if not already there
-if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-    source ~/.zshrc
-fi
+# Function to show usage
+show_help() {
+    echo "Set up development environment"
+    echo
+    echo "Usage: $0 [options]"
+    echo
+    echo "Options:"
+    echo "  --minimal         Minimal installation (no ML models)"
+    echo "  --no-deps        Skip system dependencies"
+    echo "  --no-data        Skip initial data download"
+    echo "  --no-ml          Skip ML model download"
+    echo "  --cpu-only       Force CPU-only installation"
+    echo "  --cuda-version VER CUDA version to install (default: 11.8)"
+    echo "  --no-rdkit       Skip RDKit installation"
+    echo "  --help           Show this help message"
+    echo
+    echo "Examples:"
+    echo "  $0                Full installation"
+    echo "  $0 --minimal      Minimal installation"
+    echo "  $0 --no-ml       Skip ML model download"
+}
 
-# Create and activate virtual environment
-echo "Creating virtual environment..."
-rm -rf .venv
-uv venv -p python3.12 .venv
+# Function to check Python version
+check_python() {
+    echo -e "${BLUE}Checking Python version...${NC}"
+    
+    if ! command -v python3 &> /dev/null; then
+        echo -e "${RED}Python 3 not found${NC}"
+        exit 1
+    fi
+    
+    version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+    required="3.8"
+    
+    if (( $(echo "$version < $required" | bc -l) )); then
+        echo -e "${RED}Python $required or higher required (found $version)${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}Python $version found${NC}"
+}
 
-# Activate virtual environment
-source .venv/bin/activate
+# Function to install uv
+install_uv() {
+    echo -e "${BLUE}Installing uv package manager...${NC}"
+    
+    if ! command -v uv &> /dev/null; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        
+        # Add uv to PATH
+        if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+            if [[ -f ~/.zshrc ]]; then
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+                source ~/.zshrc
+            elif [[ -f ~/.bashrc ]]; then
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+                source ~/.bashrc
+            fi
+        fi
+    else
+        echo -e "${GREEN}uv already installed${NC}"
+    fi
+}
 
-# Install standard dependencies with uv
-echo "Installing standard dependencies..."
-uv pip install -r requirements.txt
+# Function to create virtual environment
+create_venv() {
+    echo -e "${BLUE}Creating virtual environment...${NC}"
+    
+    # Remove existing venv if it exists
+    rm -rf .venv
+    
+    # Create new venv
+    uv venv -p python3 .venv
+    
+    # Activate venv
+    source .venv/bin/activate
+}
 
-# Make special deps script executable
-chmod +x scripts/install_special_deps.sh
+# Function to install dependencies
+install_deps() {
+    echo -e "${BLUE}Installing dependencies...${NC}"
+    
+    # Install core dependencies
+    uv pip install -e .
+    
+    # Install development dependencies
+    uv pip install -e ".[dev]"
+    
+    if [[ "$MINIMAL" != "true" ]]; then
+        # Install ML dependencies
+        uv pip install -e ".[ml]"
+        
+        # Install optional dependencies
+        uv pip install -e ".[optional]"
+    fi
+    
+    # Install pre-commit hooks
+    pre-commit install
+}
 
-# Install special dependencies
-echo "Installing special dependencies..."
-./scripts/install_special_deps.sh
+# Function to install system dependencies
+install_system_deps() {
+    echo -e "${BLUE}Installing system dependencies...${NC}"
+    
+    # Install RDKit if requested
+    if [[ "$NO_RDKIT" != "true" ]]; then
+        echo -e "${BLUE}Installing RDKit...${NC}"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            CONDA_SH="$HOME/miniforge3/etc/profile.d/conda.sh"
+            if [ ! -f "$CONDA_SH" ]; then
+                echo -e "${BLUE}Installing Miniforge...${NC}"
+                curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-x86_64.sh"
+                bash Miniforge3-MacOSX-x86_64.sh -b
+                rm Miniforge3-MacOSX-x86_64.sh
+            fi
+            source "$CONDA_SH"
+            conda install -y -c conda-forge rdkit
+        else
+            # Linux
+            uv pip install rdkit
+        fi
+    fi
+    
+    # Install PyTorch
+    if [[ "$CPU_ONLY" == "true" ]]; then
+        echo -e "${BLUE}Installing PyTorch (CPU only)...${NC}"
+        uv pip install torch torchvision torchaudio
+    else
+        echo -e "${BLUE}Installing PyTorch with CUDA $CUDA_VERSION...${NC}"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS (no CUDA support)
+            uv pip install torch torchvision torchaudio
+        else
+            # Linux
+            uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu${CUDA_VERSION//.}
+        fi
+    fi
+    
+    # Make special deps script executable
+    chmod +x scripts/install_special_deps.sh
+    
+    # Run special deps installation
+    ./scripts/install_special_deps.sh
+}
 
-# Install package in development mode
-echo "Installing package in development mode..."
-uv pip install -e .
-
-# Install pre-commit hooks
-echo "Setting up pre-commit hooks..."
-cat > .pre-commit-config.yaml << EOL
-repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
-    hooks:
-    -   id: trailing-whitespace
-    -   id: end-of-file-fixer
-    -   id: check-yaml
-    -   id: check-added-large-files
-
--   repo: https://github.com/psf/black
-    rev: 23.12.1
-    hooks:
-    -   id: black
-
--   repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-    -   id: isort
-
--   repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
-    hooks:
-    -   id: flake8
+# Function to create config files
+create_config() {
+    echo -e "${BLUE}Creating configuration files...${NC}"
+    
+    # Create config directory
+    mkdir -p ~/.config/chemdata
+    
+    # Create default config if it doesn't exist
+    if [ ! -f ~/.config/chemdata/config.json ]; then
+        cat > ~/.config/chemdata/config.json << EOL
+{
+    "data_dir": "$(pwd)/data",
+    "model_dir": "$(pwd)/models",
+    "cache_dir": "$(pwd)/.cache",
+    "log_dir": "$(pwd)/logs",
+    "settings": {
+        "workers": 4,
+        "batch_size": 100,
+        "use_gpu": ${CPU_ONLY:=false},
+        "cache_ttl": 3600
+    },
+    "ml": {
+        "model_batch_size": 32,
+        "prediction_confidence_threshold": 0.7,
+        "enable_predictions": ${MINIMAL:=false}
+    },
+    "web": {
+        "host": "localhost",
+        "port": 8050,
+        "debug": false,
+        "cache_type": "filesystem"
+    },
+    "api": {
+        "pubchem_rate_limit": 5,
+        "swiss_rate_limit": 2,
+        "community_rate_limit": 1,
+        "social_rate_limit": 0.2
+    },
+    "credentials": {}
+}
 EOL
+    fi
+    
+    # Create .env file if it doesn't exist
+    if [ ! -f .env ]; then
+        cat > .env << EOL
+# API Credentials
+REDDIT_CLIENT_ID=
+REDDIT_CLIENT_SECRET=
+TWITTER_API_KEY=
+TWITTER_API_SECRET=
 
-uv pip install pre-commit
-pre-commit install
+# Directories
+DATA_DIR=./data
+MODEL_DIR=./models
+CACHE_DIR=./.cache
+LOG_DIR=./logs
 
-echo "Development environment setup complete!"
-echo "To activate the environment, run: source .venv/bin/activate"
+# Processing Settings
+WORKERS=4
+BATCH_SIZE=100
+USE_GPU=${CPU_ONLY:=false}
+
+# ML Settings
+MODEL_BATCH_SIZE=32
+PREDICTION_CONFIDENCE_THRESHOLD=0.7
+ENABLE_PREDICTIONS=${MINIMAL:=false}
+
+# Web Settings
+FLASK_DEBUG=false
+FLASK_HOST=localhost
+FLASK_PORT=8050
+EOL
+    fi
+}
+
+# Function to create project directories
+create_dirs() {
+    echo -e "${BLUE}Creating project directories...${NC}"
+    
+    # Create data directories
+    mkdir -p data/{raw,processed,interim,external}
+    
+    # Create model directories
+    mkdir -p models/{toxicity,abuse,activity,affinity}
+    
+    # Create other directories
+    mkdir -p logs
+    mkdir -p .cache
+    mkdir -p reports/{coverage,test-results,profiling}
+    mkdir -p web/{static,templates}
+}
+
+# Function to download ML models
+download_models() {
+    if [[ "$SKIP_ML" == "true" || "$MINIMAL" == "true" ]]; then
+        echo -e "${YELLOW}Skipping ML model download${NC}"
+        return
+    fi
+    
+    echo -e "${BLUE}Downloading ML models...${NC}"
+    
+    # Create models directory
+    mkdir -p models
+    
+    # Download models from cloud storage
+    models=(
+        "toxicity_predictor.pt"
+        "abuse_predictor.pt"
+        "activity_predictor.pt"
+        "affinity_predictor.pt"
+        "gnn_model.pt"
+        "ensemble_model.pt"
+    )
+    
+    for model in "${models[@]}"; do
+        if [ ! -f "models/$model" ]; then
+            echo -e "${BLUE}Downloading $model...${NC}"
+            curl -L "https://storage.googleapis.com/chemdata-models/$model" \
+                -o "models/$model"
+        else
+            echo -e "${GREEN}$model already exists${NC}"
+        fi
+    done
+}
+
+# Function to download initial data
+download_initial_data() {
+    if [[ "$SKIP_DATA" == "true" ]]; then
+        echo -e "${YELLOW}Skipping initial data download${NC}"
+        return
+    fi
+    
+    echo -e "${BLUE}Downloading initial data...${NC}"
+    
+    # Create data directory
+    mkdir -p data/raw
+    
+    # Download BindingDB data
+    if [ ! -f data/raw/BindingDB_All.tsv ]; then
+        echo -e "${BLUE}Downloading BindingDB data...${NC}"
+        curl -L "https://www.bindingdb.org/bind/downloads/BindingDB_All.tsv.zip" \
+            -o data/raw/BindingDB_All.tsv.zip
+        unzip data/raw/BindingDB_All.tsv.zip -d data/raw
+        rm data/raw/BindingDB_All.tsv.zip
+    else
+        echo -e "${GREEN}BindingDB data already exists${NC}"
+    fi
+    
+    # Download ChEMBL data
+    if [ ! -f data/raw/chembl_targets.csv ]; then
+        echo -e "${BLUE}Downloading ChEMBL data...${NC}"
+        curl -L "https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/latest/chembl_target_dictionary.txt" \
+            -o data/raw/chembl_targets.csv
+    else
+        echo -e "${GREEN}ChEMBL data already exists${NC}"
+    fi
+    
+    # Validate downloaded data
+    echo -e "${BLUE}Validating downloaded data...${NC}"
+    
+    if [ ! -f data/raw/BindingDB_All.tsv ]; then
+        echo -e "${RED}BindingDB data not found${NC}"
+        exit 1
+    fi
+    
+    if [ ! -f data/raw/chembl_targets.csv ]; then
+        echo -e "${RED}ChEMBL data not found${NC}"
+        exit 1
+    fi
+}
+
+# Function to initialize git
+init_git() {
+    echo -e "${BLUE}Initializing git repository...${NC}"
+    
+    if [ ! -d .git ]; then
+        git init
+        
+        # Create .gitignore if it doesn't exist
+        if [ ! -f .gitignore ]; then
+            cat > .gitignore << EOL
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.env
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data
+data/raw/
+data/processed/
+data/interim/
+data/external/
+*.tsv
+*.csv
+*.json
+!package.json
+!tsconfig.json
+
+# Models
+models/*/
+*.pt
+*.pth
+*.h5
+*.ckpt
+
+# Logs
+logs/
+*.log
+
+# Cache
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+EOL
+        fi
+        
+        # Set up git hooks
+        pre-commit install
+    fi
+}
+
+# Parse command line arguments
+MINIMAL=false
+SKIP_DEPS=false
+SKIP_DATA=false
+SKIP_ML=false
+CPU_ONLY=false
+NO_RDKIT=false
+CUDA_VERSION="11.8"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --minimal)
+            MINIMAL=true
+            shift
+            ;;
+        --no-deps)
+            SKIP_DEPS=true
+            shift
+            ;;
+        --no-data)
+            SKIP_DATA=true
+            shift
+            ;;
+        --no-ml)
+            SKIP_ML=true
+            shift
+            ;;
+        --cpu-only)
+            CPU_ONLY=true
+            shift
+            ;;
+        --cuda-version)
+            CUDA_VERSION="$2"
+            shift 2
+            ;;
+        --no-rdkit)
+            NO_RDKIT=true
+            shift
+            ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+# Run setup steps
+echo -e "${BLUE}Setting up development environment...${NC}"
+
+# Check Python version
+check_python
+
+# Install uv
+install_uv
+
+# Create virtual environment
+create_venv
+
+# Install system dependencies if not skipped
+if [[ "$SKIP_DEPS" != "true" ]]; then
+    install_system_deps
+fi
+
+# Install dependencies
+install_deps
+
+# Create config files
+create_config
+
+# Create project directories
+create_dirs
+
+# Download initial data
+download_initial_data
+
+# Download ML models
+download_models
+
+# Initialize git
+init_git
+
+# Print success message
+echo -e "\n${GREEN}Development environment setup complete!${NC}"
+
+# Print next steps
+echo -e "\n${BLUE}Next steps:${NC}"
+echo "1. Add API credentials to .env file"
+echo "2. Run tests: pytest"
+echo "3. Start development server: python -m binding_data_processor.web.app"
+echo "4. Visit http://localhost:8050 in your browser"
+
+# Print warnings based on installation type
+if [[ "$MINIMAL" == "true" ]]; then
+    echo -e "\n${YELLOW}Note: Minimal installation completed${NC}"
+    echo "Some features requiring ML models will not be available"
+    echo "Run without --minimal flag for full installation"
+fi
+
+if [[ "$CPU_ONLY" == "true" ]]; then
+    echo -e "\n${YELLOW}Note: CPU-only installation completed${NC}"
+    echo "GPU acceleration will not be available"
+    echo "Run without --cpu-only flag to enable GPU support"
+fi
