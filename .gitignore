@@ -19,69 +19,148 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# UV
-.venv/
+# Package managers and virtual environments
+venv/
+env/
+ENV/
+.env
+.venv
+.python-version
 .uv/
 .uvenv/
 .uv-cache/
 
-# Virtual Environment
-venv/
-ENV/
-
-# IDE
+# IDE and editors
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 .project
 .pydevproject
 .settings/
+.vs/
+*.sublime-workspace
+*.sublime-project
+.spyderproject
+.spyproject
+.ropeproject
 
-# Logs and databases
-*.log
-*.sqlite
-*.db
-
-# Data files
-data/
-*.tsv
-*.csv
-*.json
-*.zip
-!data/.gitkeep
-checkpoints/
-
-# Environment variables
-.env
-.env.*
-
-# Testing
+# Testing and coverage
 .coverage
+coverage.xml
 htmlcov/
 .pytest_cache/
-.mypy_cache/
 .tox/
+nosetests.xml
+coverage/
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
 # Documentation
 docs/_build/
+docs/api/
+docs/generated/
 site/
 
-# macOS
+# Project specific
+data/
+!data/.gitkeep
+models/
+!models/.gitkeep
+cache/
+logs/
+checkpoints/
+output/
+*.tsv
+*.csv
+*.json
+!examples/**/*.json
+!tests/data/**/*.json
+*.log
+*.pkl
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.sqlite
+*.db
+
+# Credentials and secrets
+.env
+.env.*
+credentials.json
+secrets.yaml
+api_keys.txt
+
+# OS specific
 .DS_Store
 .AppleDouble
 .LSOverride
 Icon
 ._*
+Thumbs.db
+desktop.ini
 
-# Jupyter Notebook
+# Temporary files
+*.bak
+*.tmp
+*.temp
+.*.swp
+.*.swo
+*~
+
+# Jupyter Notebooks
 .ipynb_checkpoints
 *.ipynb
+!examples/**/*.ipynb
+!docs/**/*.ipynb
 
-# Pre-commit
+# Profiling and debugging
+*.prof
+*.lprof
+*.stats
+
+# Development tools
 .pre-commit-config.yaml
+.pylintrc
 
-# Cache
-__pycache__/
-.cache/
+# Archives and compressed files
+*.zip
+*.gz
+*.tar
+*.rar
+*.7z
+
+# ML and data files
+*.npy
+*.npz
+*.hdf5
+*.parquet
+*.feather
+*.arrow
+*.joblib
+*.model
+*.bin
+*.onnx
+*.tflite
+*.pb
+*.pbtxt
+*.trt
+
+# Web development
+node_modules/
+*.min.js
+*.min.css
+*.map
+.sass-cache/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Project directories to keep
+!.gitkeep

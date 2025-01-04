@@ -1,0 +1,220 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chemdata:latest
+    container_name: chemdata-web
+    ports:
+      - "8000:8000"  # Web interface
+      - "8080:8080"  # API
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+      - ./output:/app/output
+      - ./models:/app/models
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - CHEMDATA_CACHE_DIR=/app/cache
+      - CHEMDATA_DATA_DIR=/app/data
+      - CHEMDATA_LOG_DIR=/app/logs
+      - CHEMDATA_OUTPUT_DIR=/app/output
+      - CHEMDATA_MODEL_DIR=/app/models
+      - FLASK_APP=binding_data_processor.web.app
+      - FLASK_ENV=production
+      - REDIS_URL=redis://redis:6379/0
+      - POSTGRES_URL=postgresql://chemdata:chemdata@postgres:5432/chemdata
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - postgres
+      - worker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - chemdata-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chemdata:latest
+    container_name: chemdata-worker
+    command: celery -A binding_data_processor.tasks worker --loglevel=info
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+      - ./output:/app/output
+      - ./models:/app/models
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - CHEMDATA_CACHE_DIR=/app/cache
+      - CHEMDATA_DATA_DIR=/app/data
+      - CHEMDATA_LOG_DIR=/app/logs
+      - CHEMDATA_OUTPUT_DIR=/app/output
+      - CHEMDATA_MODEL_DIR=/app/models
+      - REDIS_URL=redis://redis:6379/0
+      - POSTGRES_URL=postgresql://chemdata:chemdata@postgres:5432/chemdata
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    networks:
+      - chemdata-net
+
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chemdata:dev
+    container_name: chemdata-dev
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/app
+      - ~/.uv:/root/.uv  # Share uv cache between containers
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - CHEMDATA_ENV=development
+      - REDIS_URL=redis://redis:6379/0
+      - POSTGRES_URL=postgresql://chemdata:chemdata@postgres:5432/chemdata
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - chemdata-net
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chemdata:test
+    container_name: chemdata-test
+    command: pytest
+    volumes:
+      - .:/app
+      - ~/.uv:/root/.uv  # Share uv cache between containers
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - CHEMDATA_ENV=test
+      - REDIS_URL=redis://redis:6379/0
+      - POSTGRES_URL=postgresql://chemdata:chemdata@postgres:5432/chemdata
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - chemdata-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: chemdata-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - chemdata-net
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: chemdata-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=chemdata
+      - POSTGRES_PASSWORD=chemdata
+      - POSTGRES_DB=chemdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chemdata"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - chemdata-net
+
+volumes:
+  redis-data:
+    name: chemdata-redis-data
+  postgres-data:
+    name: chemdata-postgres-data
+
+networks:
+  chemdata-net:
+    name: chemdata-network
+    driver: bridge
+
+# Usage instructions:
+# Development:
+#   docker-compose up -d dev
+#   docker-compose exec dev bash
+#
+# Run tests:
+#   docker-compose run --rm test
+#
+# Run web interface:
+#   docker-compose up web
+#
+# Run specific service with debug:
+#   docker-compose run --rm --service-ports web python -m debugpy --listen 0.0.0.0:5678 -m binding_data_processor.web.app
+#
+# Start all services:
+#   docker-compose up -d
+#
+# View logs:
+#   docker-compose logs -f
+#
+# Stop all services:
+#   docker-compose down
+#
+# Remove volumes:
+#   docker-compose down -v
+#
+# Rebuild and restart:
+#   docker-compose up -d --build
+#
+# Scale workers:
+#   docker-compose up -d --scale worker=3
+#
+# Run migrations:
+#   docker-compose exec web python -m binding_data_processor.db upgrade
+#
+# Open shell:
+#   docker-compose exec web bash
+#
+# Monitor tasks:
+#   docker-compose exec web celery -A binding_data_processor.tasks status
