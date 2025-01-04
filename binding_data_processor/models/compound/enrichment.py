@@ -1,23 +1,34 @@
-"""Web data enrichment for compound data.
+"""Web data enrichment mixin for compound data.
 
-This module extends BaseCompound with web enrichment capabilities:
+This module provides the EnrichmentMixin class that adds web enrichment capabilities:
 - Patent data integration
 - Literature data integration
 - Community data integration
 - Safety profile enrichment
+- Usage statistics tracking
+- Regulatory status tracking
+
+The mixin is designed to be used with CompoundData to add web enrichment functionality
+while maintaining clean separation of concerns.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Set
-from datetime import datetime
+from typing import Dict, List, Set, Optional
 
-from .base import BaseCompound
-from .types import TargetData
+from .types import (
+    StringSet,
+    StringDict,
+    OptionalStr,
+    BBBPermeability,
+    PsychoactiveClass,
+    NootropicMechanism,
+    RiskLevel,
+)
 
 
 @dataclass
-class EnrichedCompound(BaseCompound):
-    """CompoundData with web enrichment capabilities."""
+class EnrichmentMixin:
+    """Mixin class adding web enrichment capabilities to CompoundData."""
 
     # Patent data
     patent_data: Dict = field(default_factory=dict)
@@ -58,7 +69,25 @@ class EnrichedCompound(BaseCompound):
     dea_url: str = "N/A"
     who_url: str = "N/A"
 
-    def merge_web_data(self, other: 'EnrichedCompound') -> None:
+    # Psychopharmacological properties
+    receptor_profiles: Dict[str, Dict] = field(default_factory=dict)
+    bbb_permeability: BBBPermeability = BBBPermeability.UNKNOWN
+    bbb_score: float = 0.0
+    p_glycoprotein_substrate: bool = False
+    psychoactive_class: PsychoactiveClass = PsychoactiveClass.UNKNOWN
+    secondary_classes: Set[PsychoactiveClass] = field(default_factory=set)
+    effect_profile: Dict[str, float] = field(default_factory=dict)
+    nootropic_mechanisms: Set[NootropicMechanism] = field(default_factory=set)
+    cognitive_effects: Dict[str, Dict] = field(default_factory=dict)
+    side_effects: Dict[str, Dict] = field(default_factory=dict)
+    onset_time: OptionalStr = None
+    duration: OptionalStr = None
+    half_life: OptionalStr = None
+    tolerance_profile: Dict[str, str] = field(default_factory=dict)
+    withdrawal_profile: Dict[str, str] = field(default_factory=dict)
+    cross_tolerance: Set[str] = field(default_factory=set)
+
+    def merge_web_data(self, other: 'EnrichmentMixin') -> None:
         """Merge web-enriched data from another instance."""
         self._merge_patent_data(other)
         self._merge_swiss_data(other)
@@ -68,8 +97,9 @@ class EnrichedCompound(BaseCompound):
         self._merge_experience_reports(other)
         self._merge_safety_profile(other)
         self._merge_status_data(other)
+        self._merge_psychopharm_data(other)
 
-    def _merge_patent_data(self, other: 'EnrichedCompound') -> None:
+    def _merge_patent_data(self, other: 'EnrichmentMixin') -> None:
         """Merge patent data."""
         if other.patent_data:
             if not self.patent_data:
@@ -77,7 +107,7 @@ class EnrichedCompound(BaseCompound):
             self.patent_data.update(other.patent_data)
             self.patent_count = max(self.patent_count, other.patent_count)
 
-    def _merge_swiss_data(self, other: 'EnrichedCompound') -> None:
+    def _merge_swiss_data(self, other: 'EnrichmentMixin') -> None:
         """Merge Swiss tools data."""
         if other.swiss_data:
             if not self.swiss_data:
@@ -99,7 +129,7 @@ class EnrichedCompound(BaseCompound):
             if comp not in self.similar_compounds
         )
 
-    def _merge_community_data(self, other: 'EnrichedCompound') -> None:
+    def _merge_community_data(self, other: 'EnrichmentMixin') -> None:
         """Merge community data."""
         if other.community_data:
             if not self.community_data:
@@ -116,7 +146,7 @@ class EnrichedCompound(BaseCompound):
         self._merge_duration_stats(other)
         self._merge_combinations(other)
 
-    def _merge_dosage_info(self, other: 'EnrichedCompound') -> None:
+    def _merge_dosage_info(self, other: 'EnrichmentMixin') -> None:
         """Merge dosage information."""
         for route, stats in other.dosage_info.items():
             if route not in self.dosage_info:
@@ -132,38 +162,38 @@ class EnrichedCompound(BaseCompound):
                                 )
                 current["count"] += stats["count"]
 
-    def _merge_route_stats(self, other: 'EnrichedCompound') -> None:
+    def _merge_route_stats(self, other: 'EnrichmentMixin') -> None:
         """Merge administration route statistics."""
         for route, count in other.route_stats.items():
             self.route_stats[route] = self.route_stats.get(route, 0) + count
 
-    def _merge_duration_stats(self, other: 'EnrichedCompound') -> None:
+    def _merge_duration_stats(self, other: 'EnrichmentMixin') -> None:
         """Merge duration statistics."""
         for duration, count in other.duration_stats.items():
             self.duration_stats[duration] = self.duration_stats.get(duration, 0) + count
 
-    def _merge_combinations(self, other: 'EnrichedCompound') -> None:
+    def _merge_combinations(self, other: 'EnrichmentMixin') -> None:
         """Merge drug combinations."""
         self.common_combinations.extend(
             combo for combo in other.common_combinations
             if combo not in self.common_combinations
         )
 
-    def _merge_literature_data(self, other: 'EnrichedCompound') -> None:
+    def _merge_literature_data(self, other: 'EnrichmentMixin') -> None:
         """Merge literature data."""
         if other.literature_data:
             if not self.literature_data:
                 self.literature_data = {}
             self.literature_data.update(other.literature_data)
 
-    def _merge_regulatory_data(self, other: 'EnrichedCompound') -> None:
+    def _merge_regulatory_data(self, other: 'EnrichmentMixin') -> None:
         """Merge regulatory data."""
         if other.regulatory_data:
             if not self.regulatory_data:
                 self.regulatory_data = {}
             self.regulatory_data.update(other.regulatory_data)
 
-    def _merge_safety_profile(self, other: 'EnrichedCompound') -> None:
+    def _merge_safety_profile(self, other: 'EnrichmentMixin') -> None:
         """Merge safety profile data."""
         if other.safety_profile:
             if not self.safety_profile:
@@ -185,11 +215,53 @@ class EnrichedCompound(BaseCompound):
             if risk not in self.long_term_risks
         )
 
-    def _merge_status_data(self, other: 'EnrichedCompound') -> None:
+    def _merge_status_data(self, other: 'EnrichmentMixin') -> None:
         """Merge status data."""
         self.approval_status.update(other.approval_status)
         self.clinical_status.update(other.clinical_status)
         self.research_status.update(other.research_status)
+
+    def _merge_psychopharm_data(self, other: 'EnrichmentMixin') -> None:
+        """Merge psychopharmacological data."""
+        # Merge receptor profiles
+        if other.receptor_profiles:
+            if not self.receptor_profiles:
+                self.receptor_profiles = {}
+            self.receptor_profiles.update(other.receptor_profiles)
+
+        # Update BBB data if better score
+        if other.bbb_score > self.bbb_score:
+            self.bbb_permeability = other.bbb_permeability
+            self.bbb_score = other.bbb_score
+            self.p_glycoprotein_substrate = other.p_glycoprotein_substrate
+
+        # Update psychoactive classification
+        if other.psychoactive_class != PsychoactiveClass.UNKNOWN:
+            if self.psychoactive_class == PsychoactiveClass.UNKNOWN:
+                self.psychoactive_class = other.psychoactive_class
+            else:
+                self.secondary_classes.add(self.psychoactive_class)
+                self.psychoactive_class = other.psychoactive_class
+        self.secondary_classes.update(other.secondary_classes)
+
+        # Merge effect profiles
+        self.effect_profile.update(other.effect_profile)
+        self.nootropic_mechanisms.update(other.nootropic_mechanisms)
+        self.cognitive_effects.update(other.cognitive_effects)
+        self.side_effects.update(other.side_effects)
+
+        # Update timing data if not set
+        if not self.onset_time:
+            self.onset_time = other.onset_time
+        if not self.duration:
+            self.duration = other.duration
+        if not self.half_life:
+            self.half_life = other.half_life
+
+        # Merge tolerance data
+        self.tolerance_profile.update(other.tolerance_profile)
+        self.withdrawal_profile.update(other.withdrawal_profile)
+        self.cross_tolerance.update(other.cross_tolerance)
 
     def get_enrichment_dict(self) -> Dict:
         """Get dictionary of web enrichment data."""
@@ -221,7 +293,7 @@ class EnrichedCompound(BaseCompound):
             "clinical_status": self.clinical_status,
             "research_status": self.research_status,
 
-            # Reference URLs
+            # URLs
             "pubchem_url": self.pubchem_url,
             "chembl_url": self.chembl_url,
             "psychonaut_url": self.psychonaut_url,
@@ -232,10 +304,22 @@ class EnrichedCompound(BaseCompound):
             "nida_url": self.nida_url,
             "dea_url": self.dea_url,
             "who_url": self.who_url,
-        }
 
-    def to_dict(self) -> Dict:
-        """Convert compound data to dictionary format."""
-        data = super().to_dict()
-        data.update(self.get_enrichment_dict())
-        return data
+            # Psychopharm data
+            "receptor_profiles": self.receptor_profiles,
+            "bbb_permeability": self.bbb_permeability.value,
+            "bbb_score": self.bbb_score,
+            "p_glycoprotein_substrate": self.p_glycoprotein_substrate,
+            "psychoactive_class": self.psychoactive_class.value,
+            "secondary_classes": [c.value for c in self.secondary_classes],
+            "effect_profile": self.effect_profile,
+            "nootropic_mechanisms": [m.value for m in self.nootropic_mechanisms],
+            "cognitive_effects": self.cognitive_effects,
+            "side_effects": self.side_effects,
+            "onset_time": self.onset_time,
+            "duration": self.duration,
+            "half_life": self.half_life,
+            "tolerance_profile": self.tolerance_profile,
+            "withdrawal_profile": self.withdrawal_profile,
+            "cross_tolerance": list(self.cross_tolerance),
+        }

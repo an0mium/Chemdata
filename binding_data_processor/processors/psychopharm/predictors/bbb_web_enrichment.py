@@ -5,6 +5,7 @@ This module provides functionality to:
 2. Extract relevant information using LLMs
 3. Validate and standardize web data
 4. Integrate web data with ML predictions
+5. Track amino acid transporter data
 """
 
 import logging
@@ -25,6 +26,30 @@ from web_enrichment.llm_utils import LLMProcessor
 
 class BBBPredictorWebEnriched(BBBPredictorEnhanced):
     """BBB permeability predictor with web data enrichment."""
+
+    # Keywords for amino acid transporter detection
+    AMINO_ACID_KEYWORDS = {
+        "lat1": {
+            "lat1", "lat-1", "l-type amino acid transporter 1", 
+            "slc7a5", "solute carrier family 7 member 5"
+        },
+        "lat2": {
+            "lat2", "lat-2", "l-type amino acid transporter 2",
+            "slc7a8", "solute carrier family 7 member 8"
+        },
+        "asct1": {
+            "asct1", "asct-1", "alanine serine cysteine transporter 1",
+            "slc1a4", "solute carrier family 1 member 4"
+        },
+        "asct2": {
+            "asct2", "asct-2", "alanine serine cysteine transporter 2",
+            "slc1a5", "solute carrier family 1 member 5"
+        },
+        "b0at1": {
+            "b0at1", "b0at-1", "slc6a19", 
+            "solute carrier family 6 member 19"
+        },
+    }
 
     def __init__(
         self,
@@ -77,6 +102,13 @@ class BBBPredictorWebEnriched(BBBPredictorEnhanced):
                 'pharmacology_data',
                 'safety_data',
                 'interaction_data',
+                # Add amino acid transporter columns
+                'lat1_literature',
+                'lat1_evidence',
+                'lat1_confidence_web',
+                'amino_acid_transporters',
+                'transporter_interactions',
+                'substrate_evidence',
             ]),
         ], axis=1)
 
@@ -142,11 +174,29 @@ class BBBPredictorWebEnriched(BBBPredictorEnhanced):
             compound.smiles, compound.name
         )
         
-        # Get web search data
-        web_data["web_search"] = self.web_clients["web_search"].get_compound_data(
-            compound.smiles, compound.name
-        )
+        # Get web search data with amino acid transporter focus
+        web_data["web_search"] = self._get_transporter_web_data(compound)
         
+        return web_data
+
+    def _get_transporter_web_data(self, compound: CompoundData) -> Dict[str, Any]:
+        """Get web data focused on amino acid transporters."""
+        web_data = {}
+        
+        # Search for each transporter type
+        for transporter, keywords in self.AMINO_ACID_KEYWORDS.items():
+            # Build search query
+            query = f"{compound.name} {' OR '.join(keywords)}"
+            
+            # Get web search results
+            results = self.web_clients["web_search"].get_compound_data(
+                compound.smiles,
+                compound.name,
+                additional_query=query
+            )
+            
+            web_data[transporter] = results
+            
         return web_data
 
     def _process_web_data(
@@ -158,6 +208,11 @@ class BBBPredictorWebEnriched(BBBPredictorEnhanced):
         # Extract BBB-related information
         processed_data["bbb_data"] = self.llm_processor.extract_bbb_data(
             web_data, compound
+        )
+        
+        # Extract amino acid transporter information
+        processed_data["transporter_data"] = (
+            self.llm_processor.extract_transporter_data(web_data, compound)
         )
         
         # Extract mechanism information
@@ -193,6 +248,7 @@ class BBBPredictorWebEnriched(BBBPredictorEnhanced):
         base_result.supporting_data.update({
             "web_data": {
                 "bbb_data": web_data["bbb_data"],
+                "transporter_data": web_data["transporter_data"],
                 "mechanism_data": web_data["mechanism_data"],
                 "pharmacology_data": web_data["pharmacology_data"],
                 "safety_data": web_data["safety_data"],
@@ -201,11 +257,21 @@ class BBBPredictorWebEnriched(BBBPredictorEnhanced):
         })
         
         # Adjust confidence based on web data support
+        confidence_boost = 1.0
+        
+        # Boost if BBB data supports prediction
         if web_data["bbb_data"].get("supports_prediction", False):
-            base_result.confidence = min(
-                1.0,
-                base_result.confidence * 1.2
-            )
+            confidence_boost += 0.2
+            
+        # Boost if transporter data supports prediction
+        if web_data["transporter_data"].get("supports_prediction", False):
+            confidence_boost += 0.2
+            
+        # Apply confidence boost
+        base_result.confidence = min(
+            1.0,
+            base_result.confidence * confidence_boost
+        )
         
         return base_result
 
@@ -220,7 +286,7 @@ class BBBPredictorWebEnriched(BBBPredictorEnhanced):
         
         latest_idx = self.prediction_history[mask].index[-1]
         
-        # Update web data columns
+        # Update standard web data columns
         self.prediction_history.loc[latest_idx, 'chembl_data'] = str(
             web_data.get("chembl", {})
         )
@@ -239,6 +305,29 @@ class BBBPredictorWebEnriched(BBBPredictorEnhanced):
         self.prediction_history.loc[latest_idx, 'web_mentions'] = str(
             web_data.get("web_search", {})
         )
+        
+        # Update amino acid transporter columns
+        transporter_data = web_data.get("transporter_data", {})
+        self.prediction_history.loc[latest_idx, 'lat1_literature'] = str(
+            transporter_data.get("lat1_literature", [])
+        )
+        self.prediction_history.loc[latest_idx, 'lat1_evidence'] = str(
+            transporter_data.get("lat1_evidence", {})
+        )
+        self.prediction_history.loc[latest_idx, 'lat1_confidence_web'] = float(
+            transporter_data.get("lat1_confidence", 0.0)
+        )
+        self.prediction_history.loc[latest_idx, 'amino_acid_transporters'] = str(
+            transporter_data.get("transporters", [])
+        )
+        self.prediction_history.loc[latest_idx, 'transporter_interactions'] = str(
+            transporter_data.get("interactions", {})
+        )
+        self.prediction_history.loc[latest_idx, 'substrate_evidence'] = str(
+            transporter_data.get("substrate_evidence", {})
+        )
+        
+        # Update other data columns
         self.prediction_history.loc[latest_idx, 'mechanism_data'] = str(
             web_data.get("mechanism_data", {})
         )
@@ -297,6 +386,12 @@ class BBBPredictorWebEnriched(BBBPredictorEnhanced):
                 'pharmacology_data',
                 'safety_data',
                 'interaction_data',
+                'lat1_literature',
+                'lat1_evidence', 
+                'lat1_confidence_web',
+                'amino_acid_transporters',
+                'transporter_interactions',
+                'substrate_evidence',
             ]
             export_df = export_df.join(
                 self.prediction_history[web_columns],

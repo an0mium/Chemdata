@@ -1,33 +1,51 @@
 """Base compound data model.
 
 This module provides the base CompoundData class with core fields and methods for:
-- Basic chemical identifiers
-- Chemical properties
-- Database IDs
-- Common names
-- Basic validation
+- Basic chemical identifiers (name, SMILES, InChI, CAS)
+- Chemical properties (MW, LogP, TPSA, etc.)
+- Database IDs (ChEMBL, PubChem, DrugBank)
+- Common names with search result counts
+- Target binding data
+- Source references and metadata
+- Legal status and scheduling
+- Comprehensive validation
+
+The base class is designed to be extended through mixins for:
+- ML capabilities (predictions, features)
+- Web enrichment (patents, literature, community data)
+- Analysis features (SAR, safety, activity)
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Set
 import re
+from typing import Dict, List, Optional, Set
 
-from .types import CompoundType, LegalStatus, TargetData
+from .types import (
+    CompoundType,
+    LegalStatus,
+    StringSet,
+    StringDict,
+    ValidationErrors,
+    OptionalStr,
+    OptionalFloat,
+    TargetData,
+    TargetDict,
+)
 
 
 @dataclass
-class BaseCompound:
+class CompoundData:
     """Base data class for chemical compound information."""
     # Core identifiers (required)
     name: str
     smiles: str
 
     # Basic identifiers (optional)
-    cas_number: Optional[str] = None
-    inchi: Optional[str] = None
-    inchi_key: Optional[str] = None
-    iupac_name: Optional[str] = None
+    cas_number: OptionalStr = None
+    inchi: OptionalStr = None
+    inchi_key: OptionalStr = None
+    iupac_name: OptionalStr = None
     compound_type: CompoundType = CompoundType.OTHER
 
     # Ranked common names with search results
@@ -37,7 +55,7 @@ class BaseCompound:
     common_name_1_results: int = 0
     common_name_2_results: int = 0
     common_name_3_results: int = 0
-    other_names: Set[str] = field(default_factory=set)
+    other_names: StringSet = field(default_factory=set)
 
     # Chemical properties
     molecular_weight: float = 0.0
@@ -51,21 +69,31 @@ class BaseCompound:
     ring_count: int = 0
 
     # Database identifiers
-    chembl_id: Optional[str] = None
-    pubchem_cid: Optional[str] = None
-    pubchem_sid: Optional[str] = None
-    drugbank_id: Optional[str] = None
-    bindingdb_id: Optional[str] = None
+    chembl_id: OptionalStr = None
+    pubchem_cid: OptionalStr = None
+    pubchem_sid: OptionalStr = None
+    drugbank_id: OptionalStr = None
+    bindingdb_id: OptionalStr = None
+
+    # Target data
+    targets: List[TargetData] = field(default_factory=list)
+    target_data: TargetDict = field(default_factory=dict)
+    primary_target: OptionalStr = None
+    primary_activity: OptionalStr = None
+    mechanism_of_action: OptionalStr = None
+    pharmacology: str = "N/A"
+    toxicity: str = "N/A"
+    metabolism: str = "N/A"
 
     # Source information
-    data_sources: Set[str] = field(default_factory=set)
-    reference_dois: Set[str] = field(default_factory=set)
-    reference_pmids: Set[str] = field(default_factory=set)
-    reference_urls: Dict[str, str] = field(default_factory=dict)
+    data_sources: StringSet = field(default_factory=set)
+    reference_dois: StringSet = field(default_factory=set)
+    reference_pmids: StringSet = field(default_factory=set)
+    reference_urls: StringDict = field(default_factory=dict)
 
     # Legal & classification
     legal_status: Dict[str, LegalStatus] = field(default_factory=dict)  # Country -> Status
-    scheduling: Dict[str, str] = field(default_factory=dict)  # Country -> Schedule
+    scheduling: StringDict = field(default_factory=dict)  # Country -> Schedule
 
     # Metadata
     last_updated: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -82,6 +110,7 @@ class BaseCompound:
         # Run all validation checks
         errors.extend(self._validate_identifiers())
         errors.extend(self._validate_properties())
+        errors.extend(self._validate_targets())
         
         if errors:
             raise ValidationError("\n".join(errors))
@@ -89,7 +118,7 @@ class BaseCompound:
         # Initialize collections
         self._initialize_collections()
 
-    def _validate_identifiers(self) -> List[str]:
+    def _validate_identifiers(self) -> ValidationErrors:
         """Validate chemical identifiers."""
         errors = []
         
@@ -105,7 +134,7 @@ class BaseCompound:
 
         return errors
 
-    def _validate_properties(self) -> List[str]:
+    def _validate_properties(self) -> ValidationErrors:
         """Validate chemical properties."""
         errors = []
         
@@ -121,6 +150,37 @@ class BaseCompound:
         if self.tpsa < 0:
             errors.append(f"Invalid TPSA value: {self.tpsa}")
 
+        return errors
+
+    def _validate_targets(self) -> ValidationErrors:
+        """Validate target data."""
+        errors = []
+        for i, target in enumerate(self.targets, 1):
+            # Validate affinity value
+            if target.affinity_value < 0:
+                errors.append(
+                    f"Invalid binding affinity value for target {i}: {target.affinity_value}"
+                )
+                
+            # Validate confidence score
+            if not 0 <= target.confidence <= 1:
+                errors.append(
+                    f"Invalid confidence score for target {i}: {target.confidence}"
+                )
+                
+            # Validate affinity type
+            valid_types = {'Ki', 'IC50', 'EC50', 'Kd'}
+            if target.affinity_type not in valid_types and target.affinity_type != "N/A":
+                errors.append(
+                    f"Invalid affinity type for target {i}: {target.affinity_type}"
+                )
+                
+            # Validate affinity unit
+            valid_units = {'nM', 'uM', 'mM', 'pM'}
+            if target.affinity_unit not in valid_units and target.affinity_unit != "N/A":
+                errors.append(
+                    f"Invalid affinity unit for target {i}: {target.affinity_unit}"
+                )
         return errors
 
     def _initialize_collections(self) -> None:
@@ -200,6 +260,14 @@ class BaseCompound:
             "pubchem_sid": self.pubchem_sid,
             "drugbank_id": self.drugbank_id,
             "bindingdb_id": self.bindingdb_id,
+            # Target data
+            "targets": [vars(target) for target in self.targets],
+            "primary_target": self.primary_target,
+            "primary_activity": self.primary_activity,
+            "mechanism_of_action": self.mechanism_of_action,
+            "pharmacology": self.pharmacology,
+            "toxicity": self.toxicity,
+            "metabolism": self.metabolism,
             # Source info
             "data_sources": list(self.data_sources),
             "reference_dois": list(self.reference_dois),

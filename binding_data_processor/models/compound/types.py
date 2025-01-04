@@ -1,16 +1,31 @@
 """Type definitions for compound data models.
 
-This module provides enums and type definitions used across the compound data models:
-- Basic compound classifications
-- Legal status types
-- Psychoactive classifications
-- Binding and activity types
-- Safety and risk levels
+This module provides comprehensive type definitions used across the compound data models:
+
+Core Types:
+- Basic compound classifications (CompoundType)
+- Legal and regulatory status (LegalStatus)
+- Psychoactive classifications (PsychoactiveClass)
+- Nootropic mechanisms (NootropicMechanism)
+- BBB permeability levels (BBBPermeability)
+
+Activity Types:
+- Binding interactions (BindingType)
+- Pharmacological activity (ActivityType)
+- Risk classifications (RiskLevel)
+
+Data Structures:
+- Target binding data (TargetData)
+- ML feature types
+- Prediction result types
+- Collection type aliases
+- Export format types
 """
 
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Set, Union, Any
-from dataclasses import dataclass
+import numpy as np
 
 
 class CompoundType(Enum):
@@ -120,15 +135,42 @@ class TargetData:
     confidence: float = 0.0
     is_primary: bool = False
     pubmed_count: int = 0
-    reference_dois: Set[str] = None
-    assay_details: Dict = None
-    experimental_conditions: Dict = None
+    reference_dois: Set[str] = field(default_factory=set)
+    assay_details: Dict = field(default_factory=dict)
+    experimental_conditions: Dict = field(default_factory=dict)
 
-    def __post_init__(self):
-        """Initialize collections."""
-        if self.reference_dois is None:
-            self.reference_dois = set()
-        if self.assay_details is None:
-            self.assay_details = {}
-        if self.experimental_conditions is None:
-            self.experimental_conditions = {}
+
+# Value Types
+AffinityValue = float  # Binding affinity measurements (Ki, IC50, etc.)
+ConfidenceValue = float  # Confidence scores (0.0-1.0)
+ProbabilityValue = float  # Probability values (0.0-1.0)
+Features = np.ndarray  # ML feature vectors
+ModelVersion = str  # Model version identifiers
+Timestamp = str  # ISO format timestamps
+
+# ML Types
+PredictionResult = Dict[str, Union[float, str, Dict]]  # ML prediction results
+ModelMetrics = Dict[str, float]  # Model performance metrics
+FeatureImportances = Dict[str, float]  # Feature importance scores
+
+# Collection Types
+StringSet = Set[str]  # Set of strings
+StringDict = Dict[str, str]  # String key-value pairs
+MetricsDict = Dict[str, float]  # Metric key-value pairs
+PredictionDict = Dict[str, PredictionResult]  # Prediction results by type
+ValidationErrors = List[str]  # Validation error messages
+
+# Optional Types
+OptionalStr = Optional[str]  # Optional string values
+OptionalFloat = Optional[float]  # Optional float values
+OptionalDict = Optional[Dict]  # Optional dictionary values
+OptionalList = Optional[List]  # Optional list values
+
+# Export Types
+ExportDict = Dict[str, Union[str, float, int, List, Dict]]  # Export data format
+
+# Specialized Types
+TargetDict = Dict[str, TargetData]  # Target data by name
+ActivityDict = Dict[str, ActivityType]  # Activity types by target
+RiskDict = Dict[str, RiskLevel]  # Risk levels by category
+MechanismDict = Dict[str, NootropicMechanism]  # Mechanisms by type

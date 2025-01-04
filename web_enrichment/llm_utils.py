@@ -6,20 +6,64 @@ This module handles:
 3. Structured data extraction
 4. PDF document processing
 5. Chemical structure recognition
+6. Amino acid transporter analysis
 """
 
 import json
 import re
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List
 import requests
 import pypdf
 from io import BytesIO
 
 from logger import LogManager
 from rdkit import Chem
-from rdkit.Chem import AllChem
 
 logger = LogManager().get_logger("web_enrichment.llm_utils")
+
+
+# Amino acid transporter patterns
+TRANSPORTER_PATTERNS = {
+    "lat1": {
+        "names": {
+            "lat1", "lat-1", "l-type amino acid transporter 1", 
+            "slc7a5", "solute carrier family 7 member 5"
+        },
+        "substrates": {
+            "leucine", "isoleucine", "valine", "phenylalanine", 
+            "tyrosine", "tryptophan", "methionine"
+        }
+    },
+    "lat2": {
+        "names": {
+            "lat2", "lat-2", "l-type amino acid transporter 2",
+            "slc7a8", "solute carrier family 7 member 8"
+        },
+        "substrates": {
+            "alanine", "serine", "cysteine", "threonine", 
+            "asparagine", "glutamine", "histidine"
+        }
+    },
+    "asct1": {
+        "names": {
+            "asct1", "asct-1", "alanine serine cysteine transporter 1",
+            "slc1a4", "solute carrier family 1 member 4"
+        },
+        "substrates": {
+            "alanine", "serine", "cysteine", "threonine"
+        }
+    },
+    "asct2": {
+        "names": {
+            "asct2", "asct-2", "alanine serine cysteine transporter 2",
+            "slc1a5", "solute carrier family 1 member 5"
+        },
+        "substrates": {
+            "alanine", "serine", "cysteine", "threonine", 
+            "glutamine", "asparagine"
+        }
+    }
+}
 
 
 def analyze_content_with_llm(
@@ -52,7 +96,7 @@ SMILES: {compound_data.get('smiles', 'Unknown')}
 InChI: {compound_data.get('inchi', 'Unknown')}
 
 Webpage content:
-{processed_content[:4000]}  # Increased context window
+{processed_content[:4000]}
 
 Please extract the following information if present:
 1. Alternative names/synonyms (including systematic names, trade names, and common names)
@@ -71,25 +115,35 @@ Please extract the following information if present:
    - Mechanism of action
    - Target receptors
    - Binding affinities
-   - Activity type (agonist/antagonist)
+   - Activity type (agonist/antagonist/inhibitor/allosteric modulator)
    - Efficacy data
-5. Safety data:
+5. Transporter interactions:
+   - LAT1/LAT2 substrate status
+   - Other amino acid transporters
+   - Transport kinetics (Km, Vmax)
+   - Competition data
+6. BBB permeability:
+   - Experimental evidence
+   - Transport mechanisms
+   - Rate/extent of BBB crossing
+7. Safety data
    - Toxicity (LD50, etc.)
    - Side effects
    - Handling precautions
    - Safety classifications
-6. Regulatory status:
+8. Regulatory status
    - Scheduling status
    - Legal status by country
    - Control measures
-7. References:
+9. References
    - Scientific papers
    - Patents
    - Database entries
+   - DOIs
 
 Format the response as a JSON object with these fields."""
 
-        # Make LLM API request with increased max tokens
+        # Make LLM API request
         response = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
@@ -216,6 +270,169 @@ Format the response as a JSON object with these fields."""
     return {}
 
 
+def extract_transporter_data(
+    content: str,
+    compound_data: Dict[str, Any],
+    llm_api_key: str
+) -> Dict[str, Any]:
+    """Extract amino acid transporter information from text."""
+    try:
+        # Pre-process content
+        processed_content = _preprocess_transporter_content(content)
+        
+        # Construct transporter-specific prompt
+        prompt = f"""Extract amino acid transporter information from this text:
+
+Compound:
+Name: {compound_data.get('name', 'Unknown')}
+SMILES: {compound_data.get('smiles', 'Unknown')}
+
+Text content:
+{processed_content[:4000]}
+
+Please extract:
+1. LAT1 interactions:
+   - Substrate evidence
+   - Binding affinity
+   - Transport kinetics
+   - Competition data
+2. Other transporters:
+   - LAT2 interactions
+   - ASCT1/2 interactions
+   - Other amino acid transporters
+3. Transport mechanisms:
+   - Active vs passive
+   - Energy dependence
+   - pH dependence
+4. Structure-activity relationships:
+   - Key structural features
+   - SAR patterns
+   - Optimization strategies
+5. Supporting evidence:
+   - Experimental methods
+   - Literature citations
+   - Confidence assessment
+
+Format as JSON with these fields."""
+
+        # Process with LLM
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {llm_api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.7,
+                "max_tokens": 2000
+            }
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            try:
+                extracted_data = json.loads(
+                    result['choices'][0]['message']['content']
+                )
+                # Validate transporter data
+                validated_data = _validate_transporter_data(extracted_data)
+                return validated_data
+            except json.JSONDecodeError:
+                logger.error("Failed to parse transporter LLM response")
+                
+    except Exception as e:
+        logger.error(f"Error extracting transporter data: {str(e)}")
+        
+    return {}
+
+
+def _preprocess_transporter_content(text: str) -> str:
+    """Pre-process text to highlight transporter information."""
+    # Highlight transporter names
+    for transporter, patterns in TRANSPORTER_PATTERNS.items():
+        for name in patterns["names"]:
+            text = re.sub(
+                f"(?i){name}",
+                f"TRANSPORTER_{transporter.upper()}: {name}",
+                text
+            )
+    
+    # Highlight substrate mentions
+    for transporter, patterns in TRANSPORTER_PATTERNS.items():
+        for substrate in patterns["substrates"]:
+            text = re.sub(
+                f"(?i){substrate}",
+                f"SUBSTRATE_{transporter.upper()}: {substrate}",
+                text
+            )
+    
+    # Highlight transport-related terms
+    transport_terms = {
+        "substrate", "transport", "uptake", "efflux", "carrier",
+        "km", "vmax", "kinetics", "competitive", "inhibition"
+    }
+    for term in transport_terms:
+        text = re.sub(
+            f"(?i){term}",
+            f"TRANSPORT_TERM: {term}",
+            text
+        )
+    
+    return text
+
+
+def _validate_transporter_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and standardize transporter data."""
+    validated = {}
+    
+    # Validate LAT1 data
+    if "lat1" in data:
+        lat1_data = data["lat1"]
+        validated["lat1"] = {
+            "is_substrate": lat1_data.get("is_substrate", False),
+            "confidence": float(lat1_data.get("confidence", 0.0)),
+            "affinity": lat1_data.get("affinity"),
+            "evidence": lat1_data.get("evidence", []),
+            "kinetics": lat1_data.get("kinetics", {}),
+            "competition": lat1_data.get("competition", [])
+        }
+    
+    # Validate other transporter data
+    validated["other_transporters"] = {}
+    for transporter in ["lat2", "asct1", "asct2"]:
+        if transporter in data:
+            validated["other_transporters"][transporter] = {
+                "is_substrate": data[transporter].get("is_substrate", False),
+                "confidence": float(data[transporter].get("confidence", 0.0)),
+                "evidence": data[transporter].get("evidence", [])
+            }
+    
+    # Validate mechanism data
+    if "mechanism" in data:
+        validated["mechanism"] = {
+            "type": data["mechanism"].get("type", "unknown"),
+            "energy_dependent": data["mechanism"].get("energy_dependent"),
+            "ph_dependent": data["mechanism"].get("ph_dependent"),
+            "details": data["mechanism"].get("details", "")
+        }
+    
+    # Validate SAR data
+    if "sar" in data:
+        validated["sar"] = {
+            "features": data["sar"].get("features", []),
+            "patterns": data["sar"].get("patterns", []),
+            "optimization": data["sar"].get("optimization", [])
+        }
+    
+    # Copy evidence and references
+    validated["evidence"] = data.get("evidence", [])
+    validated["references"] = data.get("references", [])
+    
+    return validated
+
+
 def process_pdf_content(
     pdf_content: bytes,
     llm_api_key: str
@@ -240,10 +457,11 @@ def process_pdf_content(
         for page in pdf_reader.pages:
             full_text += page.extract_text() + "\n"
             
-        # Pre-process text to highlight chemical information
+        # Pre-process text
         processed_text = _preprocess_chemical_content(full_text)
+        processed_text = _preprocess_transporter_content(processed_text)
         
-        # Split into sections for processing
+        # Split into sections
         sections = _split_into_sections(processed_text)
         
         compounds = []
@@ -259,7 +477,9 @@ Please identify and extract information about any chemical compounds mentioned, 
 2. Structural information
 3. Properties and characteristics
 4. Biological activity
-5. Synthesis details if present
+5. Transporter interactions
+6. BBB permeability data
+7. Synthesis details if present
 
 Format each compound as a JSON object."""
 
@@ -432,15 +652,15 @@ def _split_into_sections(text: str, max_length: int = 4000) -> List[str]:
     return sections
 
 
-def _validate_chemical_data(data: Dict[str, Any]) -> Dict[str, Any]:
+def _validate_identifiers(data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Validate and standardize extracted chemical data.
+    Validate chemical identifiers.
     
     Args:
-        data: Dictionary of extracted data
+        data: Dictionary of extracted identifiers
         
     Returns:
-        Validated and standardized data
+        Validated and standardized identifiers
     """
     validated = {}
     
@@ -459,25 +679,65 @@ def _validate_chemical_data(data: Dict[str, Any]) -> Dict[str, Any]:
             validated['inchi'] = Chem.MolToInchi(mol)
             validated['inchi_key'] = Chem.MolToInchiKey(mol)
             
-    # Validate chemical names
+    return validated
+
+
+def _validate_names(data: Dict[str, Any]) -> List[str]:
+    """Validate chemical names."""
     if 'names' in data and isinstance(data['names'], list):
-        validated['names'] = [
+        return [
             str(name) for name in data['names']
             if isinstance(name, (str, int, float))
         ]
-        
-    # Validate properties
+    return []
+
+
+def _validate_properties(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate chemical properties."""
+    validated = {}
     if 'properties' in data and isinstance(data['properties'], dict):
-        validated['properties'] = {}
         for key, value in data['properties'].items():
             if isinstance(value, (int, float, str)):
-                validated['properties'][str(key)] = value
-                
+                validated[str(key)] = value
+    return validated
+
+
+def _validate_chemical_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validate and standardize extracted chemical data.
+    
+    Args:
+        data: Dictionary of extracted data
+        
+    Returns:
+        Validated and standardized data
+    """
+    validated = {}
+    
+    # Validate identifiers
+    validated.update(_validate_identifiers(data))
+    
+    # Validate names
+    names = _validate_names(data)
+    if names:
+        validated['names'] = names
+    
+    # Validate properties
+    properties = _validate_properties(data)
+    if properties:
+        validated['properties'] = properties
+    
+    # Validate transporter data
+    if 'transporters' in data:
+        validated['transporters'] = _validate_transporter_data(
+            data['transporters']
+        )
+    
     # Copy other fields
     for key in ['pharmacology', 'safety', 'regulatory', 'references']:
         if key in data:
             validated[key] = data[key]
-            
+    
     return validated
 
 
@@ -511,6 +771,22 @@ def _validate_patent_data(data: Dict[str, Any]) -> Dict[str, Any]:
         }
         
     return validated
+
+
+def _merge_compounds(
+    existing: Dict[str, Any],
+    new_data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Merge compound data."""
+    for key, value in new_data.items():
+        if key not in existing:
+            existing[key] = value
+        elif isinstance(value, list):
+            existing[key].extend(value)
+            existing[key] = list(set(existing[key]))
+        elif isinstance(value, dict):
+            existing[key].update(value)
+    return existing
 
 
 def _deduplicate_compounds(
@@ -548,14 +824,9 @@ def _deduplicate_compounds(
                 unique_compounds[identifier] = compound
             else:
                 # Merge with existing compound
-                existing = unique_compounds[identifier]
-                for key, value in compound.items():
-                    if key not in existing:
-                        existing[key] = value
-                    elif isinstance(value, list):
-                        existing[key].extend(value)
-                        existing[key] = list(set(existing[key]))
-                    elif isinstance(value, dict):
-                        existing[key].update(value)
+                unique_compounds[identifier] = _merge_compounds(
+                    unique_compounds[identifier],
+                    compound
+                )
                         
     return list(unique_compounds.values())

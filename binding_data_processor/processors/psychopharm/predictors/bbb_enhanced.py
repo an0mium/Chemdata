@@ -1,14 +1,16 @@
 """Enhanced BBB permeability predictor.
 
-This module provides the BBBPredictorEnhanced class that extends BBBPredictorBase with:
+This module provides the BBBPredictorEnhanced class that extends BBBPredictor with:
 1. Transporter predictions (P-gp, BCRP, etc.)
 2. Receptor-mediated transport predictions
 3. Duration and pharmacokinetic predictions
 4. Integration with other predictors (abuse, toxicity)
-5. Web data enrichment
+5. Enhanced amino acid transport detection
+6. Web data enrichment
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Any
 import numpy as np  # Required for array operations in training methods
@@ -17,7 +19,7 @@ import pandas as pd
 from ....models.core import CompoundData
 from ....models.psychopharm import BBBPermeability
 from ..base import PredictionResult
-from .bbb_base import BBBPredictorBase
+from .predictors import BBBPredictor
 from .abuse import AbusePotentialPredictor
 from .toxicity import ToxicityPredictor
 from .receptors import ReceptorPredictor
@@ -25,7 +27,7 @@ from .psychoactive import PsychoactivePredictor
 from .nootropic import NootropicPredictor
 
 
-class BBBPredictorEnhanced(BBBPredictorBase):
+class BBBPredictorEnhanced(BBBPredictor):
     """Enhanced BBB permeability predictor with additional capabilities."""
 
     # BBB-related transporters
@@ -57,9 +59,17 @@ class BBBPredictorEnhanced(BBBPredictorBase):
         "slow": {"onset": ">60min", "half_life": ">12h"},
     }
 
+    # Additional amino acid patterns
+    AMINO_ACID_PATTERNS = {
+        **BBBPredictor.LAT1_PATTERNS,
+        "carboxyl_group": r"C\(=O\)O",  # Carboxyl group
+        "amine_group": r"CN|NC",  # Primary/secondary amine
+        "peptide_bond": r"NC\(=O\)",  # Peptide bond
+    }
+
     # Additional model filenames
     MODEL_FILENAMES = {
-        **BBBPredictorBase.MODEL_FILENAMES,
+        **BBBPredictor.MODEL_FILENAMES,
         "pgp_classifier": "pgp_classifier.pkl",
         "transporter_classifier": "transporter_classifier.pkl",
         "ensemble_classifier": "ensemble_classifier.pkl",
@@ -76,12 +86,23 @@ class BBBPredictorEnhanced(BBBPredictorBase):
         receptor_transporters: Optional[Dict[str, Set[str]]] = None,
         predictors: Optional[Dict[str, Any]] = None,
     ):
-        """Initialize enhanced BBB predictor."""
-        super().__init__(model_dir, cache_dir, log_level)
-
-        # Use custom transporters if provided
-        self.transporters = transporters or self.TRANSPORTERS
-        self.receptor_transporters = receptor_transporters or self.RECEPTOR_TRANSPORTERS
+        """Initialize enhanced BBB predictor.
+        
+        Args:
+            model_dir: Optional directory containing trained models
+            cache_dir: Optional directory for caching
+            log_level: Logging level
+            transporters: Optional custom transporter definitions
+            receptor_transporters: Optional custom receptor transporter definitions
+            predictors: Optional custom predictor instances
+        """
+        super().__init__(
+            model_dir=model_dir,
+            cache_dir=cache_dir,
+            log_level=log_level,
+            transporters=transporters,
+            receptor_transporters=receptor_transporters,
+        )
 
         # Initialize other predictors
         self.predictors = predictors or {
@@ -117,7 +138,8 @@ class BBBPredictorEnhanced(BBBPredictorBase):
             "rf_classifier": 0.25,
             "gb_classifier": 0.15,
             "rf_regressor": 0.15,
-            "ensemble_classifier": 0.25,
+            "amino_acid_features": 0.15,  # Add weight for amino acid features
+            "ensemble_classifier": 0.10,  # Reduced from 0.25
             "receptor_classifier": 0.1,
             "duration_classifier": 0.1,
         }
@@ -134,6 +156,9 @@ class BBBPredictorEnhanced(BBBPredictorBase):
                 'transporter',
                 'is_substrate',
                 'transporter_confidence',
+                'lat1_substrate',  # Added for amino acid transport
+                'lat1_confidence',  # Added for amino acid transport
+                'amino_acid_features',  # Added for amino acid patterns
                 'receptor_mediated',
                 'receptor_type',
                 'duration_class',
@@ -148,6 +173,21 @@ class BBBPredictorEnhanced(BBBPredictorBase):
         )
 
         self.logger.info("BBBPredictorEnhanced initialized successfully")
+
+    def _extract_compound_features(self, compound: CompoundData) -> Dict[str, np.ndarray]:
+        """Extract compound features including amino acid patterns."""
+        # Get base features
+        features = super()._extract_compound_features(compound)
+        
+        # Add amino acid pattern features
+        amino_features = []
+        for pattern_name, pattern in self.AMINO_ACID_PATTERNS.items():
+            match = bool(re.search(pattern, compound.smiles))
+            amino_features.append(float(match))
+        
+        features["amino_acid_features"] = np.array(amino_features)
+        
+        return features
 
     def predict(self, compound: CompoundData) -> PredictionResult:
         """Generate comprehensive BBB permeability predictions."""
@@ -253,6 +293,16 @@ class BBBPredictorEnhanced(BBBPredictorBase):
         self, predictions: Dict[str, Any], compound: CompoundData
     ) -> None:
         """Update prediction history with new predictions."""
+        # Get LAT1 substrate prediction
+        is_lat1, lat1_conf = self._is_lat1_substrate(compound.smiles)
+        
+        # Get amino acid pattern matches
+        amino_patterns = [
+            k for k, v in self.AMINO_ACID_PATTERNS.items() 
+            if re.search(v, compound.smiles)
+        ]
+        
+        # Create history entry
         self.prediction_history = pd.concat([
             self.prediction_history,
             pd.DataFrame([{
@@ -265,6 +315,9 @@ class BBBPredictorEnhanced(BBBPredictorBase):
                 'transporter': None,
                 'is_substrate': None,
                 'transporter_confidence': None,
+                'lat1_substrate': is_lat1,
+                'lat1_confidence': lat1_conf,
+                'amino_acid_features': ','.join(amino_patterns),
                 'receptor_mediated': bool(predictions["receptors"]),
                 'receptor_type': next(iter(predictions["receptors"]), None),
                 'duration_class': predictions["duration"]["class"],
@@ -326,7 +379,21 @@ class BBBPredictorEnhanced(BBBPredictorBase):
         duration_labels: Optional[List[str]] = None,
         **kwargs,
     ) -> Dict[str, float]:
-        """Retrain models with new data."""
+        """Retrain models with new data.
+        
+        Args:
+            compounds: List of compounds to train on
+            labels: BBB permeability class labels
+            scores: Optional permeability scores for regression
+            pgp_labels: Optional P-gp substrate labels
+            transporter_data: Optional transporter substrate labels
+            receptor_data: Optional receptor transport labels
+            duration_labels: Optional duration class labels
+            **kwargs: Additional training parameters
+            
+        Returns:
+            Dictionary of training metrics
+        """
         # Retrain base models
         metrics = super().retrain(
             compounds=compounds,

@@ -1,6 +1,6 @@
-# ChemData Project Enhancement Plan
+# ChemData Project Master Plan
 
-## 1. Code Consolidation and Cleanup
+## 1. Immediate Code Consolidation
 
 ### A. Stranded Code Integration
 - [ ] Move root level files into package structure:
@@ -30,7 +30,31 @@
   └── similarity.py (Structure comparison)
   ```
 
-### D. Web Enrichment Integration
+## 2. Core Architecture Enhancement
+
+### A. Compound Model Integration
+- [x] Identify all compound-related code
+- [ ] Consolidate base functionality:
+  ```
+  models/compound/
+  ├── __init__.py
+  ├── base.py (core functionality)
+  ├── ml.py (ML integration)
+  ├── enrichment.py (data enrichment)
+  └── types.py (type definitions)
+  ```
+- [ ] Integrate ML capabilities
+- [ ] Update imports across codebase
+- [ ] Add comprehensive tests
+
+### B. Psychopharm Integration
+- [x] Map psychopharm functionality
+- [ ] Integrate predictors with compound model
+- [ ] Consolidate duplicate functionality
+- [ ] Enhance ML pipeline integration
+- [ ] Add validation tests
+
+### C. Web Enrichment Integration
 - [ ] Consolidate web enrichment code:
   ```
   web_enrichment/
@@ -41,8 +65,11 @@
   ├── validation/
   └── integration/
   ```
+- [ ] Integrate LLM utilities
+- [ ] Standardize API clients
+- [ ] Add error handling
 
-## 2. Feature Implementation
+## 3. Feature Implementation
 
 ### A. Data Source Integration
 - [ ] Implement community data sources:
@@ -87,29 +114,53 @@
   * Activity plots
   * Prediction displays
 
-## 3. Quality Improvements
+## 4. Implementation Timeline
 
-### A. Testing Enhancement
-- [ ] Add comprehensive tests:
-  * Unit tests for all modules
-  * Integration tests
-  * End-to-end tests
-- [ ] Improve test coverage:
-  * ML model validation
-  * Web enrichment testing
-  * Export validation
+### Week 1-2: Code Consolidation
+- [ ] Integrate stranded code
+- [ ] Consolidate compound models
+- [ ] Update import structure
+- [ ] Fix circular dependencies
 
-### B. Error Handling
-- [ ] Implement robust error handling:
-  * API error handling
-  * ML prediction errors
-  * Data validation errors
-- [ ] Add retry mechanisms:
-  * API retries
-  * Failed task recovery
-  * Graceful degradation
+### Week 3-4: Data Sources
+- [ ] Implement community sources
+- [ ] Add scientific databases
+- [ ] Set up social monitoring
+- [ ] Add data validation
 
-### C. Performance Optimization
+### Week 5-6: ML Pipeline
+- [ ] Enhance binding prediction
+- [ ] Add activity prediction
+- [ ] Implement safety assessment
+- [ ] Add uncertainty estimation
+
+### Week 7-8: Web Interface
+- [ ] Create API endpoints
+- [ ] Build frontend
+- [ ] Add visualization
+- [ ] Implement export system
+
+## 5. Quality Assurance
+
+### A. Testing Strategy
+- [ ] Unit tests for all modules
+- [ ] Integration tests for pipelines
+- [ ] End-to-end tests for web interface
+- [ ] Performance benchmarks
+
+### B. Validation System
+- [ ] Data validation
+- [ ] ML model validation
+- [ ] Export validation
+- [ ] API response validation
+
+### C. Error Handling
+- [ ] API error handling
+- [ ] ML prediction errors
+- [ ] Data validation errors
+- [ ] Export errors
+
+### D. Performance Optimization
 - [ ] Add caching:
   * API response caching
   * ML prediction caching
@@ -119,30 +170,7 @@
   * Batch predictions
   * Batch exports
 
-## 4. Implementation Timeline
-
-### Week 1-2: Code Consolidation
-- Integrate stranded code
-- Consolidate BBB prediction
-- Refactor structure processing
-- Integrate web enrichment
-
-### Week 3-4: Data Sources
-- Implement community sources
-- Add scientific databases
-- Set up social monitoring
-
-### Week 5-6: ML Pipeline
-- Enhance binding prediction
-- Add activity prediction
-- Implement safety assessment
-
-### Week 7-8: Web Interface
-- Create API endpoints
-- Build frontend
-- Add visualization
-
-## 5. Success Metrics
+## 6. Success Metrics
 
 ### Code Quality
 - [ ] All files under 700 lines
@@ -162,11 +190,62 @@
 - [ ] Export time < 30s
 - [ ] Cache hit rate > 90%
 
-## 6. Next Steps
+## 7. Documentation
 
-1. Start with stranded code integration
-2. Move to BBB prediction consolidation
-3. Implement structure processing improvements
-4. Add new data sources
-5. Enhance ML pipeline
-6. Build web interface
+### A. API Documentation
+- Core functionality
+- ML capabilities
+- Web enrichment
+- Analysis features
+
+### B. Integration Guide
+- Setup instructions
+- Usage examples
+- Best practices
+- Troubleshooting
+
+### C. Development Guide
+- Architecture overview
+- Integration points
+- Extension guide
+- Contributing guide
+
+## 8. Deployment
+
+### A. Package Structure
+- Core package
+- ML models
+- Web services
+- Analysis tools
+
+### B. Dependencies
+- Core requirements
+- ML dependencies
+- Web services
+- Development tools
+
+### C. Configuration
+- Environment setup
+- API credentials
+- Cache settings
+- Logging config
+
+## 9. Maintenance
+
+### A. Code Quality
+- Linting setup
+- Type checking
+- Code coverage
+- Performance monitoring
+
+### B. Updates
+- Dependency updates
+- API updates
+- Model updates
+- Documentation updates
+
+### C. Monitoring
+- Error tracking
+- Performance metrics
+- Usage statistics
+- API quotas

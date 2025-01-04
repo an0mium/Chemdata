@@ -1,0 +1,60 @@
+# Core dependencies
+numpy>=1.21.0
+pandas>=1.3.0
+scikit-learn>=1.0.0
+rdkit>=2022.3.1
+torch>=1.9.0
+
+# Web data enrichment
+requests>=2.26.0
+beautifulsoup4>=4.9.3
+lxml>=4.9.0
+aiohttp>=3.8.0
+tenacity>=8.0.0  # For retries
+
+# ML/DL libraries
+transformers>=4.12.0  # For LLM processing
+pytorch-lightning>=1.5.0  # For ML model training
+optuna>=2.10.0  # For hyperparameter optimization
+xgboost>=1.5.0  # For gradient boosting
+lightgbm>=3.3.0  # For gradient boosting
+
+# Chemical informatics
+mordred>=1.2.0  # For molecular descriptors
+deepchem>=2.6.0  # For chemical ML
+mol2vec>=0.2  # For molecular embeddings
+
+# Data processing
+joblib>=1.1.0
+tqdm>=4.62.0
+networkx>=2.6.0  # For graph operations
+scipy>=1.7.0
+
+# API clients
+chembl-webresource-client>=0.10.0
+pubchempy>=1.0.4
+
+# Testing
+pytest>=6.2.5
+pytest-cov>=2.12.0
+pytest-mock>=3.6.1
+
+# Type checking
+mypy>=0.910
+types-requests>=2.26.1
+types-beautifulsoup4>=4.9.3
+
+# Code quality
+black>=21.9b0
+flake8>=3.9.0
+isort>=5.9.0
+
+# Documentation
+sphinx>=4.2.0
+sphinx-rtd-theme>=1.0.0
+nbsphinx>=0.8.7  # For Jupyter notebook documentation
+
+# Optional: Performance optimizations
+numba>=0.54.0  # For numerical computations
+dask>=2021.9.0  # For parallel processing
+ray>=1.7.0  # For distributed computing

@@ -69,8 +69,8 @@ site/
 # Project specific
 data/
 !data/.gitkeep
-models/
-!models/.gitkeep
+saved_models/
+!saved_models/.gitkeep
 cache/
 logs/
 checkpoints/
