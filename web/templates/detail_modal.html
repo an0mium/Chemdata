@@ -1,0 +1,156 @@
+<!-- Compound Detail Modal -->
+<div class="modal fade" id="compound-detail-modal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Compound Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <!-- Basic Info -->
+                    <div class="col-md-6">
+                        <div class="card detail-card">
+                            <div class="card-header">Basic Information</div>
+                            <div class="card-body">
+                                <div id="structure-display" class="structure-viewer mb-3"></div>
+                                <dl class="row">
+                                    <dt class="col-sm-4">Name</dt>
+                                    <dd class="col-sm-8" id="detail-name"></dd>
+                                    <dt class="col-sm-4">SMILES</dt>
+                                    <dd class="col-sm-8">
+                                        <span id="detail-smiles"></span>
+                                        <button class="btn btn-sm btn-outline-secondary copy-structure" 
+                                                data-bs-toggle="tooltip" title="Copy SMILES">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                    </dd>
+                                    <dt class="col-sm-4">Molecular Weight</dt>
+                                    <dd class="col-sm-8" id="detail-mw"></dd>
+                                    <dt class="col-sm-4">LogP</dt>
+                                    <dd class="col-sm-8" id="detail-logp"></dd>
+                                    <dt class="col-sm-4">TPSA</dt>
+                                    <dd class="col-sm-8" id="detail-tpsa"></dd>
+                                    <dt class="col-sm-4">H-Bond Donors</dt>
+                                    <dd class="col-sm-8" id="detail-hbd"></dd>
+                                    <dt class="col-sm-4">H-Bond Acceptors</dt>
+                                    <dd class="col-sm-8" id="detail-hba"></dd>
+                                    <dt class="col-sm-4">Rotatable Bonds</dt>
+                                    <dd class="col-sm-8" id="detail-rotatable"></dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Activity Data -->
+                    <div class="col-md-6">
+                        <div class="card detail-card">
+                            <div class="card-header">Activity Data</div>
+                            <div class="card-body">
+                                <div id="binding-summary"></div>
+                                <div id="activity-chart" class="receptor-chart"></div>
+                                <div id="activity-table" class="mt-3">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Target</th>
+                                                <th>Activity Type</th>
+                                                <th>Value</th>
+                                                <th>Unit</th>
+                                                <th>Reference</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="activity-data"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ML Predictions -->
+                    <div class="col-md-12">
+                        <div class="card detail-card">
+                            <div class="card-header">ML Predictions</div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <!-- Toxicity -->
+                                    <div class="col-md-4">
+                                        <h6>Toxicity Predictions</h6>
+                                        <div id="toxicity-predictions"></div>
+                                    </div>
+                                    <!-- Abuse Potential -->
+                                    <div class="col-md-4">
+                                        <h6>Abuse Potential</h6>
+                                        <div id="abuse-predictions"></div>
+                                    </div>
+                                    <!-- Binding Predictions -->
+                                    <div class="col-md-4">
+                                        <h6>Predicted Targets</h6>
+                                        <div id="binding-predictions"></div>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-12">
+                                        <div class="alert alert-info">
+                                            <i class="bi bi-info-circle"></i>
+                                            Predictions are generated using machine learning models trained on known compounds.
+                                            Results should be validated experimentally.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Community Data -->
+                    <div class="col-md-6">
+                        <div class="card detail-card">
+                            <div class="card-header">Community Data</div>
+                            <div class="card-body">
+                                <div id="community-data"></div>
+                                <div id="experience-reports" class="mt-3"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Literature & References -->
+                    <div class="col-md-6">
+                        <div class="card detail-card">
+                            <div class="card-header">Literature & References</div>
+                            <div class="card-body">
+                                <div id="literature-data"></div>
+                                <div id="patent-data" class="mt-3"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Similar Compounds -->
+                    <div class="col-md-12">
+                        <div class="card detail-card">
+                            <div class="card-header">Similar Compounds</div>
+                            <div class="card-body">
+                                <div class="row" id="similar-compounds"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <div class="dropdown d-inline-block">
+                    <button class="btn btn-primary dropdown-toggle" type="button" 
+                            id="exportDropdown" data-bs-toggle="dropdown">
+                        Export
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" id="export-json">JSON</a></li>
+                        <li><a class="dropdown-item" href="#" id="export-sdf">SDF</a></li>
+                        <li><a class="dropdown-item" href="#" id="export-csv">CSV</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" id="export-report">Full Report</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

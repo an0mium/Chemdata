@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}ChemData - Browse Compounds{% endblock %}
+
+{% block content %}
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="card-body">
+                <h5 class="card-title">Total Compounds</h5>
+                <p class="card-text display-4">{{ stats.total_compounds }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="card-body">
+                <h5 class="card-title">With Activity Data</h5>
+                <p class="card-text display-4">{{ stats.with_activity }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="card-body">
+                <h5 class="card-title">By Target</h5>
+                <ul class="list-unstyled">
+                    {% for target, count in stats.by_target.items() %}
+                    <li><strong>{{ target }}:</strong> {{ count }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="card-body">
+                <h5 class="card-title">By Activity Type</h5>
+                <ul class="list-unstyled">
+                    {% for type, count in stats.by_activity.items() %}
+                    <li><strong>{{ type }}:</strong> {{ count }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Filters -->
+    <div class="col-md-3">
+        <div class="filters-section">
+            <h4>Filters</h4>
+            <form id="filter-form">
+                <!-- Text Search -->
+                <div class="mb-3">
+                    <label class="form-label">Text Search</label>
+                    <input type="text" id="search" class="form-control" 
+                           placeholder="Search by name, CAS, formula...">
+                </div>
+
+                <!-- Target Type -->
+                <div class="mb-3">
+                    <label class="form-label">Target Type</label>
+                    <select id="target-filter" class="form-select">
+                        <option value="">All Targets</option>
+                        {% for target in target_types %}
+                        <option value="{{ target }}">{{ target }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Activity Type -->
+                <div class="mb-3">
+                    <label class="form-label">Activity Type</label>
+                    <select id="activity-filter" class="form-select">
+                        <option value="">All Activities</option>
+                        {% for activity in activity_types %}
+                        <option value="{{ activity }}">{{ activity }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Legal Status -->
+                <div class="mb-3">
+                    <label class="form-label">Legal Status</label>
+                    <select id="legal-filter" class="form-select">
+                        <option value="">All Statuses</option>
+                        {% for status in legal_statuses %}
+                        <option value="{{ status }}">{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Structure Search -->
+                <div class="mb-3">
+                    <label class="form-label">Structure Search</label>
+                    <div class="input-group">
+                        <input type="text" id="structure-input" class="form-control" 
+                               placeholder="Enter SMILES">
+                        <button type="button" id="draw-structure" class="btn btn-outline-secondary">
+                            <i class="bi bi-pencil"></i> Draw
+                        </button>
+                    </div>
+                    <div class="form-text">Enter SMILES or draw structure for similarity search</div>
+                </div>
+
+                <!-- Similarity Threshold -->
+                <div class="mb-3">
+                    <label class="form-label">
+                        Similarity Threshold: <span id="similarity-value">70%</span>
+                    </label>
+                    <input type="range" id="similarity-threshold" class="form-range" 
+                           min="0" max="100" value="70">
+                </div>
+
+                <!-- ML Prediction Filters -->
+                <div class="mb-3">
+                    <label class="form-label">ML Predictions</label>
+                    <div class="form-check">
+                        <input type="checkbox" id="high-toxicity" class="form-check-input">
+                        <label class="form-check-label">High Toxicity Risk</label>
+                    </div>
+                    <div class="form-check">
+                        <input type="checkbox" id="high-abuse" class="form-check-input">
+                        <label class="form-check-label">High Abuse Potential</label>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+            </form>
+        </div>
+
+        <!-- Column Selection -->
+        <div class="mb-4">
+            <h5>Display Columns</h5>
+            {% for group_name, columns in column_groups.items() %}
+            <div class="column-group">
+                <label>{{ group_name|title }}</label>
+                <div class="btn-group" role="group">
+                    {% for column in columns %}
+                    <input type="checkbox" class="btn-check column-toggle" 
+                           id="btn-{{ column }}" value="{{ column }}" checked>
+                    <label class="btn btn-outline-secondary" for="btn-{{ column }}">
+                        {{ column|replace('_', ' ')|title }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div class="col-md-9">
+        <div class="table-responsive">
+            <table id="compounds-table" class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Structure</th>
+                        <th>Name</th>
+                        <th>Target</th>
+                        <th>Activity</th>
+                        <th>Properties</th>
+                        <th>Predictions</th>
+                        <th>Safety</th>
+                        <th>References</th>
+                    </tr>
+                </thead>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% include 'detail_modal.html' %}
+{% include 'structure_modal.html' %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/table.js') }}"></script>
+<script src="{{ url_for('static', filename='js/filters.js') }}"></script>
+<script src="{{ url_for('static', filename='js/structure.js') }}"></script>
+<script src="{{ url_for('static', filename='js/detail.js') }}"></script>
+{% endblock %}

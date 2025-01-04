@@ -1,12 +1,22 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Chemical Data Browser</title>
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="https://unpkg.com/ketcher-react@2.12.0/dist/ketcher.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChemData - Psychopharmacological Compound Database</title>
+    
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://unpkg.com/ketcher-react@2.12.0/dist/ketcher.css" rel="stylesheet">
+    
     <style>
+        /* Structure Visualization */
+        .structure-img {
+            max-width: 200px;
+            max-height: 200px;
+        }
         .structure-viewer {
             width: 300px;
             height: 300px;
@@ -18,6 +28,32 @@
             border: 1px solid #ccc;
             margin-bottom: 20px;
         }
+
+        /* Layout Components */
+        .filter-section {
+            background-color: #f8f9fa;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 0.25rem;
+        }
+        .stats-card {
+            margin-bottom: 1rem;
+        }
+        .column-group {
+            margin-bottom: 15px;
+        }
+        .column-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .filters-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        /* Data Display */
         .url-list {
             list-style: none;
             padding: 0;
@@ -33,22 +69,61 @@
             padding: 10px;
             border-radius: 4px;
         }
-        .stats-card {
-            margin-bottom: 20px;
+        .mechanism-list {
+            list-style: none;
+            padding-left: 0;
         }
-        .column-group {
-            margin-bottom: 15px;
+        .mechanism-list li {
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            background-color: #f8f9fa;
+            border-radius: 4px;
         }
-        .column-group label {
+
+        /* Predictions & Visualizations */
+        .prediction-badge {
+            display: inline-block;
+            padding: 0.25em 0.6em;
+            font-size: 0.75em;
+            font-weight: 700;
+            border-radius: 0.25rem;
+            margin: 0.1em;
+        }
+        .confidence-bar {
+            height: 4px;
+            margin-top: 2px;
+            background-color: #e9ecef;
+        }
+        .confidence-bar .bar {
+            height: 100%;
+            background-color: #0d6efd;
+        }
+        .receptor-chart {
+            width: 100%;
+            height: 300px;
+        }
+
+        /* Cards & Alerts */
+        .detail-card {
+            margin-bottom: 1rem;
+        }
+        .detail-card .card-header {
+            background-color: #f8f9fa;
             font-weight: bold;
-            margin-bottom: 5px;
         }
-        .filters-section {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+        .alert-warning {
+            border-left: 4px solid #ffc107;
         }
+        .alert-danger {
+            border-left: 4px solid #dc3545;
+        }
+
+        /* Navigation */
+        .nav-link.active {
+            font-weight: bold;
+        }
+
+        /* Progress Indicators */
         .progress-section {
             position: fixed;
             bottom: 20px;
@@ -58,9 +133,31 @@
     </style>
 </head>
 <body>
-    <div class="container-fluid py-4">
-        <h1 class="mb-4">Chemical Data Browser</h1>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">ChemData</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">Browse</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/api/docs">API</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
 
+    <!-- Main Content -->
+    <div class="container-fluid py-4">
         <!-- Stats Cards -->
         <div class="row mb-4">
             <div class="col-md-3">
@@ -105,95 +202,223 @@
             </div>
         </div>
 
-        <!-- Filters Section -->
-        <div class="filters-section">
-            <div class="row">
-                <div class="col-md-4">
-                    <div class="mb-3">
-                        <label class="form-label">Text Search</label>
-                        <input type="text" id="search" class="form-control" placeholder="Search by name, CAS, formula...">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Target Type</label>
-                        <select id="target-filter" class="form-select">
-                            <option value="">All Targets</option>
-                            {% for target in target_types %}
-                            <option value="{{ target }}">{{ target }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
+        <div class="row">
+            <!-- Filters -->
+            <div class="col-md-3">
+                <div class="filters-section">
+                    <h4>Filters</h4>
+                    <form id="filter-form">
+                        <!-- Text Search -->
+                        <div class="mb-3">
+                            <label class="form-label">Text Search</label>
+                            <input type="text" id="search" class="form-control" 
+                                   placeholder="Search by name, CAS, formula...">
+                        </div>
+
+                        <!-- Target Type -->
+                        <div class="mb-3">
+                            <label class="form-label">Target Type</label>
+                            <select id="target-filter" class="form-select">
+                                <option value="">All Targets</option>
+                                {% for target in target_types %}
+                                <option value="{{ target }}">{{ target }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Activity Type -->
+                        <div class="mb-3">
+                            <label class="form-label">Activity Type</label>
+                            <select id="activity-filter" class="form-select">
+                                <option value="">All Activities</option>
+                                {% for activity in activity_types %}
+                                <option value="{{ activity }}">{{ activity }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Legal Status -->
+                        <div class="mb-3">
+                            <label class="form-label">Legal Status</label>
+                            <select id="legal-filter" class="form-select">
+                                <option value="">All Statuses</option>
+                                {% for status in legal_statuses %}
+                                <option value="{{ status }}">{{ status }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Structure Search -->
+                        <div class="mb-3">
+                            <label class="form-label">Structure Search</label>
+                            <div class="input-group">
+                                <input type="text" id="structure-input" class="form-control" 
+                                       placeholder="Enter SMILES">
+                                <button type="button" id="draw-structure" class="btn btn-outline-secondary">
+                                    <i class="bi bi-pencil"></i> Draw
+                                </button>
+                            </div>
+                            <div class="form-text">Enter SMILES or draw structure for similarity search</div>
+                        </div>
+
+                        <!-- Similarity Threshold -->
+                        <div class="mb-3">
+                            <label class="form-label">
+                                Similarity Threshold: <span id="similarity-value">70%</span>
+                            </label>
+                            <input type="range" id="similarity-threshold" class="form-range" 
+                                   min="0" max="100" value="70">
+                        </div>
+
+                        <!-- ML Prediction Filters -->
+                        <div class="mb-3">
+                            <label class="form-label">ML Predictions</label>
+                            <div class="form-check">
+                                <input type="checkbox" id="high-toxicity" class="form-check-input">
+                                <label class="form-check-label">High Toxicity Risk</label>
+                            </div>
+                            <div class="form-check">
+                                <input type="checkbox" id="high-abuse" class="form-check-input">
+                                <label class="form-check-label">High Abuse Potential</label>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                    </form>
                 </div>
-                <div class="col-md-4">
-                    <div class="mb-3">
-                        <label class="form-label">Activity Type</label>
-                        <select id="activity-filter" class="form-select">
-                            <option value="">All Activities</option>
-                            {% for activity in activity_types %}
-                            <option value="{{ activity }}">{{ activity }}</option>
+
+                <!-- Column Selection -->
+                <div class="mb-4">
+                    <h5>Display Columns</h5>
+                    {% for group_name, columns in column_groups.items() %}
+                    <div class="column-group">
+                        <label>{{ group_name|title }}</label>
+                        <div class="btn-group" role="group">
+                            {% for column in columns %}
+                            <input type="checkbox" class="btn-check column-toggle" 
+                                   id="btn-{{ column }}" value="{{ column }}" checked>
+                            <label class="btn btn-outline-secondary" for="btn-{{ column }}">
+                                {{ column|replace('_', ' ')|title }}
+                            </label>
                             {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Legal Status</label>
-                        <select id="legal-filter" class="form-select">
-                            <option value="">All Statuses</option>
-                            {% for status in legal_statuses %}
-                            <option value="{{ status }}">{{ status }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="mb-3">
-                        <label class="form-label">Structure Similarity</label>
-                        <div class="input-group">
-                            <input type="range" id="similarity-threshold" class="form-range" min="0" max="100" value="70">
-                            <span id="similarity-value" class="ms-2">70%</span>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <button id="draw-structure" class="btn btn-primary">
-                            <i class="bi bi-pencil"></i> Draw Structure
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Column Selection -->
-        <div class="mb-4">
-            <h5>Select Columns</h5>
-            {% for group_name, columns in column_groups.items() %}
-            <div class="column-group">
-                <label>{{ group_name|title }}</label>
-                <div class="btn-group" role="group">
-                    {% for column in columns %}
-                    <input type="checkbox" class="btn-check column-toggle" id="btn-{{ column }}" value="{{ column }}" checked>
-                    <label class="btn btn-outline-secondary" for="btn-{{ column }}">
-                        {{ column|replace('_', ' ')|title }}
-                    </label>
                     {% endfor %}
                 </div>
             </div>
-            {% endfor %}
-        </div>
 
-        <!-- Compounds Table -->
-        <table id="compounds-table" class="table table-striped">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Structure</th>
-                    <th>Target</th>
-                    <th>Activity</th>
-                    <th>Properties</th>
-                    <th>Legal Status</th>
-                    <th>References</th>
-                </tr>
-            </thead>
-            <tbody>
-            </tbody>
-        </table>
+            <!-- Results -->
+            <div class="col-md-9">
+                <div class="table-responsive">
+                    <table id="compounds-table" class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Structure</th>
+                                <th>Name</th>
+                                <th>Target</th>
+                                <th>Activity</th>
+                                <th>Properties</th>
+                                <th>Predictions</th>
+                                <th>Safety</th>
+                                <th>References</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compound Detail Modal -->
+    <div class="modal fade" id="compound-detail-modal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Compound Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <!-- Basic Info -->
+                        <div class="col-md-6">
+                            <div class="card detail-card">
+                                <div class="card-header">Basic Information</div>
+                                <div class="card-body">
+                                    <div id="structure-display" class="structure-viewer mb-3"></div>
+                                    <dl class="row">
+                                        <dt class="col-sm-4">Name</dt>
+                                        <dd class="col-sm-8" id="detail-name"></dd>
+                                        <dt class="col-sm-4">SMILES</dt>
+                                        <dd class="col-sm-8" id="detail-smiles"></dd>
+                                        <dt class="col-sm-4">Molecular Weight</dt>
+                                        <dd class="col-sm-8" id="detail-mw"></dd>
+                                        <dt class="col-sm-4">LogP</dt>
+                                        <dd class="col-sm-8" id="detail-logp"></dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Activity Data -->
+                        <div class="col-md-6">
+                            <div class="card detail-card">
+                                <div class="card-header">Activity Data</div>
+                                <div class="card-body">
+                                    <div id="binding-summary"></div>
+                                    <div id="activity-chart" class="receptor-chart"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ML Predictions -->
+                        <div class="col-md-12">
+                            <div class="card detail-card">
+                                <div class="card-header">ML Predictions</div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <!-- Toxicity -->
+                                        <div class="col-md-4">
+                                            <h6>Toxicity Predictions</h6>
+                                            <div id="toxicity-predictions"></div>
+                                        </div>
+                                        <!-- Abuse Potential -->
+                                        <div class="col-md-4">
+                                            <h6>Abuse Potential</h6>
+                                            <div id="abuse-predictions"></div>
+                                        </div>
+                                        <!-- Binding Predictions -->
+                                        <div class="col-md-4">
+                                            <h6>Predicted Targets</h6>
+                                            <div id="binding-predictions"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Community Data -->
+                        <div class="col-md-6">
+                            <div class="card detail-card">
+                                <div class="card-header">Community Data</div>
+                                <div class="card-body">
+                                    <div id="community-data"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Literature & References -->
+                        <div class="col-md-6">
+                            <div class="card detail-card">
+                                <div class="card-header">Literature & References</div>
+                                <div class="card-body">
+                                    <div id="literature-data"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Structure Drawing Modal -->
@@ -234,13 +459,17 @@
     <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js"></script>
     <script src="https://unpkg.com/ketcher-standalone@2.12.0/dist/ketcher.js"></script>
     <script src="https://unpkg.com/ketcher-react@2.12.0/dist/ketcher.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.12.1.min.js"></script>
 
+    <!-- Custom JavaScript -->
     <script>
         let ketcher;
+        let currentCompoundData;
 
         // Initialize RDKit
         window.initRDKitModule().then(function(RDKit) {
@@ -256,10 +485,10 @@
             }
         });
 
-        // DataTable initialization
+        // Initialize DataTable
         $(document).ready(function() {
             var table = $('#compounds-table').DataTable({
-                processing: true,
+                serverSide: true,
                 ajax: {
                     url: '/api/compounds',
                     data: function(d) {
@@ -270,6 +499,8 @@
                             legal: $('#legal-filter').val(),
                             structure: window.currentStructure || '',
                             similarity: $('#similarity-threshold').val() / 100,
+                            high_toxicity: $('#high-toxicity').prop('checked'),
+                            high_abuse: $('#high-abuse').prop('checked'),
                             columns: $('.column-toggle:checked').map(function() {
                                 return $(this).val();
                             }).get(),
@@ -280,18 +511,19 @@
                     }
                 },
                 columns: [
+                    {
+                        data: 'smiles',
+                        render: function(data) {
+                            return data ? 
+                                `<img src="/api/structure/${encodeURIComponent(data)}" class="structure-img">` :
+                                '';
+                        }
+                    },
                     { 
                         data: 'name',
                         render: function(data, type, row) {
-                            return `<strong>${data}</strong>`;
-                        }
-                    },
-                    {
-                        data: 'smiles',
-                        render: function(data, type, row) {
-                            if (type === 'display' && data) {
-                                return `<img src="/api/structure/${encodeURIComponent(data)}" 
-                                       class="img-fluid" style="max-width: 150px;">`;
+                            if (type === 'display') {
+                                return `<a href="#" class="compound-detail" data-compound='${JSON.stringify(row)}'>${data}</a>`;
                             }
                             return data;
                         }
@@ -306,12 +538,21 @@
                         }
                     },
                     {
-                        data: 'activity_data',
+                        data: 'binding_summary',
                         render: function(data, type, row) {
                             if (type === 'display' && data) {
-                                return `<div class="activity-data">${data}</div>`;
+                                let html = '<div class="activity-data">';
+                                if (data.strongest_binding) {
+                                    html += `<strong>${data.strongest_binding.target}</strong>: `;
+                                    html += `${data.strongest_binding.value} ${data.strongest_binding.unit}<br>`;
+                                }
+                                if (data.primary_targets.length > 0) {
+                                    html += `<small>Primary targets: ${data.primary_targets.join(', ')}</small>`;
+                                }
+                                html += '</div>';
+                                return html;
                             }
-                            return data;
+                            return '';
                         }
                     },
                     {
@@ -328,12 +569,53 @@
                         }
                     },
                     {
-                        data: 'legal_status',
+                        data: null,
+                        render: function(data, type, row) {
+                            if (type === 'display') {
+                                let html = '<div class="predictions-summary">';
+                                
+                                // Add toxicity predictions
+                                if (row.toxicity_predictions) {
+                                    const highRisks = Object.entries(row.toxicity_predictions)
+                                        .filter(([_, pred]) => pred.probability > 0.7);
+                                    if (highRisks.length > 0) {
+                                        html += `<div class="alert alert-danger py-1 px-2 mb-1">`;
+                                        html += `High toxicity risk (${highRisks.length})`;
+                                        html += `</div>`;
+                                    }
+                                }
+                                
+                                // Add abuse potential
+                                if (row.abuse_potential) {
+                                    const highRisks = Object.entries(row.abuse_potential)
+                                        .filter(([_, pred]) => pred.probability > 0.7);
+                                    if (highRisks.length > 0) {
+                                        html += `<div class="alert alert-warning py-1 px-2 mb-1">`;
+                                        html += `High abuse potential (${highRisks.length})`;
+                                        html += `</div>`;
+                                    }
+                                }
+                                
+                                html += '</div>';
+                                return html;
+                            }
+                            return '';
+                        }
+                    },
+                    {
+                        data: 'regulatory_status',
                         render: function(data, type, row) {
                             if (type === 'display' && data) {
-                                return `<span class="badge bg-warning">${data}</span>`;
+                                let html = '';
+                                if (data.scheduling) {
+                                    html += `<span class="badge bg-danger">${data.scheduling}</span><br>`;
+                                }
+                                if (data.warnings && data.warnings.length > 0) {
+                                    html += `<small class="text-danger">${data.warnings.join(', ')}</small>`;
+                                }
+                                return html;
                             }
-                            return data;
+                            return '';
                         }
                     },
                     {
@@ -353,8 +635,15 @@
                         }
                     }
                 ],
-                pageLength: 50,
-                order: [[0, 'asc']]
+                pageLength: 25,
+                order: [[1, 'asc']]
+            });
+
+            // Compound detail click handler
+            $('#compounds-table').on('click', '.compound-detail', function(e) {
+                e.preventDefault();
+                const data = JSON.parse($(this).attr('data-compound'));
+                showCompoundDetails(data);
             });
 
             // Structure drawing
@@ -365,16 +654,17 @@
             $('#use-structure').click(function() {
                 ketcher.getSmiles().then(function(smiles) {
                     window.currentStructure = smiles;
+                    $('#structure-input').val(smiles);
                     table.ajax.reload();
                     $('#structure-modal').modal('hide');
                 });
             });
 
             // Filter handlers
-            $('#search, #target-filter, #activity-filter, #legal-filter, #similarity-threshold')
-                .on('change', function() {
-                    table.ajax.reload();
-                });
+            $('#filter-form').on('submit', function(e) {
+                e.preventDefault();
+                table.ajax.reload();
+            });
 
             // Column visibility
             $('.column-toggle').on('change', function() {
@@ -397,6 +687,175 @@
                 }
             });
         });
+
+        function showCompoundDetails(data) {
+            currentCompoundData = data;
+            
+            // Basic info
+            $('#detail-name').text(data.name);
+            $('#detail-smiles').text(data.smiles);
+            $('#detail-mw').text(data.molecular_weight);
+            $('#detail-logp').text(data.logp);
+
+            // Update structure display
+            updateStructureDisplay(data.smiles);
+
+            // Update predictions
+            updateToxicityPredictions(data.toxicity_predictions);
+            updateAbusePredictions(data.abuse_potential);
+            updateBindingPredictions(data.binding_predictions);
+
+            // Update activity data
+            updateActivityChart(data.binding_summary);
+
+            // Update community data
+            updateCommunityData(data.community_summary);
+
+            // Update literature data
+            updateLiteratureData(data);
+
+            $('#compound-detail-modal').modal('show');
+        }
+
+        function updateStructureDisplay(smiles) {
+            const img = new Image();
+            img.src = `/api/structure/${encodeURIComponent(smiles)}`;
+            img.onload = function() {
+                const container = document.getElementById('structure-display');
+                container.innerHTML = '';
+                container.appendChild(img);
+            };
+        }
+
+        function updateToxicityPredictions(predictions) {
+            const container = document.getElementById('toxicity-predictions');
+            container.innerHTML = '';
+            
+            if (!predictions) {
+                container.innerHTML = '<p>No toxicity predictions available</p>';
+                return;
+            }
+            
+            for (const [type, pred] of Object.entries(predictions)) {
+                const div = document.createElement('div');
+                div.className = 'mb-2';
+                
+                const probability = pred.probability * 100;
+                const badgeClass = probability > 70 ? 'bg-primary' : 
+                                 probability > 30 ? 'bg-info' : 'bg-secondary';
+                
+                div.innerHTML = `
+                    <span class="prediction-badge ${badgeClass}">
+                        ${pred.target}: ${probability.toFixed(1)}%
+                    </span>
+                    <div class="confidence-bar">
+                        <div class="bar" style="width: ${pred.confidence * 100}%"></div>
+                    </div>
+                `;
+                
+                container.appendChild(div);
+            });
+        }
+
+        function updateActivityChart(bindingSummary) {
+            if (!bindingSummary || !bindingSummary.target_families) {
+                document.getElementById('activity-chart').innerHTML = 'No activity data available';
+                return;
+            }
+            
+            const data = [{
+                type: 'bar',
+                x: bindingSummary.target_families,
+                y: bindingSummary.target_families.map(f => 
+                    bindingSummary.binding_data.filter(b => b.target_family === f).length
+                ),
+                marker: {
+                    color: 'rgb(55, 83, 109)'
+                }
+            }];
+            
+            const layout = {
+                title: 'Target Family Distribution',
+                xaxis: { title: 'Target Family' },
+                yaxis: { title: 'Number of Interactions' },
+                margin: { l: 50, r: 50, t: 50, b: 100 },
+                template: 'plotly_white'
+            };
+            
+            Plotly.newPlot('activity-chart', data, layout, {displayModeBar: false});
+        }
+
+        function updateCommunityData(summary) {
+            const container = document.getElementById('community-data');
+            if (!summary) {
+                container.innerHTML = '<p>No community data available</p>';
+                return;
+            }
+            
+            container.innerHTML = `
+                <p><strong>Total Reports:</strong> ${summary.total_reports}</p>
+                <h6>Reported Effects:</h6>
+                <div class="mb-3">
+                    ${summary.reported_effects.map(effect => 
+                        `<span class="badge bg-info me-1">${effect}</span>`
+                    ).join('')}
+                </div>
+                ${summary.safety_concerns.length > 0 ? `
+                    <div class="alert alert-warning">
+                        <h6>Safety Concerns:</h6>
+                        <ul class="mb-0">
+                            ${summary.safety_concerns.map(concern => 
+                                `<li>${concern}</li>`
+                            ).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+                ${summary.experience_reports.length > 0 ? `
+                    <h6>Recent Reports:</h6>
+                    <div class="list-group">
+                        ${summary.experience_reports.slice(0, 3).map(report => `
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between">
+                                    <small class="text-muted">${report.date}</small>
+                                    <small class="text-muted">${report.source}</small>
+                                </div>
+                                <p class="mb-1">${report.summary}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function updateLiteratureData(data) {
+            const container = document.getElementById('literature-data');
+            container.innerHTML = `
+                <div class="mb-3">
+                    <h6>References:</h6>
+                    <ul class="list-unstyled">
+                        ${data.reference_dois.map(doi => 
+                            `<li><a href="https://doi.org/${doi}" target="_blank">${doi}</a></li>`
+                        ).join('')}
+                    </ul>
+                </div>
+                ${data.patent_count > 0 ? `
+                    <div class="mb-3">
+                        <h6>Patents (${data.patent_count}):</h6>
+                        <ul class="list-unstyled">
+                            ${data.patent_numbers.map((num, i) => 
+                                `<li>${num}: ${data.patent_titles[i] || ''}</li>`
+                            ).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+                ${data.literature_summary ? `
+                    <div class="mb-3">
+                        <h6>Literature Summary:</h6>
+                        <p>${data.literature_summary}</p>
+                    </div>
+                ` : ''}
+            `;
+        }
     </script>
 </body>
 </html>

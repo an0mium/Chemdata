@@ -1,0 +1,227 @@
+/* Structure Visualization */
+.structure-img {
+    max-width: 200px;
+    max-height: 200px;
+}
+
+.structure-viewer {
+    width: 300px;
+    height: 300px;
+    border: 1px solid #ccc;
+}
+
+.ketcher-container {
+    width: 100%;
+    height: 500px;
+    border: 1px solid #ccc;
+    margin-bottom: 20px;
+}
+
+/* Layout Components */
+.filter-section {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 0.25rem;
+}
+
+.stats-card {
+    margin-bottom: 1rem;
+}
+
+.column-group {
+    margin-bottom: 15px;
+}
+
+.column-group label {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.filters-section {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+/* Data Display */
+.url-list {
+    list-style: none;
+    padding: 0;
+}
+
+.url-list li {
+    margin: 5px 0;
+}
+
+.activity-data {
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 0.9em;
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.mechanism-list {
+    list-style: none;
+    padding-left: 0;
+}
+
+.mechanism-list li {
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+/* Predictions & Visualizations */
+.prediction-badge {
+    display: inline-block;
+    padding: 0.25em 0.6em;
+    font-size: 0.75em;
+    font-weight: 700;
+    border-radius: 0.25rem;
+    margin: 0.1em;
+}
+
+.confidence-bar {
+    height: 4px;
+    margin-top: 2px;
+    background-color: #e9ecef;
+}
+
+.confidence-bar .bar {
+    height: 100%;
+    background-color: #0d6efd;
+}
+
+.receptor-chart {
+    width: 100%;
+    height: 300px;
+}
+
+/* Cards & Alerts */
+.detail-card {
+    margin-bottom: 1rem;
+}
+
+.detail-card .card-header {
+    background-color: #f8f9fa;
+    font-weight: bold;
+}
+
+.alert-warning {
+    border-left: 4px solid #ffc107;
+}
+
+.alert-danger {
+    border-left: 4px solid #dc3545;
+}
+
+/* Navigation */
+.nav-link.active {
+    font-weight: bold;
+}
+
+/* Progress Indicators */
+.progress-section {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .structure-img {
+        max-width: 150px;
+        max-height: 150px;
+    }
+
+    .structure-viewer {
+        width: 100%;
+        height: 250px;
+    }
+
+    .ketcher-container {
+        height: 400px;
+    }
+
+    .filters-section {
+        padding: 15px;
+    }
+
+    .receptor-chart {
+        height: 250px;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .structure-img {
+        max-width: none;
+        max-height: none;
+    }
+
+    .nav-link {
+        display: none;
+    }
+
+    .progress-section {
+        display: none;
+    }
+
+    .filters-section {
+        display: none;
+    }
+
+    .detail-card {
+        break-inside: avoid;
+    }
+}
+
+/* Accessibility */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+
+    .filter-section,
+    .filters-section,
+    .activity-data,
+    .mechanism-list li,
+    .detail-card .card-header {
+        background-color: #343a40;
+        color: #f8f9fa;
+    }
+
+    .confidence-bar {
+        background-color: #495057;
+    }
+
+    .confidence-bar .bar {
+        background-color: #0d6efd;
+    }
+
+    .alert-warning {
+        border-left-color: #ffc107;
+        background-color: rgba(255, 193, 7, 0.1);
+    }
+
+    .alert-danger {
+        border-left-color: #dc3545;
+        background-color: rgba(220, 53, 69, 0.1);
+    }
+}
