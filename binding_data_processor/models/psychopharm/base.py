@@ -1,114 +1,333 @@
-"""Base types and data structures for psychopharmacological properties."""
+"""Base compound data model with core chemical and psychopharmacological properties.
 
-from dataclasses import field
-from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple
+This module provides the base CompoundData class with core fields and methods for:
+- Basic chemical identifiers (name, SMILES, InChI, CAS)
+- Chemical properties (MW, LogP, TPSA, etc.)
+- Database IDs (ChEMBL, PubChem, DrugBank)
+- Common names with search result counts
+- Target binding data
+- Source references and metadata
+- Legal status and scheduling
+- Comprehensive validation
 
-# Type aliases for structured data
-DoseRange = Tuple[float, float, float]  # min, max, recommended
-TimeRange = Tuple[float, float]  # start, end
-RiskScore = Tuple[float, float]  # severity, confidence
-EffectScore = Tuple[float, float]  # magnitude, confidence
-ReceptorBinding = Tuple[float, float, str]  # affinity, confidence, activity
+The base class is designed to be extended through mixins for:
+- ML capabilities (predictions, features)
+- Web enrichment (patents, literature, community data)
+- Analysis features (SAR, safety, activity)
+"""
 
+from dataclasses import dataclass, field
+from datetime import datetime
+import re
+from typing import Dict, List, Optional, Set
 
-class PsychoactiveClass(Enum):
-    """Classification of psychoactive effects."""
-    
-    PSYCHEDELIC = "psychedelic"
-    EMPATHOGEN = "empathogen"
-    STIMULANT = "stimulant"
-    DEPRESSANT = "depressant"
-    DISSOCIATIVE = "dissociative"
-    DELIRIANT = "deliriant"
-    NOOTROPIC = "nootropic"
-    ANXIOLYTIC = "anxiolytic"
-    ANTIPSYCHOTIC = "antipsychotic"
-    ANTIDEPRESSANT = "antidepressant"
-    MOOD_STABILIZER = "mood_stabilizer"
-    UNKNOWN = "unknown"
-
-
-class NootropicMechanism(Enum):
-    """Mechanisms of nootropic activity."""
-    
-    CHOLINERGIC = "cholinergic"
-    GLUTAMATERGIC = "glutamatergic"
-    DOPAMINERGIC = "dopaminergic"
-    SEROTONERGIC = "serotonergic"
-    GABA = "gaba_modulation"
-    AMPAKINE = "ampakine"
-    BDNF = "bdnf_modulation"
-    NGF = "ngf_modulation"
-    NEUROPLASTICITY = "neuroplasticity"
-    ANTI_INFLAMMATORY = "anti_inflammatory"
-    ANTIOXIDANT = "antioxidant"
-    UNKNOWN = "unknown"
+from .types import (
+    CompoundType,
+    LegalStatus,
+    PsychoactiveClass,
+    NootropicMechanism,
+    BBBPermeability,
+    BindingType,
+    ActivityType,
+    RiskLevel,
+    TargetData,
+    StringSet,
+    StringDict,
+    ValidationErrors,
+    OptionalStr,
+    OptionalFloat,
+    TargetDict,
+)
 
 
-class BBBPermeability(Enum):
-    """Blood-brain barrier permeability classification."""
-    
-    HIGH = "high"
-    MODERATE = "moderate"
-    LOW = "low"
-    NEGLIGIBLE = "negligible"
-    UNKNOWN = "unknown"
+@dataclass
+class CompoundData:
+    """Base data class for chemical compound information."""
+    # Core identifiers (required)
+    name: str
+    smiles: str
 
+    # Basic identifiers (optional)
+    cas_number: OptionalStr = None
+    inchi: OptionalStr = None
+    inchi_key: OptionalStr = None
+    iupac_name: OptionalStr = None
+    compound_type: CompoundType = CompoundType.OTHER
 
-class RiskLevel(Enum):
-    """Risk level classification."""
-    
-    SEVERE = "severe"
-    HIGH = "high"
-    MODERATE = "moderate"
-    LOW = "low"
-    MINIMAL = "minimal"
-    UNKNOWN = "unknown"
+    # Ranked common names with search results
+    common_name_1: str = "N/A"
+    common_name_2: str = "N/A"
+    common_name_3: str = "N/A"
+    common_name_1_results: int = 0
+    common_name_2_results: int = 0
+    common_name_3_results: int = 0
+    other_names: StringSet = field(default_factory=set)
 
+    # Chemical properties
+    molecular_weight: float = 0.0
+    logp: float = 0.0
+    hbd: int = 0  # Hydrogen bond donors
+    hba: int = 0  # Hydrogen bond acceptors
+    tpsa: float = 0.0  # Topological polar surface area
+    rotatable_bonds: int = 0
+    charge: int = 0
+    stereocenter_count: int = 0
+    ring_count: int = 0
 
-class BaseMixin:
-    """Base mixin providing common functionality."""
+    # Database identifiers
+    chembl_id: OptionalStr = None
+    pubchem_cid: OptionalStr = None
+    pubchem_sid: OptionalStr = None
+    drugbank_id: OptionalStr = None
+    bindingdb_id: OptionalStr = None
 
-    # Basic properties
-    name: str = field(default="")
-    smiles: Optional[str] = field(default=None)
-    cas_number: Optional[str] = field(default=None)
-    
+    # Target data
+    targets: List[TargetData] = field(default_factory=list)
+    target_data: TargetDict = field(default_factory=dict)
+    primary_target: OptionalStr = None
+    primary_activity: OptionalStr = None
+    mechanism_of_action: OptionalStr = None
+    pharmacology: str = "N/A"
+    toxicity: str = "N/A"
+    metabolism: str = "N/A"
+
+    # Psychopharmacology
+    psychoactive_class: PsychoactiveClass = PsychoactiveClass.UNKNOWN
+    nootropic_mechanism: NootropicMechanism = NootropicMechanism.UNKNOWN
+    bbb_permeability: BBBPermeability = BBBPermeability.UNKNOWN
+    binding_type: BindingType = BindingType.UNKNOWN
+    activity_type: ActivityType = ActivityType.UNKNOWN
+    risk_level: RiskLevel = RiskLevel.UNKNOWN
+
+    # Source information
+    data_sources: StringSet = field(default_factory=set)
+    reference_dois: StringSet = field(default_factory=set)
+    reference_pmids: StringSet = field(default_factory=set)
+    reference_urls: StringDict = field(default_factory=dict)
+
+    # Legal & classification
+    legal_status: Dict[str, LegalStatus] = field(default_factory=dict)  # Country -> Status
+    scheduling: StringDict = field(default_factory=dict)  # Country -> Schedule
+
     # Metadata
-    data_sources: Set[str] = field(default_factory=set)
-    last_updated: Optional[str] = field(default=None)
-    confidence_scores: Dict[str, float] = field(default_factory=dict)
-    # List of update records containing:
-    # - timestamp: When the update occurred
-    # - source: Where the update came from
-    # - action: What type of update was performed
-    update_history: List[Dict[str, str]] = field(default_factory=list)
-    
-    def get_base_dict(self) -> Dict:
-        """Get dictionary of base properties."""
+    last_updated: str = field(default_factory=lambda: datetime.now().isoformat())
+    version: str = "1.0.0"
+
+    def __post_init__(self):
+        """Validate required fields and initialize collections."""
+        self._validate()
+
+    def _validate(self):
+        """Validate compound data."""
+        errors = []
+        
+        # Run all validation checks
+        errors.extend(self._validate_identifiers())
+        errors.extend(self._validate_properties())
+        errors.extend(self._validate_targets())
+        errors.extend(self._validate_psychopharm())
+        
+        if errors:
+            raise ValidationError("\n".join(errors))
+            
+        # Initialize collections
+        self._initialize_collections()
+
+    def _validate_identifiers(self) -> ValidationErrors:
+        """Validate chemical identifiers."""
+        errors = []
+        
+        # Validate required fields
+        if not self.name:
+            errors.append("Compound name is required")
+        if not self.smiles:
+            errors.append("SMILES string is required")
+
+        # Validate CAS number
+        if self.cas_number and not self._validate_cas_format(self.cas_number):
+            errors.append(f"Invalid CAS number format: {self.cas_number}")
+
+        return errors
+
+    def _validate_properties(self) -> ValidationErrors:
+        """Validate chemical properties."""
+        errors = []
+        
+        # Validate molecular weight
+        if self.molecular_weight < 0:
+            errors.append(f"Invalid molecular weight: {self.molecular_weight}")
+
+        # Validate LogP
+        if abs(self.logp) > 20:
+            errors.append(f"Suspicious LogP value: {self.logp}")
+
+        # Validate TPSA
+        if self.tpsa < 0:
+            errors.append(f"Invalid TPSA value: {self.tpsa}")
+
+        return errors
+
+    def _validate_targets(self) -> ValidationErrors:
+        """Validate target data."""
+        errors = []
+        for i, target in enumerate(self.targets, 1):
+            # Validate affinity value
+            if target.affinity_value < 0:
+                errors.append(
+                    f"Invalid binding affinity value for target {i}: {target.affinity_value}"
+                )
+                
+            # Validate confidence score
+            if not 0 <= target.confidence <= 1:
+                errors.append(
+                    f"Invalid confidence score for target {i}: {target.confidence}"
+                )
+                
+            # Validate affinity type
+            valid_types = {'Ki', 'IC50', 'EC50', 'Kd'}
+            if target.affinity_type not in valid_types and target.affinity_type != "N/A":
+                errors.append(
+                    f"Invalid affinity type for target {i}: {target.affinity_type}"
+                )
+                
+            # Validate affinity unit
+            valid_units = {'nM', 'uM', 'mM', 'pM'}
+            if target.affinity_unit not in valid_units and target.affinity_unit != "N/A":
+                errors.append(
+                    f"Invalid affinity unit for target {i}: {target.affinity_unit}"
+                )
+        return errors
+
+    def _validate_psychopharm(self) -> ValidationErrors:
+        """Validate psychopharmacological properties."""
+        errors = []
+        
+        # Validate binding type consistency
+        if (
+            self.binding_type != BindingType.UNKNOWN and
+            self.activity_type == ActivityType.UNKNOWN
+        ):
+            errors.append("Activity type must be specified when binding type is known")
+            
+        # Validate nootropic mechanism consistency
+        if (
+            self.nootropic_mechanism != NootropicMechanism.UNKNOWN and
+            self.psychoactive_class != PsychoactiveClass.NOOTROPIC
+        ):
+            errors.append(
+                "Nootropic mechanism can only be specified for nootropic compounds"
+            )
+            
+        return errors
+
+    def _initialize_collections(self) -> None:
+        """Initialize collection fields."""
+        for field_name, field_type in self.__annotations__.items():
+            if hasattr(self, field_name):
+                field_value = getattr(self, field_name)
+                if field_value is None:
+                    if "List" in str(field_type):
+                        setattr(self, field_name, [])
+                    elif "Dict" in str(field_type):
+                        setattr(self, field_name, {})
+                    elif "Set" in str(field_type):
+                        setattr(self, field_name, set())
+
+    def _validate_cas_format(self, cas: str) -> bool:
+        """
+        Validate CAS number format.
+        
+        Args:
+            cas: CAS number to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        pattern = r'^\d{1,7}-\d{2}-\d$'
+        if not re.match(pattern, cas):
+            return False
+
+        # Validate checksum
+        numbers = cas.replace('-', '')
+        check_digit = int(numbers[-1])
+        numbers = numbers[:-1]
+        total = sum(
+            int(num) * (i + 1)
+            for i, num in enumerate(reversed(numbers))
+        )
+        return (total % 10) == check_digit
+
+    def format_numeric_values(self):
+        """Format numeric values to specified precision."""
+        self.logp = float(f"{self.logp:.5f}".rstrip('0').rstrip('.'))
+        self.tpsa = float(f"{self.tpsa:.5f}".rstrip('0').rstrip('.'))
+        self.molecular_weight = float(f"{self.molecular_weight:.5f}".rstrip('0').rstrip('.'))
+
+    def to_dict(self) -> Dict:
+        """Convert compound data to dictionary format."""
         return {
+            # Basic identifiers
             "name": self.name,
             "smiles": self.smiles,
+            "inchi": self.inchi,
+            "inchi_key": self.inchi_key,
             "cas_number": self.cas_number,
+            "common_name_1": self.common_name_1,
+            "common_name_2": self.common_name_2,
+            "common_name_3": self.common_name_3,
+            "common_name_1_results": self.common_name_1_results,
+            "common_name_2_results": self.common_name_2_results,
+            "common_name_3_results": self.common_name_3_results,
+            "other_names": list(self.other_names),
+            "iupac_name": self.iupac_name,
+            "compound_type": self.compound_type.value,
+            # Chemical properties
+            "molecular_weight": self.molecular_weight,
+            "logp": self.logp,
+            "hbd": self.hbd,
+            "hba": self.hba,
+            "tpsa": self.tpsa,
+            "rotatable_bonds": self.rotatable_bonds,
+            "charge": self.charge,
+            "stereocenter_count": self.stereocenter_count,
+            "ring_count": self.ring_count,
+            # Database IDs
+            "chembl_id": self.chembl_id,
+            "pubchem_cid": self.pubchem_cid,
+            "pubchem_sid": self.pubchem_sid,
+            "drugbank_id": self.drugbank_id,
+            "bindingdb_id": self.bindingdb_id,
+            # Target data
+            "targets": [vars(target) for target in self.targets],
+            "primary_target": self.primary_target,
+            "primary_activity": self.primary_activity,
+            "mechanism_of_action": self.mechanism_of_action,
+            "pharmacology": self.pharmacology,
+            "toxicity": self.toxicity,
+            "metabolism": self.metabolism,
+            # Psychopharmacology
+            "psychoactive_class": self.psychoactive_class.value,
+            "nootropic_mechanism": self.nootropic_mechanism.value,
+            "bbb_permeability": self.bbb_permeability.value,
+            "binding_type": self.binding_type.value,
+            "activity_type": self.activity_type.value,
+            "risk_level": self.risk_level.value,
+            # Source info
             "data_sources": list(self.data_sources),
+            "reference_dois": list(self.reference_dois),
+            "reference_pmids": list(self.reference_pmids),
+            "reference_urls": self.reference_urls,
+            # Legal status
+            "legal_status": {
+                country: status.value for country, status in self.legal_status.items()
+            },
+            "scheduling": self.scheduling,
+            # Metadata
             "last_updated": self.last_updated,
-            "confidence_scores": self.confidence_scores,
+            "version": self.version,
         }
 
-    def merge_base_data(self, other: "BaseMixin", source: str = "merge") -> None:
-        """Merge base data from another instance."""
-        self.data_sources.update(other.data_sources)
-        self.confidence_scores.update(other.confidence_scores)
-        
-        # Take most recent update
-        if (
-            other.last_updated and 
-            (not self.last_updated or other.last_updated > self.last_updated)
-        ):
-            self.last_updated = other.last_updated
-            self.update_history.append({
-                "timestamp": self.last_updated,
-                "source": source,
-                "action": "merge",
-            })
+
+class ValidationError(Exception):
+    """Raised when compound data validation fails."""
+    pass

@@ -1,183 +1,185 @@
-# Immediate Next Steps
+# Immediate Steps for ChemData Implementation
 
-## Model Consolidation (Week 1)
+## Day 1: Project Setup & HTTP Client Consolidation
 
-### Day 1: Preparation
-1. Create backup branches
-```bash
-git checkout -b backup/models-original
-git checkout -b feature/model-consolidation
-```
+### Morning: Project Setup
+- [ ] Review existing codebase structure
+- [ ] Set up development environment
+- [ ] Install all dependencies
+- [ ] Run existing tests to verify setup
 
-2. Review current models
-- models/compound_*.py
-- models/compound/
-- models/psychopharm/
+### Afternoon: HTTP Client Base
+- [ ] Create `web_enrichment/clients/base.py`
+- [ ] Implement rate limiting
+- [ ] Add retry logic
+- [ ] Add error handling
 
-### Day 2-3: Model Migration
-1. Move compound models
-```bash
-# Core models
-mv models/compound_base.py models/compound/base.py
-mv models/compound_ml.py models/compound/ml.py
-mv models/compound_analysis.py models/compound/analysis.py
-mv models/compound_export.py models/compound/export.py
+## Day 2: HTTP Client Features
 
-# Run tests after each move
-pytest tests/models/
-```
+### Morning: Core Features
+- [ ] Implement response caching
+- [ ] Add async support
+- [ ] Add batch processing
+- [ ] Add request queuing
 
-2. Update imports
-- Update all import statements
-- Fix any circular imports
-- Run tests after each update
+### Afternoon: Client Migration
+- [ ] Move ChEMBL client to new structure
+- [ ] Move PubChem client to new structure
+- [ ] Move community clients to new structure
+- [ ] Update all references
 
-### Day 4: Psychopharm Integration
-1. Review psychopharm code
-```bash
-# Identify valuable components
-processors/psychopharm/predictors/
-processors/psychopharm/analysis/
+## Day 3: Property Calculation Integration
 
-# Plan integration points
-models/compound/psychopharm/
-pipeline/analysis/psychopharm/
-```
+### Morning: Core Module
+- [ ] Create `analysis/properties/` directory
+- [ ] Move all calculators to new location
+- [ ] Standardize interfaces
+- [ ] Add validation
 
-2. Migrate functionality
-- Move prediction code to ML pipeline
-- Move analysis code to analysis pipeline
-- Update tests and documentation
+### Afternoon: Analysis Updates
+- [ ] Update binding analysis to use new properties
+- [ ] Update activity analysis to use new properties
+- [ ] Update safety analysis to use new properties
+- [ ] Update SAR analysis to use new properties
 
-### Day 5: Cleanup & Testing
-1. Run full test suite
-```bash
-# Run all tests
-pytest
+## Day 4: Property Enhancement
 
-# Check coverage
-pytest --cov=binding_data_processor
-```
+### Morning: New Features
+- [ ] Add ensemble predictions
+- [ ] Add uncertainty estimation
+- [ ] Add cross-validation
+- [ ] Add model selection
 
-2. Update documentation
-- Update API docs
-- Update examples
-- Review changes
+### Afternoon: Testing
+- [ ] Add unit tests for new features
+- [ ] Add integration tests
+- [ ] Add performance tests
+- [ ] Update documentation
 
-## Infrastructure Setup (Week 2)
+## Day 5: Validation Framework
 
-### Day 1-2: Caching System
-1. Create cache infrastructure
-```python
-# In pipeline/infrastructure/cache/
-class CacheManager:
-    """Manage caching for pipeline components."""
-    
-    def __init__(self):
-        self.storage = {}
-        self.metrics = {}
-    
-    def get(self, key: str) -> Any:
-        """Get cached value."""
-        pass
-    
-    def set(self, key: str, value: Any) -> None:
-        """Cache value."""
-        pass
-```
+### Morning: Core Framework
+- [ ] Create validation module
+- [ ] Define validation interfaces
+- [ ] Implement base validators
+- [ ] Add error handling
 
-2. Add monitoring
-```python
-# In pipeline/infrastructure/monitoring/
-class MetricsCollector:
-    """Collect performance metrics."""
-    
-    def __init__(self):
-        self.metrics = {}
-    
-    def record(self, metric: str, value: float) -> None:
-        """Record metric value."""
-        pass
-    
-    def get_stats(self) -> Dict[str, float]:
-        """Get statistics."""
-        pass
-```
+### Afternoon: Specific Validators
+- [ ] Implement structure validators
+- [ ] Implement property validators
+- [ ] Implement data validators
+- [ ] Implement format validators
 
-### Day 3-4: ChEMBL Integration
-1. Create ChEMBL client
-```python
-# In pipeline/sources/chembl.py
-class ChEMBLClient:
-    """ChEMBL API client."""
-    
-    def __init__(self):
-        self.cache = CacheManager()
-        self.metrics = MetricsCollector()
-    
-    def get_compound(self, chembl_id: str) -> CompoundData:
-        """Get compound by ChEMBL ID."""
-        pass
-    
-    def search_compounds(self, query: str) -> List[CompoundData]:
-        """Search compounds."""
-        pass
-```
+## Day 6: Export Framework
 
-2. Add tests
-```python
-# In tests/pipeline/sources/test_chembl.py
-def test_get_compound():
-    """Test getting compound by ID."""
-    pass
+### Morning: Core Framework
+- [ ] Create export module
+- [ ] Define export interfaces
+- [ ] Implement base formatters
+- [ ] Add validation
 
-def test_search_compounds():
-    """Test compound search."""
-    pass
-```
+### Afternoon: Specific Exporters
+- [ ] Implement TSV exporter
+- [ ] Implement JSON exporter
+- [ ] Implement SDF exporter
+- [ ] Implement report exporter
 
-### Day 5: Integration & Testing
-1. Integrate with pipeline
-```python
-# In pipeline/base.py
-def _load_compounds(self):
-    """Load compounds from all sources."""
-    compounds = []
-    
-    # Load from BindingDB
-    bindingdb_compounds = self._load_bindingdb()
-    compounds.extend(bindingdb_compounds)
-    
-    # Load from ChEMBL
-    chembl_compounds = self._load_chembl()
-    compounds.extend(chembl_compounds)
-    
-    return compounds
-```
+## Day 7: Testing & Documentation
 
-2. Run integration tests
-```bash
-# Run specific tests
-pytest tests/pipeline/test_integration.py
+### Morning: Testing
+- [ ] Add tests for HTTP clients
+- [ ] Add tests for property calculations
+- [ ] Add tests for validation
+- [ ] Add tests for export
 
-# Run all tests
-pytest
-```
+### Afternoon: Documentation
+- [ ] Update API documentation
+- [ ] Add usage examples
+- [ ] Create user guides
+- [ ] Update architecture docs
 
-## Required Tools
-- Git for version control
-- pytest for testing
-- mypy for type checking
-- black for formatting
-- isort for import sorting
+## Day 8: Integration & Review
 
-## Support Files
-- See codebase_status.md for current state
-- Check implementation_files.md for structure
-- Review action_plan.md for timeline
+### Morning: Integration
+- [ ] Test all components together
+- [ ] Fix any integration issues
+- [ ] Add end-to-end tests
+- [ ] Update configuration
 
-## Getting Help
-- Review documentation in docs/
-- Check planning documents
-- Open issues for bugs
-- Use discussions for questions
+### Afternoon: Review & Planning
+- [ ] Review all changes
+- [ ] Run all tests
+- [ ] Update documentation
+- [ ] Plan next phase
+
+## Prerequisites
+
+### Development Environment
+- Python 3.8 or higher
+- Git
+- Docker
+- VSCode with Python extensions
+
+### Access Requirements
+- GitHub access
+- PyPI access
+- Docker Hub access
+- Development API keys
+
+### Documentation
+- Architecture diagrams
+- API documentation
+- User guides
+- Development guides
+
+## Success Criteria
+
+### Code Quality
+- All tests passing
+- No linting errors
+- Type hints complete
+- Documentation updated
+
+### Performance
+- Response times under 100ms
+- Cache hit rate > 80%
+- Memory usage < 500MB
+- CPU usage < 50%
+
+### Integration
+- All components working together
+- No circular dependencies
+- Clean interfaces
+- Good error handling
+
+### Documentation
+- API docs complete
+- Examples working
+- Guides updated
+- Architecture documented
+
+## Notes
+
+### Code Style
+- Use type hints
+- Follow PEP 8
+- Add docstrings
+- Write tests
+
+### Testing
+- Unit tests required
+- Integration tests required
+- Performance tests required
+- Documentation tests required
+
+### Documentation
+- Keep README updated
+- Add code examples
+- Include diagrams
+- Write guides
+
+### Review Process
+- Code review required
+- Tests must pass
+- Documentation required
+- Performance verified

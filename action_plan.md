@@ -1,155 +1,310 @@
-# Action Plan
+# ChemData Implementation Action Plan
 
-## Immediate Actions (Week 1)
+## Phase 1: Core Consolidation (Weeks 1-4)
 
-### 1. Model Consolidation
-1. Move all models to models/compound/
-   - Migrate existing models
-   - Update imports
-   - Add tests
-   - Remove duplicates
-
-2. Infrastructure Setup
-   - Create cache system
-   - Add monitoring
-   - Implement validation
-
-### 2. Data Source Integration
-1. ChEMBL Integration
-   - Create client
-   - Add data loading
-   - Add tests
-
-2. Infrastructure
-   - Add rate limiting
+### Week 1: HTTP Client Consolidation
+1. Create unified HTTP client in `web_enrichment/clients/base.py`
+   - Implement rate limiting
+   - Add retry logic
    - Add error handling
+   - Add response caching
+
+2. Migrate existing clients
+   - Move ChEMBL client
+   - Move PubChem client
+   - Move community clients
+   - Update references
+
+3. Add new features
+   - Add async support
+   - Add batch processing
+   - Add request queuing
+   - Add monitoring
+
+### Week 2: Property Calculation Integration
+1. Create central property module
+   - Move all calculators to `analysis/properties/`
+   - Standardize interfaces
+   - Add validation
    - Add caching
 
-## Short-term Actions (Week 2-3)
+2. Update analysis modules
+   - Update binding analysis
+   - Update activity analysis
+   - Update safety analysis
+   - Update SAR analysis
 
-### 1. ML Pipeline
-1. Predictor Enhancement
+3. Add new capabilities
+   - Add ensemble predictions
    - Add uncertainty estimation
-   - Implement ensembles
-   - Add validation
-
-2. Feature Engineering
-   - Enhance fingerprints
-   - Add pharmacophores
-   - Add text features
-
-### 2. Web Interface
-1. Component Enhancement
-   - Add virtual scrolling
-   - Enhance filtering
-   - Add visualization
-
-2. API Development
-   - Add endpoints
-   - Add validation
-   - Add documentation
-
-## Medium-term Actions (Week 4-6)
-
-### 1. Community Integration
-1. Data Sources
-   - Add PsychonautWiki
-   - Add Erowid
-   - Add TripSit
-
-2. Social Monitoring
-   - Add Reddit
-   - Add Twitter
-   - Add monitoring
-
-### 2. Analysis Enhancement
-1. Core Analysis
-   - Enhance binding analysis
-   - Add activity analysis
-   - Add safety analysis
-
-2. Web Data
-   - Add experience analysis
-   - Add trend analysis
-   - Add visualization
-
-## Long-term Actions (Week 7-8)
-
-### 1. Advanced Features
-1. ML Features
    - Add cross-validation
-   - Enhance predictions
-   - Add interpretability
+   - Add model selection
 
-2. Web Features
-   - Add 3D viewer
-   - Add advanced search
-   - Add bulk operations
-
-### 2. Integration
-1. Pipeline Integration
-   - Add streaming
-   - Enhance batching
+### Week 3: Validation Centralization
+1. Create validation framework
+   - Define validation interfaces
+   - Implement validators
+   - Add error handling
    - Add reporting
 
-2. Export System
-   - Add formats
-   - Add templates
+2. Implement validators
+   - Structure validators
+   - Property validators
+   - Data validators
+   - Format validators
+
+3. Update modules
+   - Update data loading
+   - Update processing
+   - Update analysis
+   - Update export
+
+### Week 4: Export Standardization
+1. Create export framework
+   - Define export interfaces
+   - Implement formatters
    - Add validation
+   - Add compression
+
+2. Implement exporters
+   - TSV exporter
+   - JSON exporter
+   - SDF exporter
+   - Report exporter
+
+3. Add features
+   - Column selection
+   - Filtering
+   - Batch export
+   - Progress tracking
+
+## Phase 2: Feature Enhancement (Weeks 5-8)
+
+### Week 5: ChEMBL Integration
+1. Implement ChEMBL client
+   - Add data fetching
+   - Add parsing
+   - Add validation
+   - Add caching
+
+2. Add processors
+   - Structure processor
+   - Activity processor
+   - Target processor
+   - Document processor
+
+3. Update pipeline
+   - Add ChEMBL stage
+   - Update merging
+   - Add validation
+   - Add reporting
+
+### Week 6: ML Pipeline Enhancement
+1. Implement model ensembles
+   - Add base ensemble
+   - Add voting
+   - Add stacking
+   - Add boosting
+
+2. Add uncertainty estimation
+   - Add Monte Carlo
+   - Add bootstrapping
+   - Add Bayesian
+   - Add validation
+
+3. Improve validation
+   - Add cross-validation
+   - Add metrics
+   - Add visualization
+   - Add reporting
+
+### Week 7: Web Interface Improvement
+1. Enhance compound views
+   - Add structure viewer
+   - Add property display
+   - Add predictions
+   - Add export
+
+2. Add search capabilities
+   - Structure search
+   - Property search
+   - Text search
+   - Combined search
+
+3. Improve visualization
+   - Add plots
+   - Add networks
+   - Add heatmaps
+   - Add exports
+
+### Week 8: Testing Enhancement
+1. Add integration tests
+   - Pipeline tests
+   - API tests
+   - Web tests
+   - Export tests
+
+2. Add performance tests
+   - Loading tests
+   - Processing tests
+   - Analysis tests
+   - Export tests
+
+3. Add end-to-end tests
+   - Workflow tests
+   - UI tests
+   - API tests
+   - Export tests
+
+## Phase 3: Advanced Features (Weeks 9-12)
+
+### Week 9: PubChem Integration
+1. Implement PubChem client
+   - Add data fetching
+   - Add parsing
+   - Add validation
+   - Add caching
+
+2. Add processors
+   - Structure processor
+   - Property processor
+   - Bioassay processor
+   - Literature processor
+
+3. Update pipeline
+   - Add PubChem stage
+   - Update merging
+   - Add validation
+   - Add reporting
+
+### Week 10: Patent Integration
+1. Implement patent client
+   - Add data fetching
+   - Add parsing
+   - Add validation
+   - Add caching
+
+2. Add processors
+   - Text processor
+   - Structure processor
+   - Claim processor
+   - Reference processor
+
+3. Update pipeline
+   - Add patent stage
+   - Update merging
+   - Add validation
+   - Add reporting
+
+### Week 11: Social Monitoring
+1. Implement social clients
+   - Reddit client
+   - Twitter client
+   - Bluesky client
+   - Discord client
+
+2. Add processors
+   - Text processor
+   - Entity processor
+   - Sentiment processor
+   - Trend processor
+
+3. Update pipeline
+   - Add social stage
+   - Update merging
+   - Add validation
+   - Add reporting
+
+### Week 12: Documentation Enhancement
+1. Update API documentation
+   - Update docstrings
+   - Add examples
+   - Add tutorials
+   - Add references
+
+2. Add user guides
+   - Installation guide
+   - Usage guide
+   - API guide
+   - Development guide
+
+3. Add architecture docs
+   - Overview
+   - Components
+   - Workflows
+   - Deployment
+
+## Ongoing Tasks
+
+### Code Quality
+- Run linters
+- Fix warnings
+- Add type hints
+- Update tests
+
+### Performance
+- Profile code
+- Optimize bottlenecks
+- Add caching
+- Add indexing
+
+### Monitoring
+- Add logging
+- Add metrics
+- Add alerts
+- Add dashboards
+
+### Security
+- Add authentication
+- Add authorization
+- Add validation
+- Add sanitization
 
 ## Success Criteria
 
-### 1. Technical
-- All tests passing
-- Code coverage >80%
-- Documentation complete
-- Performance metrics met
+### Phase 1
+- All HTTP clients consolidated
+- Property calculations integrated
+- Validation centralized
+- Export standardized
 
-### 2. Functional
-- Data sources integrated
+### Phase 2
+- ChEMBL integration complete
 - ML pipeline enhanced
 - Web interface improved
-- Export system working
+- Testing comprehensive
 
-### 3. Quality
-- Code reviewed
-- Tests automated
-- Documentation updated
-- Monitoring in place
+### Phase 3
+- PubChem integration complete
+- Patent integration complete
+- Social monitoring active
+- Documentation complete
 
 ## Risk Mitigation
 
-### 1. Technical Risks
-- Start with small changes
-- Add comprehensive tests
-- Monitor performance
-- Regular backups
+### Technical Risks
+- Start with proof of concepts
+- Use feature flags
+- Add monitoring
+- Plan rollbacks
 
-### 2. Integration Risks
-- Test integrations early
-- Add circuit breakers
-- Monitor API limits
-- Cache responses
+### Resource Risks
+- Prioritize features
+- Use automation
+- Add caching
+- Optimize performance
 
-### 3. Quality Risks
-- Regular code reviews
-- Automated testing
-- Documentation updates
-- Performance monitoring
+### Integration Risks
+- Use interfaces
+- Add validation
+- Test thoroughly
+- Monitor closely
 
 ## Next Steps
 
-### 1. Today
-- Start model consolidation
-- Set up infrastructure
-- Begin ChEMBL integration
+1. Begin with HTTP client consolidation
+2. Then integrate property calculations
+3. Next centralize validation
+4. Finally standardize exports
 
-### 2. This Week
-- Complete model migration
-- Add basic caching
-- Start ML enhancements
-
-### 3. Next Week
-- Add community sources
-- Enhance ML pipeline
-- Improve web interface
+This will provide the foundation for adding new features and capabilities.

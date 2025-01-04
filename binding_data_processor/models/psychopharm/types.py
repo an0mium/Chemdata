@@ -1,4 +1,4 @@
-"""Type definitions for compound data models.
+"""Consolidated type definitions for compound data models.
 
 This module provides comprehensive type definitions used across the compound data models:
 
@@ -30,12 +30,19 @@ import numpy as np
 
 class CompoundType(Enum):
     """Types of chemical compounds."""
+    # Core types
     NEUROTRANSMITTER = "neurotransmitter"
     PSYCHOACTIVE = "psychoactive"
     RESEARCH_CHEMICAL = "research_chemical"
     NPS = "novel_psychoactive_substance"
     PHARMACEUTICAL = "pharmaceutical"
     NATURAL_PRODUCT = "natural_product"
+    PEPTIDE = "peptide"
+    PROTEIN = "protein"
+    ANTIBODY = "antibody"
+    SMALL_MOLECULE = "small_molecule"
+    METABOLITE = "metabolite"
+    PRODRUG = "prodrug"
     OTHER = "other"
 
 
@@ -48,6 +55,8 @@ class LegalStatus(Enum):
     UNSCHEDULED = "unscheduled"
     PRESCRIPTION = "prescription_only"
     OTC = "over_the_counter"
+    INVESTIGATIONAL = "investigational"
+    WITHDRAWN = "withdrawn"
 
 
 class PsychoactiveClass(Enum):
@@ -63,6 +72,8 @@ class PsychoactiveClass(Enum):
     ANTIPSYCHOTIC = "antipsychotic"
     ANTIDEPRESSANT = "antidepressant"
     MOOD_STABILIZER = "mood_stabilizer"
+    OPIOID = "opioid"
+    CANNABINOID = "cannabinoid"
     UNKNOWN = "unknown"
 
 
@@ -79,6 +90,7 @@ class NootropicMechanism(Enum):
     NEUROPLASTICITY = "neuroplasticity"
     ANTI_INFLAMMATORY = "anti_inflammatory"
     ANTIOXIDANT = "antioxidant"
+    MITOCHONDRIAL = "mitochondrial"
     UNKNOWN = "unknown"
 
 
@@ -88,6 +100,7 @@ class BBBPermeability(Enum):
     MODERATE = "moderate"
     LOW = "low"
     NEGLIGIBLE = "negligible"
+    SUBSTRATE = "transporter_substrate"
     UNKNOWN = "unknown"
 
 
@@ -98,6 +111,11 @@ class BindingType(Enum):
     PARTIAL_AGONIST = "partial_agonist"
     INVERSE_AGONIST = "inverse_agonist"
     ALLOSTERIC = "allosteric"
+    POSITIVE_MODULATOR = "positive_modulator"
+    NEGATIVE_MODULATOR = "negative_modulator"
+    REUPTAKE_INHIBITOR = "reuptake_inhibitor"
+    RELEASING_AGENT = "releasing_agent"
+    ENZYME_INHIBITOR = "enzyme_inhibitor"
     UNKNOWN = "unknown"
 
 
@@ -108,12 +126,17 @@ class ActivityType(Enum):
     PSYCHEDELIC = "psychedelic"
     DISSOCIATIVE = "dissociative"
     NOOTROPIC = "nootropic"
+    ANXIOLYTIC = "anxiolytic"
+    ANTIPSYCHOTIC = "antipsychotic"
+    ANTIDEPRESSANT = "antidepressant"
+    MOOD_STABILIZER = "mood_stabilizer"
     UNKNOWN = "unknown"
 
 
 class RiskLevel(Enum):
     """Risk level classifications."""
     NONE = "none"
+    MINIMAL = "minimal"
     LOW = "low"
     MODERATE = "moderate"
     HIGH = "high"
@@ -124,20 +147,30 @@ class RiskLevel(Enum):
 @dataclass
 class TargetData:
     """Structured data for a single target interaction."""
+    # Target identification
     common_name: str = "N/A"
     protein_name: str = "N/A"
     gene_name: str = "N/A"
     organism: str = "human"
+    
+    # Binding data
     affinity_value: float = 0.0
     affinity_type: str = "N/A"  # Ki, IC50, Kd, EC50
     affinity_unit: str = "nM"
     activity_type: str = "N/A"  # agonist, antagonist, etc.
     confidence: float = 0.0
+    
+    # Metadata
     is_primary: bool = False
     pubmed_count: int = 0
     reference_dois: Set[str] = field(default_factory=set)
     assay_details: Dict = field(default_factory=dict)
     experimental_conditions: Dict = field(default_factory=dict)
+    
+    # Additional fields
+    binding_type: BindingType = BindingType.UNKNOWN
+    activity_level: float = 0.0  # 0.0-1.0 scale
+    effect_confidence: float = 0.0  # 0.0-1.0 scale
 
 
 # Value Types

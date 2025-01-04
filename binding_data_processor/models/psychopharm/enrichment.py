@@ -1,15 +1,35 @@
-"""Web data enrichment functionality."""
+"""Web data enrichment functionality for psychopharmacological compounds.
 
-from dataclasses import field
-from typing import Dict, List, Optional
+This module provides web enrichment capabilities through:
+1. WebEnrichmentMixin - Core web data processing functionality
+2. EnrichedCompoundData - Compound model with web enrichment
+
+Key features:
+- Patent data integration
+- Literature data integration
+- Community data integration
+- Social media monitoring
+- Web data validation
+- Data merging and export
+"""
+
+from dataclasses import dataclass, field
 from datetime import datetime
 import json
+from typing import Dict, List, Optional, Set
 
-from .base import RiskLevel
+from .base import CompoundData, RiskLevel
+from .types import (
+    StringSet,
+    StringDict,
+    ValidationErrors,
+    OptionalStr,
+    OptionalDict,
+)
 
 
 class WebEnrichmentMixin:
-    """Mixin class providing web data enrichment capabilities."""
+    """Mixin providing web data enrichment capabilities."""
 
     # Web data sources
     web_sources: Dict[str, Dict] = field(default_factory=dict)
@@ -376,3 +396,228 @@ class WebEnrichmentMixin:
         instance.scheduling_info = data["regulatory"]["scheduling"]
         
         return instance
+
+
+@dataclass
+class EnrichedCompoundData(CompoundData, WebEnrichmentMixin):
+    """Compound data enriched with web information."""
+
+    # Patent data
+    patent_numbers: StringSet = field(default_factory=set)
+    patent_titles: StringDict = field(default_factory=dict)  # number -> title
+    patent_abstracts: StringDict = field(default_factory=dict)  # number -> abstract
+    patent_claims: Dict[str, List[str]] = field(default_factory=dict)  # number -> claims
+    patent_citations: Dict[str, List[str]] = field(default_factory=dict)  # number -> cited by
+
+    # Literature data
+    pubmed_ids: StringSet = field(default_factory=set)
+    paper_titles: StringDict = field(default_factory=dict)  # pmid -> title
+    paper_abstracts: StringDict = field(default_factory=dict)  # pmid -> abstract
+    paper_citations: Dict[str, List[str]] = field(default_factory=dict)  # pmid -> cited by
+    paper_keywords: Dict[str, List[str]] = field(default_factory=dict)  # pmid -> keywords
+
+    # Community data
+    psychonaut_url: OptionalStr = None
+    psychonaut_data: OptionalDict = field(default_factory=dict)
+    erowid_url: OptionalStr = None
+    erowid_data: OptionalDict = field(default_factory=dict)
+    tripsit_url: OptionalStr = None
+    tripsit_data: OptionalDict = field(default_factory=dict)
+
+    # Social media data
+    reddit_mentions: List[Dict] = field(default_factory=list)  # [{subreddit, title, url, score, date}]
+    twitter_mentions: List[Dict] = field(default_factory=list)  # [{user, text, url, date}]
+    bluesky_mentions: List[Dict] = field(default_factory=list)  # [{user, text, url, date}]
+    discord_mentions: List[Dict] = field(default_factory=list)  # [{server, channel, text, date}]
+
+    # Web data metadata
+    last_enriched: str = field(default_factory=lambda: datetime.now().isoformat())
+    enrichment_sources: StringSet = field(default_factory=set)
+    enrichment_stats: Dict[str, int] = field(default_factory=dict)  # source -> count
+
+    def __post_init__(self):
+        """Initialize and validate web enrichment data."""
+        super().__post_init__()
+        self._validate_web_data()
+
+    def _validate_web_data(self) -> None:
+        """Validate web enrichment data."""
+        errors = []
+        
+        # Run web data validation checks
+        errors.extend(self._validate_patents())
+        errors.extend(self._validate_literature())
+        errors.extend(self._validate_community())
+        errors.extend(self._validate_social())
+        
+        if errors:
+            raise ValidationError("\n".join(errors))
+
+    def _validate_patents(self) -> ValidationErrors:
+        """Validate patent data."""
+        errors = []
+        
+        # Validate patent numbers
+        for number in self.patent_numbers:
+            if not self._validate_patent_number(number):
+                errors.append(f"Invalid patent number format: {number}")
+                
+        # Validate patent data consistency
+        for number in self.patent_numbers:
+            if number not in self.patent_titles:
+                errors.append(f"Missing title for patent: {number}")
+            if number not in self.patent_abstracts:
+                errors.append(f"Missing abstract for patent: {number}")
+                
+        return errors
+
+    def _validate_literature(self) -> ValidationErrors:
+        """Validate literature data."""
+        errors = []
+        
+        # Validate PubMed IDs
+        for pmid in self.pubmed_ids:
+            if not pmid.isdigit():
+                errors.append(f"Invalid PubMed ID format: {pmid}")
+                
+        # Validate literature data consistency
+        for pmid in self.pubmed_ids:
+            if pmid not in self.paper_titles:
+                errors.append(f"Missing title for paper: {pmid}")
+            if pmid not in self.paper_abstracts:
+                errors.append(f"Missing abstract for paper: {pmid}")
+                
+        return errors
+
+    def _validate_community(self) -> ValidationErrors:
+        """Validate community data."""
+        errors = []
+        
+        # Validate URLs
+        if self.psychonaut_url and not self._validate_url(self.psychonaut_url):
+            errors.append(f"Invalid PsychonautWiki URL: {self.psychonaut_url}")
+        if self.erowid_url and not self._validate_url(self.erowid_url):
+            errors.append(f"Invalid Erowid URL: {self.erowid_url}")
+        if self.tripsit_url and not self._validate_url(self.tripsit_url):
+            errors.append(f"Invalid TripSit URL: {self.tripsit_url}")
+            
+        return errors
+
+    def _validate_social(self) -> ValidationErrors:
+        """Validate social media data."""
+        errors = []
+        
+        # Validate Reddit mentions
+        for mention in self.reddit_mentions:
+            if not all(k in mention for k in ["subreddit", "title", "url", "score", "date"]):
+                errors.append(f"Invalid Reddit mention format: {mention}")
+                
+        # Validate Twitter mentions
+        for mention in self.twitter_mentions:
+            if not all(k in mention for k in ["user", "text", "url", "date"]):
+                errors.append(f"Invalid Twitter mention format: {mention}")
+                
+        return errors
+
+    def _validate_patent_number(self, number: str) -> bool:
+        """Validate patent number format."""
+        # Basic validation - can be enhanced
+        return bool(number and len(number) >= 6)
+
+    def _validate_url(self, url: str) -> bool:
+        """Validate URL format."""
+        # Basic validation - can be enhanced
+        return url.startswith(("http://", "https://"))
+
+    def merge_web_data(self, other: "EnrichedCompoundData", source: str = "merge") -> None:
+        """Merge web enrichment data from another instance."""
+        # Merge base web enrichment data
+        super().merge_enrichment_data(other)
+        
+        # Merge patent data
+        self.patent_numbers.update(other.patent_numbers)
+        self.patent_titles.update(other.patent_titles)
+        self.patent_abstracts.update(other.patent_abstracts)
+        self.patent_claims.update(other.patent_claims)
+        self.patent_citations.update(other.patent_citations)
+        
+        # Merge literature data
+        self.pubmed_ids.update(other.pubmed_ids)
+        self.paper_titles.update(other.paper_titles)
+        self.paper_abstracts.update(other.paper_abstracts)
+        self.paper_citations.update(other.paper_citations)
+        self.paper_keywords.update(other.paper_keywords)
+        
+        # Merge community data
+        if other.psychonaut_url:
+            self.psychonaut_url = other.psychonaut_url
+            self.psychonaut_data.update(other.psychonaut_data)
+        if other.erowid_url:
+            self.erowid_url = other.erowid_url
+            self.erowid_data.update(other.erowid_data)
+        if other.tripsit_url:
+            self.tripsit_url = other.tripsit_url
+            self.tripsit_data.update(other.tripsit_data)
+            
+        # Merge social data
+        self.reddit_mentions.extend(other.reddit_mentions)
+        self.twitter_mentions.extend(other.twitter_mentions)
+        self.bluesky_mentions.extend(other.bluesky_mentions)
+        self.discord_mentions.extend(other.discord_mentions)
+        
+        # Update metadata
+        self.enrichment_sources.update(other.enrichment_sources)
+        for k, v in other.enrichment_stats.items():
+            self.enrichment_stats[k] = self.enrichment_stats.get(k, 0) + v
+            
+        self.last_enriched = datetime.now().isoformat()
+        self.update_history.append({
+            "timestamp": self.last_enriched,
+            "source": source,
+            "action": "web_data_merge",
+        })
+
+    def to_dict(self) -> Dict:
+        """Convert enriched compound data to dictionary format."""
+        base_dict = super().to_dict()
+        enrichment_dict = self.get_enrichment_dict()
+        
+        web_dict = {
+            # Patent data
+            "patent_numbers": list(self.patent_numbers),
+            "patent_titles": self.patent_titles,
+            "patent_abstracts": self.patent_abstracts,
+            "patent_claims": self.patent_claims,
+            "patent_citations": self.patent_citations,
+            # Literature data
+            "pubmed_ids": list(self.pubmed_ids),
+            "paper_titles": self.paper_titles,
+            "paper_abstracts": self.paper_abstracts,
+            "paper_citations": self.paper_citations,
+            "paper_keywords": self.paper_keywords,
+            # Community data
+            "psychonaut_url": self.psychonaut_url,
+            "psychonaut_data": self.psychonaut_data,
+            "erowid_url": self.erowid_url,
+            "erowid_data": self.erowid_data,
+            "tripsit_url": self.tripsit_url,
+            "tripsit_data": self.tripsit_data,
+            # Social data
+            "reddit_mentions": self.reddit_mentions,
+            "twitter_mentions": self.twitter_mentions,
+            "bluesky_mentions": self.bluesky_mentions,
+            "discord_mentions": self.discord_mentions,
+            # Metadata
+            "last_enriched": self.last_enriched,
+            "enrichment_sources": list(self.enrichment_sources),
+            "enrichment_stats": self.enrichment_stats,
+            # Enrichment data
+            "enrichment": enrichment_dict,
+        }
+        
+        return {**base_dict, **web_dict}
+
+
+class ValidationError(Exception):
+    """Raised when web data validation fails."""
+    pass
