@@ -1,0 +1,263 @@
+"""HTTP client for web data enrichment.
+
+This module provides a robust HTTP client with:
+- Rate limiting
+- Retries with exponential backoff
+- Caching
+- User agent rotation
+- Proxy support
+"""
+
+import logging
+import time
+import json
+from pathlib import Path
+from typing import Optional, Dict, Any, Union
+from datetime import datetime, timedelta
+import random
+
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from cachetools import TTLCache
+from fake_useragent import UserAgent
+
+
+class HTTPClient:
+    """HTTP client with caching and rate limiting."""
+
+    def __init__(
+        self,
+        cache_dir: Optional[Path] = None,
+        rate_limit: float = 1.0,  # Requests per second
+        max_retries: int = 3,
+        timeout: float = 30.0,
+        cache_ttl: int = 86400,  # 24 hours
+        cache_size: int = 1000,
+        proxies: Optional[Dict[str, str]] = None,
+        logger: Optional[logging.Logger] = None,
+    ):
+        """Initialize HTTP client.
+        
+        Args:
+            cache_dir: Optional directory for persistent cache
+            rate_limit: Maximum requests per second
+            max_retries: Maximum number of retries
+            timeout: Request timeout in seconds
+            cache_ttl: Cache TTL in seconds
+            cache_size: Maximum cache size
+            proxies: Optional proxy configuration
+            logger: Optional logger instance
+        """
+        self.logger = logger or logging.getLogger(self.__class__.__name__)
+        self.cache_dir = cache_dir
+        self.rate_limit = rate_limit
+        self.timeout = timeout
+        self.last_request_time = 0.0
+
+        # Create cache directory
+        if cache_dir:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Initialize session
+        self.session = requests.Session()
+
+        # Configure retries
+        retry_strategy = Retry(
+            total=max_retries,
+            backoff_factor=0.5,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+
+        # Configure proxies
+        if proxies:
+            self.session.proxies.update(proxies)
+
+        # Initialize caches
+        self.memory_cache = TTLCache(maxsize=cache_size, ttl=cache_ttl)
+        self.user_agents = UserAgent()
+
+    def get(
+        self,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+        use_cache: bool = True,
+        cache_key: Optional[str] = None,
+    ) -> requests.Response:
+        """Make GET request with caching and rate limiting.
+        
+        Args:
+            url: Request URL
+            params: Optional query parameters
+            headers: Optional request headers
+            use_cache: Whether to use cache
+            cache_key: Optional cache key override
+            
+        Returns:
+            Response object
+        """
+        # Generate cache key
+        if cache_key is None:
+            cache_key = self._make_cache_key(url, params)
+
+        # Check memory cache
+        if use_cache:
+            cached = self.memory_cache.get(cache_key)
+            if cached:
+                return cached
+
+            # Check disk cache
+            if self.cache_dir:
+                disk_cached = self._load_from_disk(cache_key)
+                if disk_cached:
+                    self.memory_cache[cache_key] = disk_cached
+                    return disk_cached
+
+        # Apply rate limiting
+        self._wait_for_rate_limit()
+
+        # Add random user agent
+        if headers is None:
+            headers = {}
+        headers["User-Agent"] = self.user_agents.random
+
+        # Make request
+        try:
+            response = self.session.get(
+                url,
+                params=params,
+                headers=headers,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+
+            # Cache response
+            if use_cache:
+                self.memory_cache[cache_key] = response
+                if self.cache_dir:
+                    self._save_to_disk(cache_key, response)
+
+            return response
+
+        except Exception as e:
+            self.logger.error(f"Error fetching {url}: {str(e)}")
+            raise
+
+    def post(
+        self,
+        url: str,
+        data: Optional[Dict[str, Any]] = None,
+        json_data: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> requests.Response:
+        """Make POST request with rate limiting.
+        
+        Args:
+            url: Request URL
+            data: Optional form data
+            json_data: Optional JSON data
+            headers: Optional request headers
+            
+        Returns:
+            Response object
+        """
+        # Apply rate limiting
+        self._wait_for_rate_limit()
+
+        # Add random user agent
+        if headers is None:
+            headers = {}
+        headers["User-Agent"] = self.user_agents.random
+
+        # Make request
+        try:
+            response = self.session.post(
+                url,
+                data=data,
+                json=json_data,
+                headers=headers,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response
+
+        except Exception as e:
+            self.logger.error(f"Error posting to {url}: {str(e)}")
+            raise
+
+    def _wait_for_rate_limit(self) -> None:
+        """Wait to respect rate limit."""
+        if self.rate_limit > 0:
+            now = time.time()
+            time_since_last = now - self.last_request_time
+            if time_since_last < (1.0 / self.rate_limit):
+                time.sleep((1.0 / self.rate_limit) - time_since_last)
+            self.last_request_time = time.time()
+
+    def _make_cache_key(self, url: str, params: Optional[Dict[str, Any]]) -> str:
+        """Generate cache key from URL and params."""
+        key = url
+        if params:
+            key += "_" + json.dumps(params, sort_keys=True)
+        return key
+
+    def _load_from_disk(self, cache_key: str) -> Optional[requests.Response]:
+        """Load cached response from disk."""
+        try:
+            cache_file = self.cache_dir / f"{cache_key}.json"
+            if not cache_file.exists():
+                return None
+
+            with cache_file.open() as f:
+                data = json.load(f)
+
+            # Check TTL
+            cached_time = datetime.fromisoformat(data["timestamp"])
+            if datetime.now() - cached_time > timedelta(seconds=self.memory_cache.ttl):
+                return None
+
+            # Reconstruct response
+            response = requests.Response()
+            response.status_code = data["status_code"]
+            response._content = json.dumps(data["content"]).encode()
+            response.headers.update(data["headers"])
+            return response
+
+        except Exception as e:
+            self.logger.error(f"Error loading cache: {str(e)}")
+            return None
+
+    def _save_to_disk(self, cache_key: str, response: requests.Response) -> None:
+        """Save response to disk cache."""
+        try:
+            cache_file = self.cache_dir / f"{cache_key}.json"
+            data = {
+                "timestamp": datetime.now().isoformat(),
+                "status_code": response.status_code,
+                "content": response.json(),
+                "headers": dict(response.headers),
+            }
+            with cache_file.open("w") as f:
+                json.dump(data, f)
+
+        except Exception as e:
+            self.logger.error(f"Error saving cache: {str(e)}")
+
+    def clear_cache(self) -> None:
+        """Clear all caches."""
+        self.memory_cache.clear()
+        if self.cache_dir:
+            for cache_file in self.cache_dir.glob("*.json"):
+                try:
+                    cache_file.unlink()
+                except Exception as e:
+                    self.logger.error(f"Error deleting cache file: {str(e)}")
+
+    def close(self) -> None:
+        """Close session and cleanup."""
+        self.session.close()
+        self.clear_cache()

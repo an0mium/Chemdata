@@ -1,0 +1,366 @@
+"""Community data source client.
+
+This module provides functionality to fetch and parse data from community sources:
+- PsychonautWiki
+- Erowid
+- TripSit
+"""
+
+import logging
+from pathlib import Path
+from typing import Optional, Dict, Any, List
+import json
+import re
+from datetime import datetime
+
+from bs4 import BeautifulSoup
+import pandas as pd
+from transformers import pipeline
+
+from .base_client import BaseWebClient, ValidationError
+from ..models.compound import Compound
+
+
+class CommunityClient(BaseWebClient):
+    """Client for community data sources."""
+
+    # API endpoints
+    PSYCHONAUT_API = "https://api.psychonautwiki.org"
+    TRIPSIT_API = "https://tripbot.tripsit.me/api/tripsit/getDrug"
+    EROWID_BASE = "https://erowid.org/experiences"
+
+    # Required fields for validation
+    REQUIRED_FIELDS = {
+        "psychonaut": ["name", "effects", "roas"],
+        "tripsit": ["name", "properties", "effects"],
+        "erowid": ["title", "substance", "body_text"],
+    }
+
+    def __init__(
+        self,
+        http_client: Optional["HTTPClient"] = None,
+        model_dir: Optional[Path] = None,
+        cache_dir: Optional[Path] = None,
+        logger: Optional[logging.Logger] = None,
+    ):
+        """Initialize community client.
+        
+        Args:
+            http_client: Optional HTTP client to use
+            model_dir: Optional directory for ML models
+            cache_dir: Optional directory for caching
+            logger: Optional logger instance
+        """
+        super().__init__(http_client, model_dir, cache_dir, logger)
+
+        # Initialize text classifier for experience reports
+        if model_dir:
+            self.logger.info("Loading text classifier...")
+            self.text_classifier = pipeline(
+                "text-classification",
+                model=str(model_dir / "experience_classifier"),
+                device="cuda" if model_dir else "cpu",
+            )
+        else:
+            self.text_classifier = None
+
+    def process_compounds(
+        self,
+        compounds: List[Compound],
+        skip_predictions: bool = False,
+        use_cache: bool = True,
+    ) -> None:
+        """Process list of compounds.
+        
+        Args:
+            compounds: List of compounds to process
+            skip_predictions: Whether to skip ML predictions
+            use_cache: Whether to use cached results
+        """
+        for compound in compounds:
+            try:
+                data = self.get_compound_data(
+                    compound.name,
+                    compound.cas_number,
+                    use_cache=use_cache,
+                )
+                if data:
+                    compound.community_data = data
+                    
+                    # Add references
+                    if "references" in data:
+                        for ref in data["references"]:
+                            if "doi" in ref:
+                                compound.reference_dois.add(ref["doi"])
+                            if "pubmed_id" in ref:
+                                compound.reference_pmids.add(ref["pubmed_id"])
+                            if "url" in ref:
+                                compound.reference_urls[ref["title"]] = ref["url"]
+
+            except Exception as e:
+                self.logger.error(f"Error processing {compound.name}: {str(e)}")
+
+    def get_compound_data(
+        self,
+        name: str,
+        cas_number: Optional[str] = None,
+        use_cache: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """Get data for a single compound.
+        
+        Args:
+            name: Compound name
+            cas_number: Optional CAS number
+            use_cache: Whether to use cached results
+            
+        Returns:
+            Dictionary of compound data or None if not found
+        """
+        data = {}
+
+        # Get PsychonautWiki data
+        try:
+            psychonaut_data = self._get_psychonaut_data(name, use_cache)
+            if psychonaut_data:
+                data["psychonaut"] = psychonaut_data
+        except Exception as e:
+            self.logger.error(f"Error getting PsychonautWiki data: {str(e)}")
+
+        # Get TripSit data
+        try:
+            tripsit_data = self._get_tripsit_data(name, use_cache)
+            if tripsit_data:
+                data["tripsit"] = tripsit_data
+        except Exception as e:
+            self.logger.error(f"Error getting TripSit data: {str(e)}")
+
+        # Get Erowid data
+        try:
+            erowid_data = self._get_erowid_data(name, use_cache)
+            if erowid_data:
+                data["erowid"] = erowid_data
+        except Exception as e:
+            self.logger.error(f"Error getting Erowid data: {str(e)}")
+
+        return data if data else None
+
+    def _get_psychonaut_data(
+        self,
+        name: str,
+        use_cache: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """Get data from PsychonautWiki.
+        
+        Args:
+            name: Compound name
+            use_cache: Whether to use cached results
+            
+        Returns:
+            Dictionary of PsychonautWiki data or None if not found
+        """
+        query = """
+        query Substance($query: String) {
+            substances(query: $query) {
+                name
+                commonNames
+                class {
+                    chemical
+                    psychoactive
+                }
+                tolerance {
+                    full
+                    half
+                    zero
+                }
+                roas {
+                    name
+                    dose {
+                        units
+                        threshold
+                        light {
+                            min
+                            max
+                        }
+                        common {
+                            min
+                            max
+                        }
+                        strong {
+                            min
+                            max
+                        }
+                        heavy
+                    }
+                    duration {
+                        onset {
+                            min
+                            max
+                            units
+                        }
+                        comeup {
+                            min
+                            max
+                            units
+                        }
+                        peak {
+                            min
+                            max
+                            units
+                        }
+                        offset {
+                            min
+                            max
+                            units
+                        }
+                        total {
+                            min
+                            max
+                            units
+                        }
+                        afterglow {
+                            min
+                            max
+                            units
+                        }
+                    }
+                    bioavailability {
+                        min
+                        max
+                    }
+                }
+                effects {
+                    name
+                    url
+                    experience {
+                        positive
+                        neutral
+                        negative
+                    }
+                }
+                interactions {
+                    status
+                    note
+                }
+            }
+        }
+        """
+
+        try:
+            response = self.http.post(
+                self.PSYCHONAUT_API,
+                json_data={"query": query, "variables": {"query": name}},
+                use_cache=use_cache,
+            )
+            data = response.json()
+
+            if "data" in data and "substances" in data["data"]:
+                substances = data["data"]["substances"]
+                if substances:
+                    substance = substances[0]
+                    self._validate_response(substance, self.REQUIRED_FIELDS["psychonaut"])
+                    return substance
+
+        except Exception as e:
+            self.logger.error(f"Error querying PsychonautWiki: {str(e)}")
+
+        return None
+
+    def _get_tripsit_data(
+        self,
+        name: str,
+        use_cache: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """Get data from TripSit.
+        
+        Args:
+            name: Compound name
+            use_cache: Whether to use cached results
+            
+        Returns:
+            Dictionary of TripSit data or None if not found
+        """
+        try:
+            response = self.http.get(
+                self.TRIPSIT_API,
+                params={"name": name},
+                use_cache=use_cache,
+            )
+            data = response.json()
+
+            if "data" in data and data["data"]:
+                substance = data["data"][0]
+                self._validate_response(substance, self.REQUIRED_FIELDS["tripsit"])
+                return substance
+
+        except Exception as e:
+            self.logger.error(f"Error querying TripSit: {str(e)}")
+
+        return None
+
+    def _get_erowid_data(
+        self,
+        name: str,
+        use_cache: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """Get data from Erowid.
+        
+        Args:
+            name: Compound name
+            use_cache: Whether to use cached results
+            
+        Returns:
+            Dictionary of Erowid data or None if not found
+        """
+        try:
+            # Search for experience reports
+            search_url = f"{self.EROWID_BASE}/search.php"
+            response = self.http.get(
+                search_url,
+                params={"q": name},
+                use_cache=use_cache,
+            )
+
+            # Parse search results
+            soup = BeautifulSoup(response.text, "html.parser")
+            reports = []
+
+            for result in soup.find_all("div", class_="experience-report"):
+                try:
+                    report = {
+                        "title": result.find("h3").text.strip(),
+                        "substance": result.find("div", class_="substance").text.strip(),
+                        "author": result.find("div", class_="author").text.strip(),
+                        "date": result.find("div", class_="date").text.strip(),
+                        "body_text": result.find("div", class_="body").text.strip(),
+                    }
+
+                    # Validate report
+                    self._validate_response(report, self.REQUIRED_FIELDS["erowid"])
+
+                    # Classify report if model available
+                    if self.text_classifier:
+                        classification = self.text_classifier(
+                            report["body_text"][:512]
+                        )[0]
+                        report["classification"] = {
+                            "label": classification["label"],
+                            "score": classification["score"],
+                        }
+
+                    reports.append(report)
+
+                except Exception as e:
+                    self.logger.error(f"Error parsing report: {str(e)}")
+                    continue
+
+            if reports:
+                return {
+                    "reports": reports,
+                    "total_reports": len(reports),
+                    "last_updated": datetime.now().isoformat(),
+                }
+
+        except Exception as e:
+            self.logger.error(f"Error querying Erowid: {str(e)}")
+
+        return None
