@@ -1,0 +1,11 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Run full test suite
+npm run test
+
+# Run full type check
+npm run type-check
+
+# Run build to ensure no compilation errors
+npm run build

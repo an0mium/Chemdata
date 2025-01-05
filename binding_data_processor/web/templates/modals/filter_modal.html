@@ -1,0 +1,158 @@
+<!-- Filter Modal -->
+<div class="modal fade" id="filterModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Filter Compounds</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="filterForm" method="GET">
+                    <!-- Basic Properties -->
+                    <div class="mb-4">
+                        <h6>Basic Properties</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="mwMin" class="form-label">Molecular Weight</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="mwMin" name="mw_min" placeholder="Min"
+                                            value="{{ filters.mw_min }}">
+                                        <input type="number" class="form-control" id="mwMax" name="mw_max" placeholder="Max"
+                                            value="{{ filters.mw_max }}">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="logpMin" class="form-label">LogP</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="logpMin" name="logp_min" placeholder="Min"
+                                            value="{{ filters.logp_min }}">
+                                        <input type="number" class="form-control" id="logpMax" name="logp_max" placeholder="Max"
+                                            value="{{ filters.logp_max }}">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Binding Data -->
+                    <div class="mb-4">
+                        <h6>Binding Data</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="target" class="form-label">Target</label>
+                                    <select class="form-select" id="target" name="target">
+                                        <option value="">Any</option>
+                                        <option value="5-HT2A" {% if filters.target == "5-HT2A" %}selected{% endif %}>5-HT2A</option>
+                                        <option value="D2" {% if filters.target == "D2" %}selected{% endif %}>D2</option>
+                                        <option value="NMDA" {% if filters.target == "NMDA" %}selected{% endif %}>NMDA</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="affinityMin" class="form-label">Affinity (Ki)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="affinityMin" name="affinity_min" placeholder="Min"
+                                            value="{{ filters.affinity_min }}">
+                                        <input type="number" class="form-control" id="affinityMax" name="affinity_max" placeholder="Max"
+                                            value="{{ filters.affinity_max }}">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Activity Data -->
+                    <div class="mb-4">
+                        <h6>Activity Data</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="activityType" class="form-label">Activity Type</label>
+                                    <select class="form-select" id="activityType" name="activity_type">
+                                        <option value="">Any</option>
+                                        <option value="stimulant" {% if filters.activity_type == "stimulant" %}selected{% endif %}>Stimulant</option>
+                                        <option value="psychedelic" {% if filters.activity_type == "psychedelic" %}selected{% endif %}>Psychedelic</option>
+                                        <option value="nootropic" {% if filters.activity_type == "nootropic" %}selected{% endif %}>Nootropic</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="activityScore" class="form-label">Activity Score</label>
+                                    <input type="range" class="form-range" id="activityScore" name="activity_score"
+                                        min="0" max="1" step="0.1" value="{{ filters.activity_score or 0.5 }}">
+                                    <div class="form-text">Minimum activity score (0.0 - 1.0)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Safety Data -->
+                    <div class="mb-4">
+                        <h6>Safety Data</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="safetyRisk" class="form-label">Safety Risk</label>
+                                    <select class="form-select" id="safetyRisk" name="safety_risk">
+                                        <option value="">Any</option>
+                                        <option value="toxicity" {% if filters.safety_risk == "toxicity" %}selected{% endif %}>Toxicity</option>
+                                        <option value="addiction" {% if filters.safety_risk == "addiction" %}selected{% endif %}>Addiction</option>
+                                        <option value="overdose" {% if filters.safety_risk == "overdose" %}selected{% endif %}>Overdose</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="riskScore" class="form-label">Risk Score</label>
+                                    <input type="range" class="form-range" id="riskScore" name="risk_score"
+                                        min="0" max="1" step="0.1" value="{{ filters.risk_score or 0.5 }}">
+                                    <div class="form-text">Maximum risk score (0.0 - 1.0)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Social Data -->
+                    <div class="mb-4">
+                        <h6>Social Data</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="mentionsMin" class="form-label">Social Mentions</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="mentionsMin" name="mentions_min" placeholder="Min"
+                                            value="{{ filters.mentions_min }}">
+                                        <input type="number" class="form-control" id="mentionsMax" name="mentions_max" placeholder="Max"
+                                            value="{{ filters.mentions_max }}">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="dateRange" class="form-label">Date Range</label>
+                                    <div class="input-group">
+                                        <input type="date" class="form-control" id="dateStart" name="date_start"
+                                            value="{{ filters.date_start }}">
+                                        <input type="date" class="form-control" id="dateEnd" name="date_end"
+                                            value="{{ filters.date_end }}">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="reset" form="filterForm" class="btn btn-outline-secondary">Reset</button>
+                <button type="submit" form="filterForm" class="btn btn-primary">Apply Filters</button>
+            </div>
+        </div>
+    </div>
+</div>

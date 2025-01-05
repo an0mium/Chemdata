@@ -1,6 +1,7 @@
-"""Web enrichment manager.
+"""Enhanced web enrichment manager.
 
-This module provides a manager for web enrichment clients:
+This module provides an enhanced manager class that coordinates web enrichment clients
+with improved error handling and resilience through circuit breakers:
 - Swiss tools (SwissTargetPrediction, SwissADME)
 - Community sources (PsychonautWiki, Erowid, TripSit)
 - Social media (Reddit, Twitter)
@@ -8,33 +9,32 @@ This module provides a manager for web enrichment clients:
 The manager handles:
 1. Client initialization and configuration
 2. Coordinated data enrichment
-3. Error handling and recovery
-4. Progress tracking
+3. Error handling and recovery with circuit breakers
+4. Progress tracking and metrics
 5. Result aggregation
 """
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Type
+from typing import Optional, Dict, Any, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from datetime import datetime
 
 from tqdm import tqdm
 
-from .base import WebClient, WebClientError
-from .clients.swiss import SwissClient
-from .clients.community import CommunityClient
-from .clients.social import SocialClient
+from .http_client_enhanced import HTTPClientEnhanced
+from .swiss_client import SwissClient
+from .community_client import CommunityClient
+from .social_client import SocialClient
 from ..models.compound import Compound
 from ..pipeline.infrastructure.circuit_breaker import CircuitConfig
-from ..pipeline.infrastructure.monitoring import MetricsCollector
 
 
 @dataclass
 class EnrichmentConfig:
     """Configuration for web enrichment."""
-
+    
     # API credentials
     reddit_client_id: Optional[str] = None
     reddit_client_secret: Optional[str] = None
@@ -51,150 +51,65 @@ class EnrichmentConfig:
     model_dir: Optional[Path] = None
     cache_dir: Optional[Path] = None
 
-    # Circuit breaker
+    # Circuit breaker settings
     circuit_config: Optional[CircuitConfig] = None
 
-    # Client configs
-    client_configs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
-
-class WebEnrichmentError(Exception):
-    """Web enrichment error."""
-
-    def __init__(
-        self,
-        message: str,
-        client: str,
-        details: Optional[Dict[str, Any]] = None,
-    ):
-        """Initialize error.
-        
-        Args:
-            message: Error message
-            client: Client name
-            details: Optional error details
-        """
-        super().__init__(message)
-        self.client = client
-        self.details = details or {}
-        self.timestamp = datetime.now().isoformat()
-
-
-class WebEnrichmentManager:
-    """Manager for web enrichment clients."""
+class WebEnrichmentManagerEnhanced:
+    """Enhanced manager for web enrichment clients."""
 
     def __init__(
         self,
         config: EnrichmentConfig,
         logger: Optional[logging.Logger] = None,
-        metrics_collector: Optional[MetricsCollector] = None,
     ):
-        """Initialize manager.
+        """Initialize web enrichment manager.
         
         Args:
             config: Enrichment configuration
             logger: Optional logger instance
-            metrics_collector: Optional metrics collector
         """
         self.config = config
         self.logger = logger or logging.getLogger(self.__class__.__name__)
-        self.metrics = metrics_collector or MetricsCollector(
-            namespace="web_enrichment",
+
+        # Initialize shared HTTP client
+        self.http = HTTPClientEnhanced(
+            name="web_enrichment",
+            cache_dir=config.cache_dir / "http" if config.cache_dir else None,
+            circuit_config=config.circuit_config,
             logger=self.logger,
         )
 
         # Initialize clients
-        self.clients: Dict[str, WebClient] = {}
-        self.processed_compounds: Set[str] = set()
-        self.failed_compounds: Set[str] = set()
+        self.swiss_client = SwissClient(
+            http_client=self.http,
+            model_dir=config.model_dir,
+            cache_dir=config.cache_dir / "swiss" if config.cache_dir else None,
+            logger=self.logger,
+        )
+
+        self.community_client = CommunityClient(
+            http_client=self.http,
+            model_dir=config.model_dir,
+            cache_dir=config.cache_dir / "community" if config.cache_dir else None,
+            logger=self.logger,
+        )
+
+        self.social_client = SocialClient(
+            reddit_client_id=config.reddit_client_id,
+            reddit_client_secret=config.reddit_client_secret,
+            twitter_bearer_token=config.twitter_bearer_token,
+            http_client=self.http,
+            model_dir=config.model_dir,
+            cache_dir=config.cache_dir / "social" if config.cache_dir else None,
+            logger=self.logger,
+        )
 
         # Initialize thread pool
         self.executor = ThreadPoolExecutor(
             max_workers=config.n_workers,
             thread_name_prefix="enrichment",
         )
-
-        # Register default clients
-        self._register_default_clients()
-
-    def _register_default_clients(self) -> None:
-        """Register default web enrichment clients."""
-        # Swiss client
-        self.register_client(
-            SwissClient,
-            model_dir=self.config.model_dir,
-            cache_dir=(
-                self.config.cache_dir / "swiss"
-                if self.config.cache_dir
-                else None
-            ),
-            **self.config.client_configs.get("swiss", {}),
-        )
-
-        # Community client
-        self.register_client(
-            CommunityClient,
-            model_dir=self.config.model_dir,
-            cache_dir=(
-                self.config.cache_dir / "community"
-                if self.config.cache_dir
-                else None
-            ),
-            **self.config.client_configs.get("community", {}),
-        )
-
-        # Social client
-        self.register_client(
-            SocialClient,
-            reddit_client_id=self.config.reddit_client_id,
-            reddit_client_secret=self.config.reddit_client_secret,
-            twitter_bearer_token=self.config.twitter_bearer_token,
-            model_dir=self.config.model_dir,
-            cache_dir=(
-                self.config.cache_dir / "social"
-                if self.config.cache_dir
-                else None
-            ),
-            **self.config.client_configs.get("social", {}),
-        )
-
-    def register_client(
-        self,
-        client_class: Type[WebClient],
-        **kwargs: Any,
-    ) -> None:
-        """Register web enrichment client.
-        
-        Args:
-            client_class: Client class to register
-            **kwargs: Additional client arguments
-        """
-        client = client_class(
-            circuit_config=self.config.circuit_config,
-            logger=self.logger,
-            **kwargs,
-        )
-        self.clients[client.name] = client
-        self.logger.info(f"Registered client: {client.name}")
-
-    def get_client(self, name: str) -> WebClient:
-        """Get client by name.
-        
-        Args:
-            name: Client name
-            
-        Returns:
-            Web enrichment client
-            
-        Raises:
-            WebEnrichmentError: If client not found
-        """
-        if name not in self.clients:
-            raise WebEnrichmentError(
-                message=f"Client not found: {name}",
-                client=name,
-            )
-        return self.clients[name]
 
     def enrich_compounds(
         self,
@@ -300,30 +215,27 @@ class WebEnrichmentManager:
 
             # Get Swiss data
             if not skip_predictions:
-                swiss_client = self.get_client("swiss")
-                compound.swiss_data = swiss_client.predict_targets(
-                    smiles=compound.smiles,
+                self.swiss_client.process_compounds(
+                    [compound],
+                    skip_predictions=skip_predictions,
                     use_cache=use_cache,
                 )
-                self.processed_compounds.add(compound.smiles)
 
             # Get community data
             if not skip_web_data:
-                community_client = self.get_client("community")
-                compound.community_data = community_client.get_data(
-                    smiles=compound.smiles,
+                self.community_client.process_compounds(
+                    [compound],
+                    skip_predictions=skip_predictions,
                     use_cache=use_cache,
                 )
-                self.processed_compounds.add(compound.smiles)
 
             # Get social data
             if not skip_web_data:
-                social_client = self.get_client("social")
-                compound.social_data = social_client.get_data(
-                    smiles=compound.smiles,
+                self.social_client.process_compounds(
+                    [compound],
+                    skip_predictions=skip_predictions,
                     use_cache=use_cache,
                 )
-                self.processed_compounds.add(compound.smiles)
 
             # Add metadata
             compound.enrichment_metadata = {
@@ -337,43 +249,34 @@ class WebEnrichmentManager:
             if compound.social_data:
                 compound.enrichment_metadata["sources"].append("social")
 
-        except WebClientError as e:
-            self.failed_compounds.add(compound.smiles)
-            self.logger.error(
-                f"Error enriching {compound.name}: {str(e)}"
-            )
-            raise WebEnrichmentError(
-                message=str(e),
-                client=e.source,
-                details=e.details,
-            )
-
         except Exception as e:
-            self.failed_compounds.add(compound.smiles)
             self.logger.error(
                 f"Error enriching {compound.name}: {str(e)}"
             )
             raise
 
     def get_metrics(self) -> Dict[str, Any]:
-        """Get manager metrics.
-        
-        Returns:
-            Manager metrics
-        """
-        metrics = {
-            "processed_compounds": len(self.processed_compounds),
-            "failed_compounds": len(self.failed_compounds),
-            "clients": {},
+        """Get enrichment metrics including circuit breaker states."""
+        return {
+            "http_client": self.http.get_metrics(),
+            "swiss_client": {
+                "processed": len(self.swiss_client.processed_compounds),
+                "failed": len(self.swiss_client.failed_compounds),
+            },
+            "community_client": {
+                "processed": len(self.community_client.processed_compounds),
+                "failed": len(self.community_client.failed_compounds),
+            },
+            "social_client": {
+                "processed": len(self.social_client.processed_compounds),
+                "failed": len(self.social_client.failed_compounds),
+            },
         }
-
-        for name, client in self.clients.items():
-            metrics["clients"][name] = client.get_metrics()
-
-        return metrics
 
     def close(self) -> None:
         """Close manager and cleanup."""
         self.executor.shutdown()
-        for client in self.clients.values():
-            client.close()
+        self.http.close()
+        self.swiss_client.close()
+        self.community_client.close()
+        self.social_client.close()

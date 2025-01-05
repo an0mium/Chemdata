@@ -1,0 +1,126 @@
+<!-- Export Modal -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Export Compounds</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="exportForm" method="GET">
+                    <!-- Export Format -->
+                    <div class="mb-3">
+                        <label for="exportFormat" class="form-label">Export Format</label>
+                        <select class="form-select" id="exportFormat" name="format">
+                            <option value="tsv" {% if export_format == "tsv" %}selected{% endif %}>TSV (Tab-Separated Values)</option>
+                            <option value="sdf" {% if export_format == "sdf" %}selected{% endif %}>SDF (Structure Data Format)</option>
+                            <option value="json" {% if export_format == "json" %}selected{% endif %}>JSON</option>
+                        </select>
+                    </div>
+
+                    <!-- Column Selection -->
+                    <div class="mb-4">
+                        <h6>Basic Properties</h6>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colName" name="columns" value="name" checked>
+                            <label class="form-check-label" for="colName">Name</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colCAS" name="columns" value="cas_number" checked>
+                            <label class="form-check-label" for="colCAS">CAS Number</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colSMILES" name="columns" value="smiles" checked>
+                            <label class="form-check-label" for="colSMILES">SMILES</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colMW" name="columns" value="mw">
+                            <label class="form-check-label" for="colMW">Molecular Weight</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colLogP" name="columns" value="logp">
+                            <label class="form-check-label" for="colLogP">LogP</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h6>Binding Data</h6>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colBindingData" name="columns" value="binding_data">
+                            <label class="form-check-label" for="colBindingData">Binding Data</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colBindingTargets" name="columns" value="binding_targets">
+                            <label class="form-check-label" for="colBindingTargets">Binding Targets</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colBindingAffinities" name="columns" value="binding_affinities">
+                            <label class="form-check-label" for="colBindingAffinities">Binding Affinities</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colBindingConfidences" name="columns" value="binding_confidences">
+                            <label class="form-check-label" for="colBindingConfidences">Binding Confidences</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h6>Activity Data</h6>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colActivityPredictions" name="columns" value="activity_predictions">
+                            <label class="form-check-label" for="colActivityPredictions">Activity Predictions</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colActivityScores" name="columns" value="activity_scores">
+                            <label class="form-check-label" for="colActivityScores">Activity Scores</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h6>Safety Data</h6>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colSafetyPredictions" name="columns" value="safety_predictions">
+                            <label class="form-check-label" for="colSafetyPredictions">Safety Predictions</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colSafetyScores" name="columns" value="safety_scores">
+                            <label class="form-check-label" for="colSafetyScores">Safety Scores</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h6>Social Data</h6>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colSocialData" name="columns" value="social_data">
+                            <label class="form-check-label" for="colSocialData">Social Data</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colRedditPosts" name="columns" value="reddit_posts">
+                            <label class="form-check-label" for="colRedditPosts">Reddit Posts</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="colTwitterMentions" name="columns" value="twitter_mentions">
+                            <label class="form-check-label" for="colTwitterMentions">Twitter Mentions</label>
+                        </div>
+                    </div>
+
+                    <!-- Export Options -->
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="validateData" name="validate" value="true" checked>
+                            <label class="form-check-label" for="validateData">Validate data before export</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="includeMetadata" name="include_metadata" value="true">
+                            <label class="form-check-label" for="includeMetadata">Include metadata</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="reset" form="exportForm" class="btn btn-outline-secondary">Reset</button>
+                <button type="submit" form="exportForm" class="btn btn-primary">Export</button>
+            </div>
+        </div>
+    </div>
+</div>

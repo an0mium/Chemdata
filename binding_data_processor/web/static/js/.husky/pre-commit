@@ -1,0 +1,11 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Format and lint staged files
+npx lint-staged
+
+# Run type checking
+npm run type-check
+
+# Run tests
+npm run test:staged

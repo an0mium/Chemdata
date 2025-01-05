@@ -1,127 +1,303 @@
 # Model Consolidation Plan
 
-## Current Structure
+## Overview
 
-### Psychopharm Models (Target)
-- psychopharm/base.py - Core base mixin
-- psychopharm/binding.py - Receptor binding profiles
-- psychopharm/activity.py - Activity analysis
-- psychopharm/safety.py - Safety assessment
-- psychopharm/enrichment.py - Web data enrichment
-- psychopharm/compound.py - Main compound class
+Current issues:
+1. Duplicate model definitions between models/ and models/compound/
+2. Psychopharm functionality not integrated
+3. Analysis code spread across modules
+4. Validation logic duplicated
 
-### Legacy Models (To Consolidate)
-- compound.py - Duplicate compound model
-- compound_base.py - Duplicate base functionality
-- compound_ml.py - ML prediction functionality
-- compound_enrichment.py - Duplicate enrichment
-- compound_analysis.py - Duplicate analysis
+## Step 1: Directory Structure
 
-## Consolidation Steps
+```
+binding_data_processor/models/compound/
+├── base/
+│   ├── __init__.py
+│   ├── core.py          # Core data model
+│   ├── mixins.py        # Shared functionality
+│   └── types.py         # Type definitions
+├── ml/
+│   ├── __init__.py
+│   ├── predictors.py    # ML models
+│   ├── features.py      # Feature extraction
+│   └── training.py      # Model training
+├── enrichment/
+│   ├── __init__.py
+│   ├── web.py          # Web data
+│   ├── community.py    # Community data
+│   └── social.py       # Social media data
+├── analysis/
+│   ├── __init__.py
+│   ├── binding.py      # Binding analysis
+│   ├── activity.py     # Activity analysis
+│   ├── safety.py       # Safety analysis
+│   └── properties.py   # Property analysis
+└── export/
+    ├── __init__.py
+    ├── formats.py      # Export formats
+    └── validation.py   # Export validation
+```
 
-### 1. Base Functionality
-- Move core dataclass fields from compound_base.py to psychopharm/base.py
-- Merge validation methods
-- Update type hints and docstrings
-- Remove compound_base.py
+## Step 2: Class Hierarchy
 
-### 2. ML Integration
-- Move ML prediction methods from compound_ml.py to psychopharm/binding.py
-- Enhance receptor profile with ML capabilities
-- Add uncertainty estimation
-- Remove compound_ml.py
+```python
+# Base Classes
+class CompoundBase:
+    """Base compound data model."""
+    
+class ValidationMixin:
+    """Validation functionality."""
+    
+class SerializationMixin:
+    """Serialization functionality."""
 
-### 3. Web Enrichment
-- Move enrichment methods from compound_enrichment.py to psychopharm/enrichment.py
-- Enhance web data processing
-- Add new data sources
-- Remove compound_enrichment.py
+# ML Classes
+class MLCompound(CompoundBase):
+    """ML-enabled compound."""
+    
+class PredictorMixin:
+    """Prediction functionality."""
 
-### 4. Analysis Capabilities
-- Move analysis methods from compound_analysis.py to:
-  - psychopharm/activity.py for activity analysis
-  - psychopharm/safety.py for safety analysis
-- Enhance prediction capabilities
-- Remove compound_analysis.py
+# Enrichment Classes
+class EnrichedCompound(MLCompound):
+    """Web-enriched compound."""
+    
+class WebDataMixin:
+    """Web data functionality."""
 
-### 5. Main Compound Class
-- Move any unique functionality from compound.py to psychopharm/compound.py
-- Update class inheritance
-- Enhance documentation
-- Remove compound.py
+# Analysis Classes
+class AnalyzedCompound(EnrichedCompound):
+    """Analyzed compound."""
+    
+class AnalysisMixin:
+    """Analysis functionality."""
 
-## Implementation Order
+# Export Classes
+class ExportableCompound(AnalyzedCompound):
+    """Export-ready compound."""
+    
+class ExportMixin:
+    """Export functionality."""
+```
 
-1. Base Functionality
-- [ ] Audit base.py and compound_base.py
-- [ ] Identify unique features
-- [ ] Merge functionality
-- [ ] Update tests
-- [ ] Remove old file
+## Step 3: Migration Steps
 
-2. ML Integration
-- [ ] Audit binding.py and compound_ml.py
-- [ ] Merge prediction capabilities
-- [ ] Enhance receptor profiles
-- [ ] Update tests
-- [ ] Remove old file
+### Day 1: Setup
+1. Create new directory structure
+```bash
+mkdir -p binding_data_processor/models/compound/{base,ml,enrichment,analysis,export}
+touch binding_data_processor/models/compound/{base,ml,enrichment,analysis,export}/__init__.py
+```
 
-3. Web Enrichment
-- [ ] Audit enrichment.py and compound_enrichment.py
-- [ ] Merge enrichment features
-- [ ] Add new data sources
-- [ ] Update tests
-- [ ] Remove old file
+2. Move existing files
+```bash
+# Move base files
+mv binding_data_processor/models/compound.py binding_data_processor/models/compound/base/core.py
+mv binding_data_processor/models/mixins.py binding_data_processor/models/compound/base/mixins.py
+mv binding_data_processor/models/types.py binding_data_processor/models/compound/base/types.py
 
-4. Analysis Capabilities
-- [ ] Audit activity.py, safety.py, and compound_analysis.py
-- [ ] Split analysis features
-- [ ] Enhance predictions
-- [ ] Update tests
-- [ ] Remove old file
+# Move ML files
+mv binding_data_processor/models/compound_ml.py binding_data_processor/models/compound/ml/predictors.py
 
-5. Main Class
-- [ ] Audit compound.py files
-- [ ] Merge unique features
-- [ ] Update inheritance
-- [ ] Update tests
-- [ ] Remove old file
+# Move enrichment files
+mv binding_data_processor/models/compound_enrichment.py binding_data_processor/models/compound/enrichment/web.py
 
-## Testing Strategy
+# Move analysis files
+mv binding_data_processor/models/compound_analysis.py binding_data_processor/models/compound/analysis/base.py
 
-1. Create Backup
-- [ ] Branch: backup/models-original
-- [ ] Commit all current files
+# Move export files
+mv binding_data_processor/models/compound_export.py binding_data_processor/models/compound/export/formats.py
+```
 
-2. Feature Branch
-- [ ] Branch: feature/model-consolidation
-- [ ] Implement changes incrementally
+### Day 2: Base Classes
+1. Consolidate base functionality
+```python
+# In base/core.py
+class CompoundBase:
+    """Base compound data model."""
+    def __init__(self):
+        self.identifiers = {}
+        self.properties = {}
+        self.metadata = {}
+```
 
-3. Testing
-- [ ] Run existing tests after each merge
-- [ ] Add new tests for enhanced features
-- [ ] Verify no functionality loss
+2. Update mixins
+```python
+# In base/mixins.py
+class ValidationMixin:
+    """Validation functionality."""
+    def validate(self):
+        pass
 
-4. Documentation
-- [ ] Update API documentation
-- [ ] Add migration guide
-- [ ] Update examples
+class SerializationMixin:
+    """Serialization functionality."""
+    def to_dict(self):
+        pass
+```
 
-## Validation
+### Day 3: ML Integration
+1. Consolidate ML functionality
+```python
+# In ml/predictors.py
+class MLCompound(CompoundBase, PredictorMixin):
+    """ML-enabled compound."""
+    def predict(self, model_name: str):
+        pass
+```
 
-For each consolidated file:
-1. Verify all functionality preserved
-2. Run full test suite
-3. Check import statements
-4. Update documentation
-5. Remove old file
+2. Add feature extraction
+```python
+# In ml/features.py
+class FeatureExtractor:
+    """Feature extraction."""
+    def extract_features(self, compound: CompoundBase):
+        pass
+```
 
-## Next Steps
+### Day 4: Enrichment Integration
+1. Consolidate enrichment functionality
+```python
+# In enrichment/web.py
+class EnrichedCompound(MLCompound, WebDataMixin):
+    """Web-enriched compound."""
+    def enrich(self):
+        pass
+```
 
-1. Create backup branch
-2. Create feature branch
-3. Start with base functionality
-4. Follow implementation order
-5. Run tests frequently
-6. Update documentation
-7. Clean up old files
+2. Add community data
+```python
+# In enrichment/community.py
+class CommunityDataMixin:
+    """Community data functionality."""
+    def get_community_data(self):
+        pass
+```
+
+### Day 5: Analysis Integration
+1. Consolidate analysis functionality
+```python
+# In analysis/base.py
+class AnalyzedCompound(EnrichedCompound, AnalysisMixin):
+    """Analyzed compound."""
+    def analyze(self):
+        pass
+```
+
+2. Add specific analyses
+```python
+# In analysis/binding.py
+class BindingAnalyzer:
+    """Binding analysis."""
+    def analyze_binding(self, compound: AnalyzedCompound):
+        pass
+```
+
+## Step 4: Testing
+
+### Test Structure
+```
+tests/models/compound/
+├── base/
+│   ├── test_core.py
+│   ├── test_mixins.py
+│   └── test_types.py
+├── ml/
+│   ├── test_predictors.py
+│   └── test_features.py
+├── enrichment/
+│   ├── test_web.py
+│   └── test_community.py
+├── analysis/
+│   ├── test_binding.py
+│   └── test_activity.py
+└── export/
+    ├── test_formats.py
+    └── test_validation.py
+```
+
+### Test Cases
+1. Base functionality
+```python
+def test_compound_initialization():
+    compound = CompoundBase()
+    assert compound.identifiers == {}
+    assert compound.properties == {}
+```
+
+2. ML functionality
+```python
+def test_prediction():
+    compound = MLCompound()
+    result = compound.predict("binding")
+    assert isinstance(result, dict)
+```
+
+3. Integration tests
+```python
+def test_full_pipeline():
+    compound = ExportableCompound()
+    compound.predict("binding")
+    compound.enrich()
+    compound.analyze()
+    result = compound.export()
+    assert isinstance(result, str)
+```
+
+## Success Criteria
+
+### Code Quality
+- [ ] No duplicate implementations
+- [ ] Clear inheritance hierarchy
+- [ ] Comprehensive docstrings
+- [ ] Type hints
+
+### Test Coverage
+- [ ] Unit tests for all classes
+- [ ] Integration tests
+- [ ] Edge cases covered
+- [ ] 90%+ coverage
+
+### Documentation
+- [ ] API documentation
+- [ ] Usage examples
+- [ ] Migration guide
+- [ ] Architecture docs
+
+## Commands
+
+### Setup
+```bash
+# Create structure
+./scripts/setup_models.sh
+
+# Run tests
+pytest tests/models/compound/
+
+# Check coverage
+pytest --cov=binding_data_processor/models/compound/
+
+# Build docs
+cd docs && make html
+```
+
+### Development
+```bash
+# Run specific tests
+pytest tests/models/compound/base/test_core.py -v
+
+# Run linters
+flake8 binding_data_processor/models/compound/
+mypy binding_data_processor/models/compound/
+
+# Format code
+black binding_data_processor/models/compound/
+```
+
+## Notes
+
+1. Keep backward compatibility during migration
+2. Update imports gradually
+3. Run tests after each change
+4. Update documentation as you go
+5. Monitor performance impacts

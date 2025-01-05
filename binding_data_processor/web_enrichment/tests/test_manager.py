@@ -1,209 +1,340 @@
 """Tests for web enrichment manager."""
 
-import pytest
+import logging
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
-from datetime import datetime, timedelta
 
-from ..manager import WebEnrichmentManager, EnrichmentConfig
-from ..http_client import HTTPClient
-from ..swiss_client import SwissClient
-from ..community_client import CommunityClient
-from ..social_client import SocialClient
+import pytest
+
+from ..manager import (
+    WebEnrichmentManager,
+    WebEnrichmentError,
+    EnrichmentConfig,
+)
+from ..clients.swiss import SwissClient
+from ..clients.community import CommunityClient
+from ..clients.social import SocialClient
 from ...models.compound import Compound
-
-
-@pytest.fixture
-def test_config():
-    """Create test enrichment configuration."""
-    return EnrichmentConfig(
-        reddit_client_id="test_reddit_id",
-        reddit_client_secret="test_reddit_secret",
-        twitter_bearer_token="test_twitter_token",
-        model_dir=Path("/tmp/models"),
-        cache_dir=Path("/tmp/cache"),
-        n_workers=2,
-        batch_size=10,
-    )
+from ...pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ...pipeline.infrastructure.monitoring import MetricsCollector
 
 
 @pytest.fixture
 def test_compounds():
-    """Create test compounds."""
+    """Create test compounds with realistic data."""
     compounds = []
-    
-    # Create test compounds
+
+    # Caffeine
     caffeine = Compound(
         name="Caffeine",
         smiles="CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
         cas_number="58-08-2",
     )
     compounds.append(caffeine)
-    
+
+    # Amphetamine
     amphetamine = Compound(
         name="Amphetamine",
         smiles="CC(N)CC1=CC=CC=C1",
         cas_number="300-62-9",
     )
     compounds.append(amphetamine)
-    
+
+    # Aspirin
+    aspirin = Compound(
+        name="Aspirin",
+        smiles="CC(=O)OC1=CC=CC=C1C(=O)O",
+        cas_number="50-78-2",
+    )
+    compounds.append(aspirin)
+
     return compounds
 
 
 @pytest.fixture
-def mock_clients():
-    """Create mock web clients."""
-    with patch("binding_data_processor.web_enrichment.manager.HTTPClient") as mock_http, \
-         patch("binding_data_processor.web_enrichment.manager.SwissClient") as mock_swiss, \
-         patch("binding_data_processor.web_enrichment.manager.CommunityClient") as mock_community, \
-         patch("binding_data_processor.web_enrichment.manager.SocialClient") as mock_social:
-        
-        yield {
-            "http": mock_http,
-            "swiss": mock_swiss,
-            "community": mock_community,
-            "social": mock_social,
-        }
+def config():
+    """Create test config."""
+    return EnrichmentConfig(
+        reddit_client_id="test_id",
+        reddit_client_secret="test_secret",
+        twitter_bearer_token="test_token",
+        skip_predictions=False,
+        skip_web_data=False,
+        use_cache=True,
+        n_workers=2,
+        batch_size=10,
+        model_dir=Path("/tmp/models"),
+        cache_dir=Path("/tmp/cache"),
+        circuit_config=CircuitConfig(
+            failure_threshold=3,
+            recovery_timeout=60,
+        ),
+        client_configs={
+            "swiss": {"base_url": "http://test.swiss.com"},
+            "community": {"base_url": "http://test.community.com"},
+            "social": {"base_url": "http://test.social.com"},
+        },
+    )
 
 
-class TestWebEnrichmentManager:
-    """Tests for WebEnrichmentManager class."""
+@pytest.fixture
+def manager(config):
+    """Create test manager."""
+    return WebEnrichmentManager(
+        config=config,
+        logger=logging.getLogger("test"),
+        metrics_collector=Mock(spec=MetricsCollector),
+    )
 
-    def test_initialization(self, test_config, mock_clients):
-        """Test manager initialization."""
-        manager = WebEnrichmentManager(test_config)
 
-        # Check client initialization
-        assert isinstance(manager.http, HTTPClient)
-        assert isinstance(manager.swiss_client, SwissClient)
-        assert isinstance(manager.community_client, CommunityClient)
-        assert isinstance(manager.social_client, SocialClient)
+def test_manager_initialization(manager, config):
+    """Test manager initialization."""
+    # Check client initialization
+    assert len(manager.clients) == 3
+    assert isinstance(manager.clients["swiss"], SwissClient)
+    assert isinstance(manager.clients["community"], CommunityClient)
+    assert isinstance(manager.clients["social"], SocialClient)
 
-        # Check config
-        assert manager.config == test_config
-        assert manager.executor._max_workers == test_config.n_workers
+    # Check config
+    assert manager.config == config
+    assert manager.executor._max_workers == config.n_workers
 
-    def test_enrich_compounds(self, test_config, test_compounds, mock_clients):
-        """Test compound enrichment."""
-        manager = WebEnrichmentManager(test_config)
+    # Check initial state
+    assert len(manager.processed_compounds) == 0
+    assert len(manager.failed_compounds) == 0
 
-        # Mock client process_compounds methods
-        manager.swiss_client.process_compounds = Mock()
-        manager.community_client.process_compounds = Mock()
-        manager.social_client.process_compounds = Mock()
 
-        # Record start time
-        start_time = datetime.now()
+def test_register_client(manager):
+    """Test client registration."""
+    # Create mock client class
+    mock_client = Mock()
+    mock_client.name = "test"
 
-        # Enrich compounds
+    # Register client
+    with patch("..base.WebClient", return_value=mock_client):
+        manager.register_client(
+            mock_client.__class__,
+            base_url="http://test.com",
+        )
+
+    assert "test" in manager.clients
+    assert manager.clients["test"] == mock_client
+
+
+def test_get_client(manager):
+    """Test getting client."""
+    # Get existing client
+    client = manager.get_client("swiss")
+    assert isinstance(client, SwissClient)
+
+    # Get non-existent client
+    with pytest.raises(WebEnrichmentError) as exc:
+        manager.get_client("invalid")
+    assert "Client not found" in str(exc.value)
+
+
+def test_enrich_compounds_success(manager, test_compounds):
+    """Test successful compound enrichment."""
+    # Mock client responses
+    swiss_data = {
+        "targets": [
+            {
+                "target": "Adenosine A2a receptor",
+                "probability": 0.95,
+            },
+        ],
+    }
+    community_data = {
+        "reports": [
+            {
+                "source": "PsychonautWiki",
+                "text": "Test report",
+            },
+        ],
+    }
+    social_data = {
+        "posts": [
+            {
+                "platform": "Reddit",
+                "text": "Test post",
+            },
+        ],
+    }
+
+    # Record start time
+    start_time = datetime.now()
+
+    # Mock client methods
+    with patch.object(
+        manager.clients["swiss"],
+        "predict_targets",
+        return_value=swiss_data,
+    ), patch.object(
+        manager.clients["community"],
+        "get_data",
+        return_value=community_data,
+    ), patch.object(
+        manager.clients["social"],
+        "get_data",
+        return_value=social_data,
+    ):
         manager.enrich_compounds(test_compounds)
 
-        # Check client calls
-        assert manager.swiss_client.process_compounds.call_count == len(test_compounds)
-        assert manager.community_client.process_compounds.call_count == len(test_compounds)
-        assert manager.social_client.process_compounds.call_count == len(test_compounds)
+    # Check enrichment results
+    for compound in test_compounds:
+        # Check data
+        assert compound.swiss_data == swiss_data
+        assert compound.community_data == community_data
+        assert compound.social_data == social_data
 
-        # Check compound data
-        for compound in test_compounds:
-            assert isinstance(compound.swiss_data, dict)
-            assert isinstance(compound.community_data, dict)
-            assert isinstance(compound.social_data, dict)
-            assert isinstance(compound.enrichment_metadata, dict)
-            
-            # Check timestamp
-            timestamp = datetime.fromisoformat(compound.enrichment_metadata["timestamp"])
-            assert start_time <= timestamp <= datetime.now()
-            assert timestamp - start_time < timedelta(seconds=10)
-            
-            assert "sources" in compound.enrichment_metadata
+        # Check metadata
+        assert "timestamp" in compound.enrichment_metadata
+        timestamp = datetime.fromisoformat(
+            compound.enrichment_metadata["timestamp"]
+        )
+        assert start_time <= timestamp <= datetime.now()
+        assert timestamp - start_time < timedelta(seconds=10)
 
-    def test_skip_predictions(self, test_config, test_compounds, mock_clients):
-        """Test skipping predictions."""
-        manager = WebEnrichmentManager(test_config)
+        assert compound.enrichment_metadata["sources"] == [
+            "swiss",
+            "community",
+            "social",
+        ]
 
-        # Mock client process_compounds methods
-        manager.swiss_client.process_compounds = Mock()
-        manager.community_client.process_compounds = Mock()
-        manager.social_client.process_compounds = Mock()
+        # Check tracking
+        assert compound.smiles in manager.processed_compounds
 
-        # Enrich compounds with skip_predictions=True
-        manager.enrich_compounds(test_compounds, skip_predictions=True)
 
-        # Check client calls
-        assert manager.swiss_client.process_compounds.call_count == 0
-        assert manager.community_client.process_compounds.call_count == len(test_compounds)
-        assert manager.social_client.process_compounds.call_count == len(test_compounds)
+def test_enrich_compounds_skip_options(manager, test_compounds):
+    """Test compound enrichment with skip options."""
+    # Test skip predictions
+    manager.enrich_compounds(
+        compounds=test_compounds,
+        skip_predictions=True,
+        skip_web_data=False,
+    )
+    for compound in test_compounds:
+        assert not compound.swiss_data
+        assert compound.community_data
+        assert compound.social_data
 
-    def test_skip_web_data(self, test_config, test_compounds, mock_clients):
-        """Test skipping web data."""
-        manager = WebEnrichmentManager(test_config)
+    # Test skip web data
+    test_compounds_2 = test_compounds.copy()
+    manager.enrich_compounds(
+        compounds=test_compounds_2,
+        skip_predictions=False,
+        skip_web_data=True,
+    )
+    for compound in test_compounds_2:
+        assert compound.swiss_data
+        assert not compound.community_data
+        assert not compound.social_data
 
-        # Mock client process_compounds methods
-        manager.swiss_client.process_compounds = Mock()
-        manager.community_client.process_compounds = Mock()
-        manager.social_client.process_compounds = Mock()
 
-        # Enrich compounds with skip_web_data=True
-        manager.enrich_compounds(test_compounds, skip_web_data=True)
+def test_enrich_compounds_batch_processing(manager):
+    """Test batch processing of compounds."""
+    # Create test compounds
+    compounds = [
+        Compound(
+            name=f"Compound {i}",
+            smiles=f"C{'C' * i}",
+            cas_number=f"123-{i:02d}-{i:1d}",
+        )
+        for i in range(25)  # More than batch size
+    ]
 
-        # Check client calls
-        assert manager.swiss_client.process_compounds.call_count == len(test_compounds)
-        assert manager.community_client.process_compounds.call_count == 0
-        assert manager.social_client.process_compounds.call_count == 0
+    # Mock client responses
+    swiss_data = {"targets": [{"target": "test", "probability": 0.9}]}
+    community_data = {"reports": [{"source": "test", "text": "test"}]}
+    social_data = {"posts": [{"platform": "test", "text": "test"}]}
 
-    def test_batch_processing(self, test_config, test_compounds, mock_clients):
-        """Test batch processing."""
-        # Set small batch size
-        test_config.batch_size = 1
-        manager = WebEnrichmentManager(test_config)
+    with patch.object(
+        manager.clients["swiss"],
+        "predict_targets",
+        return_value=swiss_data,
+    ), patch.object(
+        manager.clients["community"],
+        "get_data",
+        return_value=community_data,
+    ), patch.object(
+        manager.clients["social"],
+        "get_data",
+        return_value=social_data,
+    ):
+        manager.enrich_compounds(compounds)
 
-        # Mock client process_compounds methods
-        manager.swiss_client.process_compounds = Mock()
-        manager.community_client.process_compounds = Mock()
-        manager.social_client.process_compounds = Mock()
+    # Check all compounds were processed
+    assert len(manager.processed_compounds) == len(compounds)
+    for compound in compounds:
+        assert compound.smiles in manager.processed_compounds
 
-        # Enrich compounds
-        manager.enrich_compounds(test_compounds)
 
-        # Check batch processing
-        assert manager.swiss_client.process_compounds.call_count == len(test_compounds)
-        assert manager.community_client.process_compounds.call_count == len(test_compounds)
-        assert manager.social_client.process_compounds.call_count == len(test_compounds)
+def test_enrich_compounds_error_handling(manager, test_compounds):
+    """Test error handling during enrichment."""
+    # Mock client error
+    error = Exception("Test error")
+    with patch.object(
+        manager.clients["swiss"],
+        "predict_targets",
+        side_effect=error,
+    ):
+        with pytest.raises(Exception) as exc:
+            manager.enrich_compounds([test_compounds[0]])
 
-    def test_error_handling(self, test_config, test_compounds, mock_clients):
-        """Test error handling."""
-        manager = WebEnrichmentManager(test_config)
+    assert str(exc.value) == "Test error"
+    assert test_compounds[0].smiles in manager.failed_compounds
 
-        # Mock client process_compounds methods to raise errors
-        manager.swiss_client.process_compounds = Mock(side_effect=Exception("Swiss error"))
-        manager.community_client.process_compounds = Mock(side_effect=Exception("Community error"))
-        manager.social_client.process_compounds = Mock(side_effect=Exception("Social error"))
 
-        # Enrich compounds (should not raise errors)
-        manager.enrich_compounds(test_compounds)
+def test_metrics(manager, test_compounds):
+    """Test metrics collection."""
+    # Mock successful enrichment
+    with patch.object(
+        manager.clients["swiss"],
+        "predict_targets",
+        return_value={},
+    ), patch.object(
+        manager.clients["community"],
+        "get_data",
+        return_value={},
+    ), patch.object(
+        manager.clients["social"],
+        "get_data",
+        return_value={},
+    ):
+        manager.enrich_compounds(test_compounds[:2])
 
-        # Check compound data still initialized
-        for compound in test_compounds:
-            assert isinstance(compound.swiss_data, dict)
-            assert isinstance(compound.community_data, dict)
-            assert isinstance(compound.social_data, dict)
-            assert isinstance(compound.enrichment_metadata, dict)
+    # Mock failed enrichment
+    with patch.object(
+        manager.clients["swiss"],
+        "predict_targets",
+        side_effect=Exception("Test error"),
+    ):
+        with pytest.raises(Exception):
+            manager.enrich_compounds([test_compounds[2]])
 
-    def test_cleanup(self, test_config, mock_clients):
-        """Test cleanup on close."""
-        manager = WebEnrichmentManager(test_config)
+    # Check metrics
+    metrics = manager.get_metrics()
+    assert metrics["processed_compounds"] == 2
+    assert metrics["failed_compounds"] == 1
+    assert "swiss" in metrics["clients"]
+    assert "community" in metrics["clients"]
+    assert "social" in metrics["clients"]
 
-        # Mock close methods
-        manager.http.close = Mock()
-        manager.swiss_client.close = Mock()
-        manager.community_client.close = Mock()
-        manager.social_client.close = Mock()
 
-        # Close manager
-        manager.close()
+def test_cleanup(manager):
+    """Test manager cleanup."""
+    with patch.object(manager.executor, "shutdown") as mock_executor_close:
+        with patch.object(manager.clients["swiss"], "close") as mock_swiss_close:
+            with patch.object(
+                manager.clients["community"], "close"
+            ) as mock_community_close:
+                with patch.object(
+                    manager.clients["social"], "close"
+                ) as mock_social_close:
+                    manager.close()
 
-        # Check close calls
-        assert manager.http.close.called
-        assert manager.swiss_client.close.called
-        assert manager.community_client.close.called
-        assert manager.social_client.close.called
+    mock_executor_close.assert_called_once()
+    mock_swiss_close.assert_called_once()
+    mock_community_close.assert_called_once()
+    mock_social_close.assert_called_once()

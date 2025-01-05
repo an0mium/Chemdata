@@ -1,0 +1,71 @@
+<!-- Search Modal -->
+<div class="modal fade" id="searchModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Search Compounds</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="searchForm" method="GET">
+                    <div class="mb-3">
+                        <label for="query" class="form-label">Search Query</label>
+                        <input type="text" class="form-control" id="query" name="query" value="{{ query }}"
+                            placeholder="Enter name, CAS number, SMILES, or structure">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Search Fields</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="searchName" name="search_fields" value="name" checked>
+                            <label class="form-check-label" for="searchName">Name</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="searchCAS" name="search_fields" value="cas_number" checked>
+                            <label class="form-check-label" for="searchCAS">CAS Number</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="searchSMILES" name="search_fields" value="smiles" checked>
+                            <label class="form-check-label" for="searchSMILES">SMILES</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="searchStructure" name="search_fields" value="structure">
+                            <label class="form-check-label" for="searchStructure">Structure Similarity</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Data Fields</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="searchBinding" name="search_fields" value="binding_data">
+                            <label class="form-check-label" for="searchBinding">Binding Data</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="searchActivity" name="search_fields" value="activity">
+                            <label class="form-check-label" for="searchActivity">Activity Data</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="searchSafety" name="search_fields" value="safety">
+                            <label class="form-check-label" for="searchSafety">Safety Data</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="searchSocial" name="search_fields" value="social_data">
+                            <label class="form-check-label" for="searchSocial">Social Data</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="similarityThreshold" class="form-label">Structure Similarity Threshold</label>
+                        <input type="range" class="form-range" id="similarityThreshold" name="similarity_threshold"
+                            min="0" max="1" step="0.1" value="0.7">
+                        <div class="form-text">Minimum similarity score (0.0 - 1.0) for structure matching</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="searchForm" class="btn btn-primary">Search</button>
+            </div>
+        </div>
+    </div>
+</div>
