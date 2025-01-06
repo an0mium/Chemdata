@@ -45,6 +45,21 @@ from ..base_client import WebClient, WebClientError
 from ..validation.schema import DataSource, ResearchData
 from ..validation.enhanced import EnhancedValidator
 from ..llm_utils import NootropicLLMExtractor
+from ...pipeline.infrastructure.rate_limiter import RateLimiter, RateLimit
+from ...pipeline.infrastructure.circuit_breaker import CircuitBreaker, ErrorCode, McpError
+
+# API Rate Limits
+# 3 requests per second for authenticated users
+AUTH_RATE_LIMIT = RateLimit(requests=3, period=1)
+# 1 request per second for non-authenticated users
+UNAUTH_RATE_LIMIT = RateLimit(requests=1, period=1)
+# 1 request per second for web scraping
+SCRAPE_RATE_LIMIT = RateLimit(requests=1, period=1)
+
+# Circuit Breaker Config
+CIRCUIT_FAILURE_THRESHOLD = 5
+CIRCUIT_RESET_TIMEOUT = 300  # 5 minutes
+CIRCUIT_HALF_OPEN_TIMEOUT = 60  # 1 minute
 
 
 class PubMedArticleSchema(BaseModel):
@@ -141,6 +156,28 @@ class EnhancedPubMedClient(WebClient):
             timeout=timeout,
             cache_ttl=cache_ttl,
             logger=logger,
+        )
+
+        # Initialize rate limiters
+        self.rate_limiter = RateLimiter()
+        if api_key:
+            self.rate_limiter.add_limit("api", AUTH_RATE_LIMIT)
+        else:
+            self.rate_limiter.add_limit("api", UNAUTH_RATE_LIMIT)
+        self.rate_limiter.add_limit("scrape", SCRAPE_RATE_LIMIT)
+
+        # Initialize circuit breakers
+        self.api_circuit = CircuitBreaker(
+            "pubmed_api",
+            failure_threshold=CIRCUIT_FAILURE_THRESHOLD,
+            reset_timeout=CIRCUIT_RESET_TIMEOUT,
+            half_open_timeout=CIRCUIT_HALF_OPEN_TIMEOUT,
+        )
+        self.scrape_circuit = CircuitBreaker(
+            "pubmed_scrape",
+            failure_threshold=CIRCUIT_FAILURE_THRESHOLD,
+            reset_timeout=CIRCUIT_RESET_TIMEOUT,
+            half_open_timeout=CIRCUIT_HALF_OPEN_TIMEOUT,
         )
 
         # API config
@@ -318,29 +355,54 @@ class EnhancedPubMedClient(WebClient):
         Returns:
             List of PMIDs
         """
-        search_params = {
-            "db": "pubmed",
-            "term": query,
-            "retmode": "json",
-            "retmax": max_results,
-            "sort": sort,
-        }
-        if min_date:
-            search_params["mindate"] = min_date.split("-")[0]
-        if max_date:
-            search_params["maxdate"] = max_date.split("-")[0]
+        # Check circuit breaker
+        if not self.api_circuit.allow_request():
+            raise McpError(
+                ErrorCode.ServiceUnavailable,
+                "PubMed API circuit breaker open",
+            )
 
-        if self.api_key:
-            search_params["api_key"] = self.api_key
+        try:
+            # Wait for rate limit
+            self.rate_limiter.wait("api")
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.ESEARCH_URL, params=search_params) as response:
-                if not response.ok:
-                    self.logger.error(f"API search failed: {response.status}")
-                    return []
+            search_params = {
+                "db": "pubmed",
+                "term": query,
+                "retmode": "json",
+                "retmax": max_results,
+                "sort": sort,
+            }
+            if min_date:
+                search_params["mindate"] = min_date.split("-")[0]
+            if max_date:
+                search_params["maxdate"] = max_date.split("-")[0]
 
-                search_data = await response.json()
-                return search_data["esearchresult"].get("idlist", [])
+            if self.api_key:
+                search_params["api_key"] = self.api_key
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(self.ESEARCH_URL, params=search_params) as response:
+                    if not response.ok:
+                        error_text = await response.text()
+                        self.logger.error(f"API search failed: {error_text}")
+                        self.api_circuit.record_failure()
+                        return []
+
+                    search_data = await response.json()
+                    pmids = search_data["esearchresult"].get("idlist", [])
+
+                    if pmids:
+                        self.api_circuit.record_success()
+
+                    return pmids
+
+        except Exception as e:
+            self.api_circuit.record_failure()
+            raise McpError(
+                ErrorCode.ServiceError,
+                f"PubMed API search failed: {str(e)}",
+            )
 
     async def _process_article(
         self,
@@ -356,23 +418,43 @@ class EnhancedPubMedClient(WebClient):
         Returns:
             Research paper data if successful
         """
-        # Check cache
-        if cached := self.cache.get(f"article:{pmid}"):
-            return cached
+        # Check circuit breaker
+        if not self.scrape_circuit.allow_request():
+            raise McpError(
+                ErrorCode.ServiceUnavailable,
+                "PubMed scraping circuit breaker open",
+            )
 
-        # Get article data
-        article = await self._get_article_data(pmid, crawler)
-        if not article:
-            return None
+        try:
+            # Wait for rate limit
+            self.rate_limiter.wait("scrape")
 
-        # Validate
-        if not await self._validate_article(article):
-            return None
+            # Check cache
+            if cached := self.cache.get(f"article:{pmid}"):
+                return cached
 
-        # Cache result
-        result = ResearchData(**article.__dict__)
-        self.cache.set(f"article:{pmid}", result)
-        return result
+            # Get article data
+            article = await self._get_article_data(pmid, crawler)
+            if not article:
+                return None
+
+            # Validate
+            if not await self._validate_article(article):
+                return None
+
+            # Cache result
+            result = ResearchData(**article.__dict__)
+            self.cache.set(f"article:{pmid}", result)
+
+            self.scrape_circuit.record_success()
+            return result
+
+        except Exception as e:
+            self.scrape_circuit.record_failure()
+            raise McpError(
+                ErrorCode.ServiceError,
+                f"Error processing PubMed article: {str(e)}",
+            )
 
     async def get_paper_details(
         self,

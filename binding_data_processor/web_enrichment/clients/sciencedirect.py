@@ -20,6 +20,20 @@ from bs4 import BeautifulSoup
 from ..base_client import BaseClient
 from ..validation.enhanced import EnhancedValidator
 from ...models.compound import CompoundData
+from ...pipeline.infrastructure.rate_limiter import RateLimiter, RateLimit
+from ...pipeline.infrastructure.circuit_breaker import CircuitBreaker, ErrorCode, McpError
+
+# API Rate Limits
+API_RATE_LIMIT = RateLimit(requests=6, period=1)  # 6 requests per second
+SCRAPE_RATE_LIMIT = RateLimit(requests=1, period=1)  # 1 request per second
+
+# Weekly quota tracking (10,000 requests per week for academic)
+WEEKLY_QUOTA = 10000
+
+# Circuit Breaker Config
+CIRCUIT_FAILURE_THRESHOLD = 5
+CIRCUIT_RESET_TIMEOUT = 300  # 5 minutes
+CIRCUIT_HALF_OPEN_TIMEOUT = 60  # 1 minute
 
 
 @dataclass
@@ -58,6 +72,7 @@ class EnhancedScienceDirectClient(BaseClient):
         proxy_retry_count: int = 3,
         rate_limit: int = 10,
         rate_limit_delay: int = 60,
+        weekly_quota: int = WEEKLY_QUOTA,
     ):
         """Initialize client.
 
@@ -75,6 +90,30 @@ class EnhancedScienceDirectClient(BaseClient):
         super().__init__(cache_dir=cache_dir)
         self.validator = validator or EnhancedValidator()
         self.logger = logging.getLogger(__name__)
+
+        # Initialize rate limiters
+        self.rate_limiter = RateLimiter()
+        self.rate_limiter.add_limit("api", API_RATE_LIMIT)
+        self.rate_limiter.add_limit("scrape", SCRAPE_RATE_LIMIT)
+
+        # Initialize circuit breakers
+        self.api_circuit = CircuitBreaker(
+            "sciencedirect_api",
+            failure_threshold=CIRCUIT_FAILURE_THRESHOLD,
+            reset_timeout=CIRCUIT_RESET_TIMEOUT,
+            half_open_timeout=CIRCUIT_HALF_OPEN_TIMEOUT,
+        )
+        self.scrape_circuit = CircuitBreaker(
+            "sciencedirect_scrape",
+            failure_threshold=CIRCUIT_FAILURE_THRESHOLD,
+            reset_timeout=CIRCUIT_RESET_TIMEOUT,
+            half_open_timeout=CIRCUIT_HALF_OPEN_TIMEOUT,
+        )
+
+        # Weekly quota tracking
+        self.weekly_quota = weekly_quota
+        self.request_count = 0
+        self.quota_reset = datetime.now()
 
         # Configure Crawl4AI with anti-bot detection avoidance
         self.config = Config(
@@ -122,6 +161,108 @@ class EnhancedScienceDirectClient(BaseClient):
             ),
         )
 
+    async def _check_quota(self) -> None:
+        """Check and update weekly quota."""
+        # Reset quota if a week has passed
+        now = datetime.now()
+        if (now - self.quota_reset).days >= 7:
+            self.request_count = 0
+            self.quota_reset = now
+
+        # Check quota
+        if self.request_count >= self.weekly_quota:
+            raise McpError(
+                ErrorCode.QuotaExceeded,
+                f"Weekly quota of {self.weekly_quota} requests exceeded",
+            )
+
+        self.request_count += 1
+
+    async def _process_search_page(
+        self,
+        crawler: AsyncWebCrawler,
+        url: str,
+        page_num: int,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Process a single search results page.
+
+        Args:
+            crawler: AsyncWebCrawler instance
+            url: Page URL
+            page_num: Page number
+
+        Returns:
+            List of papers if successful, None otherwise
+        """
+        # Wait for scrape rate limit
+        self.rate_limiter.wait("scrape")
+
+        # Crawl search results
+        result = await crawler.arun(urls=[url], config=self.config)
+        if not result.success:
+            error_text = str(result.error) if result.error else "Unknown error"
+            self.logger.error(f"Failed to scrape page {page_num}: {error_text}")
+            self.api_circuit.record_failure()
+            return None
+
+        # Extract papers
+        content = result.extracted_content[0]
+        papers = self._parse_search_results(content)
+        if not papers:
+            return None
+
+        # Process each paper
+        page_results = []
+        for paper in papers:
+            try:
+                # Extract data
+                article = await self._extract_article_data(paper, result)
+                if not article:
+                    continue
+
+                # Validate
+                if await self._validate_article(article):
+                    page_results.append(article)
+
+            except Exception as e:
+                self.logger.error(f"Error processing paper: {str(e)}")
+                continue
+
+        return page_results
+
+    async def _get_cached_results(
+        self,
+        query: str,
+        start: int,
+    ) -> Optional[List[ScienceDirectResearchData]]:
+        """Get cached search results.
+
+        Args:
+            query: Search query
+            start: Start index
+
+        Returns:
+            Cached results if found, None otherwise
+        """
+        cache_key = f"search:{query}:{start}"
+        return self.cache.get(cache_key)
+
+    async def _cache_results(
+        self,
+        query: str,
+        start: int,
+        results: List[ScienceDirectResearchData],
+    ) -> None:
+        """Cache search results.
+
+        Args:
+            query: Search query
+            start: Start index
+            results: Results to cache
+        """
+        cache_key = f"search:{query}:{start}"
+        self.cache.set(cache_key, results)
+
     async def search_articles(
         self,
         query: str,
@@ -142,16 +283,26 @@ class EnhancedScienceDirectClient(BaseClient):
         Returns:
             List of research paper data
         """
-        results = []
-        start = 0
-        results_per_page = 25  # ScienceDirect shows 25 results per page
+        # Check circuit breaker
+        if not self.api_circuit.allow_request():
+            raise McpError(
+                ErrorCode.ServiceUnavailable,
+                "ScienceDirect API circuit breaker open",
+            )
 
         try:
+            # Check quota and rate limit
+            await self._check_quota()
+            self.rate_limiter.wait("api")
+
+            results = []
+            start = 0
+            results_per_page = 25  # ScienceDirect shows 25 results per page
+
             async with AsyncWebCrawler() as crawler:
                 while len(results) < max_results:
                     # Check cache
-                    cache_key = f"search:{query}:{start}"
-                    if cached := self.cache.get(cache_key):
+                    if cached := await self._get_cached_results(query, start):
                         results.extend(cached)
                         start += results_per_page
                         continue
@@ -165,50 +316,36 @@ class EnhancedScienceDirectClient(BaseClient):
                         start=start,
                     )
 
-                    # Crawl search results
-                    result = await crawler.arun(urls=[url], config=self.config)
-                    if not result.success:
-                        self.logger.error(f"Failed to scrape page {start//25 + 1}")
+                    # Process page
+                    page_results = await self._process_search_page(
+                        crawler=crawler,
+                        url=url,
+                        page_num=start // results_per_page + 1,
+                    )
+                    if not page_results:
                         break
 
-                    # Extract and process articles
-                    content = result.extracted_content[0]
-                    papers = self._parse_search_results(content)
-                    if not papers:
-                        break
-
-                    # Process each paper
-                    page_results = []
-                    for paper in papers:
-                        try:
-                            # Extract data
-                            article = await self._extract_article_data(paper, result)
-                            if not article:
-                                continue
-
-                            # Validate
-                            if await self._validate_article(article):
-                                page_results.append(article)
-
-                        except Exception as e:
-                            self.logger.error(f"Error processing paper: {str(e)}")
-                            continue
-
-                    # Cache page results
-                    if page_results:
-                        self.cache.set(cache_key, page_results)
-                        results.extend(page_results)
+                    # Cache and add results
+                    await self._cache_results(query, start, page_results)
+                    results.extend(page_results)
 
                     if len(results) >= max_results:
                         break
 
                     start += results_per_page
 
+            # Record success if we got any results
+            if results:
+                self.api_circuit.record_success()
+
             return results[:max_results]
 
         except Exception as e:
-            self.logger.error(f"Error searching articles: {str(e)}")
-            return []
+            self.api_circuit.record_failure()
+            raise McpError(
+                ErrorCode.ServiceError,
+                f"Error searching ScienceDirect articles: {str(e)}",
+            )
 
     async def get_compound_articles(
         self,

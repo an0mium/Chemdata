@@ -6,6 +6,7 @@ This module provides a specialized Crawl4AI client for Bluelight that:
 3. Extracts community data about compounds
 """
 
+import logging
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,6 +16,10 @@ from bs4 import BeautifulSoup
 
 from ..base_client import BaseWebClient
 from ..validation.schema import BaseSchema
+from ..storage.bluelight_storage import BluelightStorage
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -139,7 +144,7 @@ class BluelightCrawl4AIClient(BaseWebClient):
                     result = await crawler.arun(urls=[url], config=self.config)
 
                     if not result.success:
-                        self.logger.error(f"Failed to scrape {subforum}")
+                        logger.error(f"Failed to scrape {subforum}")
                         continue
 
                     # Extract data using both CSS and LLM
@@ -176,11 +181,26 @@ class BluelightCrawl4AIClient(BaseWebClient):
                             break
 
         except Exception as e:
-            self.logger.error(f"Error scraping Bluelight: {str(e)}")
+            logger.error(f"Error scraping Bluelight: {str(e)}")
+
+            # Store error for monitoring
+            storage = BluelightStorage()
+            storage.store_error(
+                error=str(e),
+                metadata={
+                    "query": query,
+                    "subforums": subforums,
+                    "max_results": max_results,
+                },
+            )
 
         return results
 
-    def _parse_search_results(self, content: Dict[str, Any], subforum: str) -> List[Dict[str, Any]]:
+    def _parse_search_results(
+        self,
+        content: Dict[str, Any],
+        subforum: str,
+    ) -> List[Dict[str, Any]]:
         """Parse search results from extracted content.
 
         Args:
@@ -220,6 +240,14 @@ class BluelightCrawl4AIClient(BaseWebClient):
                 "safety": safety,
             }
             posts.append(post)
+
+        # Store posts in database
+        storage = BluelightStorage()
+        for post in posts:
+            storage.store_post(
+                post_id=post["url"].split("/")[-1],
+                data=post,
+            )
 
         return posts
 

@@ -59,17 +59,21 @@ from .validation import ValidationError, validate_smiles, validate_inchi
 
 class CompoundType(Enum):
     """Types of chemical compounds."""
+
     NEUROTRANSMITTER = "neurotransmitter"
     PSYCHOACTIVE = "psychoactive"
     RESEARCH_CHEMICAL = "research_chemical"
     NPS = "novel_psychoactive_substance"
     PHARMACEUTICAL = "pharmaceutical"
     NATURAL_PRODUCT = "natural_product"
+    SMALL_MOLECULE = "small_molecule"
     OTHER = "other"
+    UNKNOWN = "unknown"
 
 
 class LegalStatus(Enum):
     """Legal status classifications."""
+
     LEGAL = "legal"
     CONTROLLED = "controlled"
     ILLEGAL = "illegal"
@@ -77,10 +81,16 @@ class LegalStatus(Enum):
     UNSCHEDULED = "unscheduled"
     PRESCRIPTION = "prescription_only"
     OTC = "over_the_counter"
+    APPROVED = "approved"
+    INVESTIGATIONAL = "investigational"
+    WITHDRAWN = "withdrawn"
+    BANNED = "banned"
+    UNKNOWN = "unknown"
 
 
 class PsychoactiveClass(Enum):
     """Classification of psychoactive effects."""
+
     PSYCHEDELIC = "psychedelic"
     EMPATHOGEN = "empathogen"
     STIMULANT = "stimulant"
@@ -97,6 +107,7 @@ class PsychoactiveClass(Enum):
 
 class NootropicMechanism(Enum):
     """Mechanisms of nootropic activity."""
+
     CHOLINERGIC = "cholinergic"
     GLUTAMATERGIC = "glutamatergic"
     DOPAMINERGIC = "dopaminergic"
@@ -108,11 +119,18 @@ class NootropicMechanism(Enum):
     NEUROPLASTICITY = "neuroplasticity"
     ANTI_INFLAMMATORY = "anti_inflammatory"
     ANTIOXIDANT = "antioxidant"
+    MEMORY_ENHANCEMENT = "memory_enhancement"
+    FOCUS_IMPROVEMENT = "focus_improvement"
+    NEUROPROTECTION = "neuroprotection"
+    NOOTROPIC_SYNERGY = "nootropic_synergy"
+    COGNITIVE_MODULATION = "cognitive_modulation"
+    BRAIN_METABOLISM = "brain_metabolism"
     UNKNOWN = "unknown"
 
 
 class BBBPermeability(Enum):
     """Blood-brain barrier permeability classification."""
+
     HIGH = "high"
     MODERATE = "moderate"
     LOW = "low"
@@ -123,6 +141,7 @@ class BBBPermeability(Enum):
 @dataclass
 class TargetData:
     """Structured data for a single target interaction."""
+
     common_name: str = "N/A"
     protein_name: str = "N/A"
     gene_name: str = "N/A"
@@ -142,6 +161,7 @@ class TargetData:
 @dataclass
 class CompoundData:
     """Enhanced data class for chemical compound information."""
+
     # Core identifiers (required)
     name: str
     smiles: str
@@ -278,15 +298,17 @@ class CompoundData:
     _predictors: Dict[str, PredictorBase] = field(default_factory=dict)
     _prediction_cache: Dict[str, PredictionResult] = field(default_factory=dict)
     _feature_cache: Dict[str, np.ndarray] = field(default_factory=dict)
-    _prediction_history: pd.DataFrame = field(default_factory=lambda: pd.DataFrame(
-        columns=[
-            'predictor_type',
-            'prediction_value',
-            'confidence',
-            'timestamp',
-            'supporting_data',
-        ]
-    ))
+    _prediction_history: pd.DataFrame = field(
+        default_factory=lambda: pd.DataFrame(
+            columns=[
+                "predictor_type",
+                "prediction_value",
+                "confidence",
+                "timestamp",
+                "supporting_data",
+            ]
+        )
+    )
 
     def __post_init__(self):
         """Validate required fields and initialize collections."""
@@ -299,12 +321,12 @@ class CompoundData:
         use_cache: bool = True,
     ) -> PredictionResult:
         """Run prediction using specified predictor.
-        
+
         Args:
             predictor_type: Type of predictor to use
             predictor: Predictor instance to use
             use_cache: Whether to use cached predictions
-            
+
         Returns:
             PredictionResult containing prediction and confidence
         """
@@ -320,16 +342,23 @@ class CompoundData:
         self._predictors[predictor_type] = predictor
 
         # Update history
-        self._prediction_history = pd.concat([
-            self._prediction_history,
-            pd.DataFrame([{
-                'predictor_type': predictor_type,
-                'prediction_value': result.value,
-                'confidence': result.confidence,
-                'timestamp': pd.Timestamp.now(),
-                'supporting_data': json.dumps(result.supporting_data),
-            }])
-        ], ignore_index=True)
+        self._prediction_history = pd.concat(
+            [
+                self._prediction_history,
+                pd.DataFrame(
+                    [
+                        {
+                            "predictor_type": predictor_type,
+                            "prediction_value": result.value,
+                            "confidence": result.confidence,
+                            "timestamp": pd.Timestamp.now(),
+                            "supporting_data": json.dumps(result.supporting_data),
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
 
         return result
 
@@ -350,9 +379,7 @@ class CompoundData:
     ) -> pd.DataFrame:
         """Get prediction history, optionally filtered by type."""
         if predictor_type:
-            return self._prediction_history[
-                self._prediction_history['predictor_type'] == predictor_type
-            ]
+            return self._prediction_history[self._prediction_history["predictor_type"] == predictor_type]
         return self._prediction_history
 
     def get_cached_features(
@@ -374,27 +401,26 @@ class CompoundData:
         """Clear cached features."""
         self._feature_cache.clear()
 
-    
     def _validate(self):
         """Validate compound data."""
         errors = []
-        
+
         # Run all validation checks
         errors.extend(self._validate_identifiers())
         errors.extend(self._validate_properties())
         errors.extend(self._validate_targets())
         errors.extend(self._validate_psychopharm_data())
-        
+
         if errors:
             raise ValidationError("\n".join(errors))
-            
+
         # Initialize collections
         self._initialize_collections()
 
     def _validate_identifiers(self) -> List[str]:
         """Validate chemical identifiers."""
         errors = []
-        
+
         # Validate required fields
         if not self.name:
             errors.append("Compound name is required")
@@ -418,7 +444,7 @@ class CompoundData:
     def _validate_properties(self) -> List[str]:
         """Validate chemical properties."""
         errors = []
-        
+
         # Validate molecular weight
         if self.molecular_weight < 0:
             errors.append(f"Invalid molecular weight: {self.molecular_weight}")
@@ -443,39 +469,31 @@ class CompoundData:
     def _validate_single_target(self, index: int, target) -> List[str]:
         """Validate a single target entry."""
         errors = []
-        
+
         # Validate affinity value
         if target.affinity_value < 0:
-            errors.append(
-                f"Invalid binding affinity value for target {index}: {target.affinity_value}"
-            )
-            
+            errors.append(f"Invalid binding affinity value for target {index}: {target.affinity_value}")
+
         # Validate confidence score
         if not 0 <= target.confidence <= 1:
-            errors.append(
-                f"Invalid confidence score for target {index}: {target.confidence}"
-            )
-            
+            errors.append(f"Invalid confidence score for target {index}: {target.confidence}")
+
         # Validate affinity type
-        valid_types = {'Ki', 'IC50', 'EC50', 'Kd'}
+        valid_types = {"Ki", "IC50", "EC50", "Kd"}
         if target.affinity_type not in valid_types and target.affinity_type != "N/A":
-            errors.append(
-                f"Invalid affinity type for target {index}: {target.affinity_type}"
-            )
-            
+            errors.append(f"Invalid affinity type for target {index}: {target.affinity_type}")
+
         # Validate affinity unit
-        valid_units = {'nM', 'uM', 'mM', 'pM'}
+        valid_units = {"nM", "uM", "mM", "pM"}
         if target.affinity_unit not in valid_units and target.affinity_unit != "N/A":
-            errors.append(
-                f"Invalid affinity unit for target {index}: {target.affinity_unit}"
-            )
-            
+            errors.append(f"Invalid affinity unit for target {index}: {target.affinity_unit}")
+
         return errors
 
     def _validate_psychopharm_data(self) -> List[str]:
         """Validate psychopharmacological data."""
         errors = []
-        
+
         # Validate BBB score
         if not 0 <= self.bbb_score <= 1:
             errors.append(f"Invalid BBB score: {self.bbb_score}")
@@ -515,9 +533,7 @@ class CompoundData:
         errors = []
         for i, target in enumerate(self.targets, 1):
             if target.affinity_value < 0:
-                errors.append(
-                    f"Invalid binding affinity value for target {i}: {target.affinity_value}"
-                )
+                errors.append(f"Invalid binding affinity value for target {i}: {target.affinity_value}")
         return errors
 
     def _initialize_collections(self) -> None:
@@ -536,32 +552,29 @@ class CompoundData:
     def _validate_cas_format(self, cas: str) -> bool:
         """
         Validate CAS number format.
-        
+
         Args:
             cas: CAS number to validate
-            
+
         Returns:
             True if valid, False otherwise
         """
-        pattern = r'^\d{1,7}-\d{2}-\d$'
+        pattern = r"^\d{1,7}-\d{2}-\d$"
         if not re.match(pattern, cas):
             return False
 
         # Validate checksum
-        numbers = cas.replace('-', '')
+        numbers = cas.replace("-", "")
         check_digit = int(numbers[-1])
         numbers = numbers[:-1]
-        total = sum(
-            int(num) * (i + 1)
-            for i, num in enumerate(reversed(numbers))
-        )
+        total = sum(int(num) * (i + 1) for i, num in enumerate(reversed(numbers)))
         return (total % 10) == check_digit
 
     def format_numeric_values(self):
         """Format numeric values to specified precision."""
-        self.logp = float(f"{self.logp:.5f}".rstrip('0').rstrip('.'))
-        self.tpsa = float(f"{self.tpsa:.5f}".rstrip('0').rstrip('.'))
-        self.molecular_weight = float(f"{self.molecular_weight:.5f}".rstrip('0').rstrip('.'))
+        self.logp = float(f"{self.logp:.5f}".rstrip("0").rstrip("."))
+        self.tpsa = float(f"{self.tpsa:.5f}".rstrip("0").rstrip("."))
+        self.molecular_weight = float(f"{self.molecular_weight:.5f}".rstrip("0").rstrip("."))
 
     def get_psychopharm_dict(self) -> Dict:
         """Get dictionary of psychopharmacological properties."""
@@ -580,13 +593,11 @@ class CompoundData:
             # Patent data
             "patent_data": self.patent_data,
             "patent_count": self.patent_count,
-
             # Swiss data
             "swiss_data": self.swiss_data,
             "target_predictions": self.target_predictions,
             "adme_properties": self.adme_properties,
             "similar_compounds": self.similar_compounds,
-
             # Web data
             "community_data": self.community_data,
             "literature_data": self.literature_data,
@@ -606,37 +617,37 @@ class CompoundData:
             "binding_summary": self._summarize_binding_data(),
         }
 
-    def merge(self, other: 'CompoundData') -> None:
+    def merge(self, other: "CompoundData") -> None:
         """Merge data from another CompoundData object."""
         # Merge basic data
         self._merge_basic_data(other)
-        
+
         # Merge analysis results
         self._merge_analysis_results(other)
-        
+
         # Merge predictions
         self._merge_predictions(other)
-        
+
         # Merge web data
         self._merge_web_data(other)
-        
+
         # Merge psychopharmacological properties
         self._merge_psychopharm_data(other)
 
         # Update metadata
         self.last_updated = datetime.now().isoformat()
 
-    def _merge_basic_data(self, other: 'CompoundData') -> None:
+    def _merge_basic_data(self, other: "CompoundData") -> None:
         """Merge basic data fields."""
         # Merge sets
         self.other_names.update(other.other_names)
         self.data_sources.update(other.data_sources)
         self.reference_dois.update(other.reference_dois)
         self.reference_pmids.update(other.reference_pmids)
-        
+
         # Merge dictionaries
         self.reference_urls.update(other.reference_urls)
-        
+
         # Merge ranked names
         if other.common_name_1_results > self.common_name_1_results:
             self.common_name_1 = other.common_name_1
@@ -679,10 +690,7 @@ class CompoundData:
             if key not in target:
                 target[key] = type(value)()
             if isinstance(value, list):
-                target[key].extend(
-                    item for item in value
-                    if item not in target[key]
-                )
+                target[key].extend(item for item in value if item not in target[key])
             else:  # set
                 target[key].update(value)
         elif isinstance(value, dict):
@@ -691,13 +699,11 @@ class CompoundData:
             target[key].update(value)
         else:
             target[key] = value
-    
-    def _merge_target_data(self, other: 'CompoundData') -> None:
+
+    def _merge_target_data(self, other: "CompoundData") -> None:
         """Merge target data from another CompoundData object."""
         # Create lookup of existing targets by name
         existing_targets = {target.common_name: target for target in self.targets}
-
-
 
         # Merge target data
         for other_target in other.targets:
@@ -715,7 +721,7 @@ class CompoundData:
         if other.primary_target and (not self.primary_target or has_more_refs):
             self.primary_target = other.primary_target
 
-    def _merge_predictions(self, other: 'CompoundData') -> None:
+    def _merge_predictions(self, other: "CompoundData") -> None:
         """Merge all ML predictions from another instance."""
         self._merge_toxicity_predictions(other)
         self._merge_abuse_potential(other)
@@ -723,7 +729,7 @@ class CompoundData:
         self._merge_activity_predictions(other)
         self._merge_mechanism_predictions(other)
 
-    def _merge_toxicity_predictions(self, other: 'CompoundData') -> None:
+    def _merge_toxicity_predictions(self, other: "CompoundData") -> None:
         """Merge toxicity predictions."""
         for tox_type, tox_data in other.toxicity_predictions.items():
             if tox_type not in self.toxicity_predictions:
@@ -734,7 +740,7 @@ class CompoundData:
                 if tox_data.get("confidence", 0) > old_conf:
                     self.toxicity_predictions[tox_type] = tox_data
 
-    def _merge_abuse_potential(self, other: 'CompoundData') -> None:
+    def _merge_abuse_potential(self, other: "CompoundData") -> None:
         """Merge abuse potential predictions."""
         for abuse_type, abuse_data in other.abuse_potential.items():
             if abuse_type not in self.abuse_potential:
@@ -745,25 +751,22 @@ class CompoundData:
                 if abuse_data.get("confidence", 0) > old_conf:
                     self.abuse_potential[abuse_type] = abuse_data
 
-    def _merge_binding_predictions(self, other: 'CompoundData') -> None:
+    def _merge_binding_predictions(self, other: "CompoundData") -> None:
         """Merge binding predictions."""
         self.binding_predictions.extend(
-            pred for pred in other.binding_predictions
-            if pred not in self.binding_predictions
+            pred for pred in other.binding_predictions if pred not in self.binding_predictions
         )
 
-    def _merge_activity_predictions(self, other: 'CompoundData') -> None:
+    def _merge_activity_predictions(self, other: "CompoundData") -> None:
         """Merge activity predictions."""
         self.activity_predictions.extend(
-            pred for pred in other.activity_predictions
-            if pred not in self.activity_predictions
+            pred for pred in other.activity_predictions if pred not in self.activity_predictions
         )
 
-    def _merge_mechanism_predictions(self, other: 'CompoundData') -> None:
+    def _merge_mechanism_predictions(self, other: "CompoundData") -> None:
         """Merge mechanism predictions."""
         self.mechanism_predictions.extend(
-            pred for pred in other.mechanism_predictions
-            if pred not in self.mechanism_predictions
+            pred for pred in other.mechanism_predictions if pred not in self.mechanism_predictions
         )
 
     def get_predictions_dict(self) -> Dict:
@@ -776,7 +779,7 @@ class CompoundData:
             "mechanism_predictions": self._format_mechanism_predictions(),
         }
 
-    def _merge_web_data(self, other: 'CompoundData') -> None:
+    def _merge_web_data(self, other: "CompoundData") -> None:
         """Merge web-enriched data from another CompoundData object."""
         self._merge_community_data(other.community_data)
         self._merge_literature_data(other.literature_data)
@@ -816,11 +819,7 @@ class CompoundData:
 
     def _merge_experience_reports(self, other_reports: List[Dict]) -> None:
         """Merge experience reports."""
-        self.experience_reports.extend(
-            report
-            for report in other_reports
-            if report not in self.experience_reports
-        )
+        self.experience_reports.extend(report for report in other_reports if report not in self.experience_reports)
 
     def _merge_safety_profile(self, other_profile: Dict) -> None:
         """Merge safety profile data."""
@@ -833,9 +832,7 @@ class CompoundData:
         """Merge a list field into a dictionary."""
         if key not in target_dict:
             target_dict[key] = []
-        target_dict[key].extend(
-            item for item in value if item not in target_dict[key]
-        )
+        target_dict[key].extend(item for item in value if item not in target_dict[key])
 
     def _merge_dict_field(self, target_dict: Dict, key: str, value: Dict) -> None:
         """Merge a dictionary field into a dictionary."""
@@ -843,35 +840,25 @@ class CompoundData:
             target_dict[key] = {}
         target_dict[key].update(value)
 
-    def _merge_analysis_results(self, other: 'CompoundData') -> None:
+    def _merge_analysis_results(self, other: "CompoundData") -> None:
         """Merge analysis results from another CompoundData object."""
         # Merge pharmacophores
-        self.pharmacophores.extend(
-            pharm for pharm in other.pharmacophores if pharm not in self.pharmacophores
-        )
+        self.pharmacophores.extend(pharm for pharm in other.pharmacophores if pharm not in self.pharmacophores)
 
         # Merge structural alerts
-        self.structural_alerts.extend(
-            alert
-            for alert in other.structural_alerts
-            if alert not in self.structural_alerts
-        )
+        self.structural_alerts.extend(alert for alert in other.structural_alerts if alert not in self.structural_alerts)
 
         # Merge receptor interactions
         for receptor, interactions in other.receptor_interactions.items():
             if receptor not in self.receptor_interactions:
                 self.receptor_interactions[receptor] = []
             self.receptor_interactions[receptor].extend(
-                inter
-                for inter in interactions
-                if inter not in self.receptor_interactions[receptor]
+                inter for inter in interactions if inter not in self.receptor_interactions[receptor]
             )
 
         # Merge mechanism predictions
         self.mechanism_predictions.extend(
-            mech
-            for mech in other.mechanism_predictions
-            if mech not in self.mechanism_predictions
+            mech for mech in other.mechanism_predictions if mech not in self.mechanism_predictions
         )
 
         # Merge SAR analysis
@@ -880,7 +867,7 @@ class CompoundData:
                 self.sar_analysis = {}
             self.sar_analysis.update(other.sar_analysis)
 
-    def _merge_receptor_profiles(self, other: 'CompoundData') -> None:
+    def _merge_receptor_profiles(self, other: "CompoundData") -> None:
         """Merge receptor binding profiles."""
         for receptor, data in other.receptor_profiles.items():
             if receptor not in self.receptor_profiles:
@@ -891,14 +878,14 @@ class CompoundData:
                 if data.get("confidence", 0) > old_conf:
                     self.receptor_profiles[receptor] = data
 
-    def _merge_bbb_properties(self, other: 'CompoundData') -> None:
+    def _merge_bbb_properties(self, other: "CompoundData") -> None:
         """Merge blood-brain barrier properties."""
         if other.bbb_score > self.bbb_score:
             self.bbb_permeability = other.bbb_permeability
             self.bbb_score = other.bbb_score
             self.p_glycoprotein_substrate = other.p_glycoprotein_substrate
 
-    def _merge_psychoactive_properties(self, other: 'CompoundData') -> None:
+    def _merge_psychoactive_properties(self, other: "CompoundData") -> None:
         """Merge psychoactive classification data."""
         if other.psychoactive_class != PsychoactiveClass.UNKNOWN:
             if self.psychoactive_class == PsychoactiveClass.UNKNOWN:
@@ -909,13 +896,13 @@ class CompoundData:
         self.secondary_classes.update(other.secondary_classes)
         self.effect_profile.update(other.effect_profile)
 
-    def _merge_nootropic_properties(self, other: 'CompoundData') -> None:
+    def _merge_nootropic_properties(self, other: "CompoundData") -> None:
         """Merge nootropic properties."""
         self.nootropic_mechanisms.update(other.nootropic_mechanisms)
         self.cognitive_effects.update(other.cognitive_effects)
         self.side_effects.update(other.side_effects)
 
-    def _merge_duration_metrics(self, other: 'CompoundData') -> None:
+    def _merge_duration_metrics(self, other: "CompoundData") -> None:
         """Merge duration metrics."""
         if not self.onset_time:
             self.onset_time = other.onset_time
@@ -924,7 +911,7 @@ class CompoundData:
         if not self.half_life:
             self.half_life = other.half_life
 
-    def _merge_tolerance_data(self, other: 'CompoundData') -> None:
+    def _merge_tolerance_data(self, other: "CompoundData") -> None:
         """Merge tolerance and withdrawal data."""
         self.tolerance_profile.update(other.tolerance_profile)
         self.withdrawal_profile.update(other.withdrawal_profile)
@@ -942,10 +929,7 @@ class CompoundData:
         for target in self.targets:
             # Track strongest binding
             if target.affinity_value:
-                if (
-                    not summary["strongest_binding"]
-                    or target.affinity_value < summary["strongest_binding"]["value"]
-                ):
+                if not summary["strongest_binding"] or target.affinity_value < summary["strongest_binding"]["value"]:
                     summary["strongest_binding"] = {
                         "target": target.common_name,
                         "value": target.affinity_value,
@@ -967,7 +951,7 @@ class CompoundData:
     def _summarize_community_data(self) -> Dict:
         """Create a summary of community data."""
         summary = self._init_community_summary()
-        
+
         # Process each report
         for report in self.experience_reports:
             self._process_report_effects(report, summary)
@@ -1003,8 +987,7 @@ class CompoundData:
         """Process safety concerns from a report."""
         if "safety_concerns" in report:
             new_concerns = [
-                concern for concern in report["safety_concerns"]
-                if concern not in summary["safety_concerns"]
+                concern for concern in report["safety_concerns"] if concern not in summary["safety_concerns"]
             ]
             summary["safety_concerns"].extend(new_concerns)
 
@@ -1048,25 +1031,20 @@ class CompoundData:
         # Convert sets to sorted lists
         summary["reported_effects"] = sorted(summary["reported_effects"])
         summary["reported_mechanisms"] = sorted(summary["reported_mechanisms"])
-        
+
         # Sort combinations by frequency
         self._sort_combinations(summary)
-        
+
         # Calculate dosage statistics
         self._calculate_dosage_stats(summary)
 
     def _sort_combinations(self, summary: Dict) -> None:
         """Sort combinations by frequency."""
+
         def get_combo_frequency(combo):
-            return sum(
-                1 for r in self.experience_reports
-                if "combinations" in r and combo in r["combinations"]
-            )
-        
-        summary["common_combinations"].sort(
-            key=get_combo_frequency,
-            reverse=True
-        )
+            return sum(1 for r in self.experience_reports if "combinations" in r and combo in r["combinations"])
+
+        summary["common_combinations"].sort(key=get_combo_frequency, reverse=True)
 
     def _calculate_dosage_stats(self, summary: Dict) -> None:
         """Calculate statistics for dosage information."""
@@ -1076,7 +1054,7 @@ class CompoundData:
                 "min": min(doses),
                 "max": max(doses),
                 "avg": sum(doses) / len(doses),
-                "count": len(doses)
+                "count": len(doses),
             }
 
     def _get_safety_summary(self) -> Dict:
@@ -1102,37 +1080,38 @@ class CompoundData:
 
     def _add_structural_alerts(self, summary: Dict) -> None:
         """Add structural alerts to safety summary."""
-        summary["alerts"].extend(
-            alert["description"] for alert in self.structural_alerts
-        )
+        summary["alerts"].extend(alert["description"] for alert in self.structural_alerts)
 
     def _add_toxicity_warnings(self, summary: Dict) -> None:
         """Add toxicity warnings to safety summary."""
         for tox_type, tox_data in self.toxicity_predictions.items():
             if tox_data.get("probability", 0) > 0.7:
-                summary["warnings"].append({
-                    "type": tox_type,
-                    "probability": tox_data["probability"],
-                    "severity": tox_data.get("severity", "unknown"),
-                    "mechanisms": tox_data.get("mechanisms", [])
-                })
+                summary["warnings"].append(
+                    {
+                        "type": tox_type,
+                        "probability": tox_data["probability"],
+                        "severity": tox_data.get("severity", "unknown"),
+                        "mechanisms": tox_data.get("mechanisms", []),
+                    }
+                )
 
     def _add_abuse_warnings(self, summary: Dict) -> None:
         """Add abuse potential warnings to safety summary."""
         for abuse_type, abuse_data in self.abuse_potential.items():
             if abuse_data.get("probability", 0) > 0.7:
-                summary["warnings"].append({
-                    "type": f"abuse_{abuse_type}",
-                    "probability": abuse_data["probability"],
-                    "risk_level": abuse_data.get("risk_level", "unknown"),
-                    "mechanisms": abuse_data.get("mechanisms", [])
-                })
+                summary["warnings"].append(
+                    {
+                        "type": f"abuse_{abuse_type}",
+                        "probability": abuse_data["probability"],
+                        "risk_level": abuse_data.get("risk_level", "unknown"),
+                        "mechanisms": abuse_data.get("mechanisms", []),
+                    }
+                )
 
     def _add_safety_profile_data(self, summary: Dict) -> None:
         """Add safety profile data to safety summary."""
         if self.safety_profile:
-            for key in ["contraindications", "interactions", "risk_factors",
-                           "overdose_risks", "long_term_risks"]:
+            for key in ["contraindications", "interactions", "risk_factors", "overdose_risks", "long_term_risks"]:
                 summary[key].extend(self.safety_profile.get(key, []))
 
     def _get_regulatory_status(self) -> Dict:
@@ -1164,23 +1143,27 @@ class CompoundData:
         """Add toxicity warnings to regulatory status."""
         for tox_type, tox_data in self.toxicity_predictions.items():
             if tox_data.get("probability", 0) > 0.7:
-                status["warnings"].append({
-                    "type": f"toxicity_{tox_type}",
-                    "probability": tox_data["probability"],
-                    "severity": tox_data.get("severity", "unknown")
-                })
+                status["warnings"].append(
+                    {
+                        "type": f"toxicity_{tox_type}",
+                        "probability": tox_data["probability"],
+                        "severity": tox_data.get("severity", "unknown"),
+                    }
+                )
 
     def _add_abuse_status(self, status: Dict) -> None:
         """Add abuse potential warnings to regulatory status."""
         for abuse_type, abuse_data in self.abuse_potential.items():
             if abuse_data.get("probability", 0) > 0.7:
-                status["warnings"].append({
-                    "type": f"abuse_{abuse_type}",
-                    "probability": abuse_data["probability"],
-                    "risk_level": abuse_data.get("risk_level", "unknown")
-                })
+                status["warnings"].append(
+                    {
+                        "type": f"abuse_{abuse_type}",
+                        "probability": abuse_data["probability"],
+                        "risk_level": abuse_data.get("risk_level", "unknown"),
+                    }
+                )
 
-    def merge_web_data(self, other: 'CompoundData') -> None:
+    def merge_web_data(self, other: "CompoundData") -> None:
         """Merge web-enriched data from another instance."""
         self._merge_patent_data(other)
         self._merge_swiss_data(other)
@@ -1191,23 +1174,14 @@ class CompoundData:
         self._merge_safety_profile(other)
         self._merge_status_data(other)
 
-    def _merge_status_data(self, other: 'CompoundData') -> None:
+    def _merge_status_data(self, other: "CompoundData") -> None:
         """Merge status data."""
         self.approval_status.update(other.approval_status)
         self.clinical_status.update(other.clinical_status)
         self.research_status.update(other.research_status)
-        self.risk_factors.extend(
-            factor for factor in other.risk_factors
-            if factor not in self.risk_factors
-        )
-        self.overdose_risks.extend(
-            risk for risk in other.overdose_risks
-            if risk not in self.overdose_risks
-        )
-        self.long_term_risks.extend(
-            risk for risk in other.long_term_risks
-            if risk not in self.long_term_risks
-        )
+        self.risk_factors.extend(factor for factor in other.risk_factors if factor not in self.risk_factors)
+        self.overdose_risks.extend(risk for risk in other.overdose_risks if risk not in self.overdose_risks)
+        self.long_term_risks.extend(risk for risk in other.long_term_risks if risk not in self.long_term_risks)
 
     def _format_toxicity_predictions(self) -> Dict:
         """Format toxicity predictions for output."""
@@ -1277,7 +1251,6 @@ class CompoundData:
             for pred in self.mechanism_predictions
         ]
 
-
     def to_dict(self, include_predictions: bool = True) -> Dict:
         """Convert compound data to dictionary format."""
         data = {
@@ -1341,9 +1314,7 @@ class CompoundData:
             "patent_numbers": self.patent_data.get("numbers", []),
             "patent_titles": self.patent_data.get("titles", []),
             # Legal status
-            "legal_status": {
-                country: status.value for country, status in self.legal_status.items()
-            },
+            "legal_status": {country: status.value for country, status in self.legal_status.items()},
             "scheduling": self.scheduling,
             # Analysis summaries
             "binding_summary": self._summarize_binding_data(),
@@ -1371,23 +1342,7 @@ class CompoundData:
         return json.dumps(self.to_dict(include_predictions=include_predictions))
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'CompoundData':
+    def from_json(cls, json_str: str) -> "CompoundData":
         """Create CompoundData from JSON string."""
         data = json.loads(json_str)
         return cls(**data)
-    
-[Previous methods remain unchanged until _prediction_history update...]
-
-        # Update history
-        self._prediction_history = pd.concat([
-            self._prediction_history,
-            pd.DataFrame([{
-                'predictor_type': predictor_type,
-                'prediction_value': result.value,
-                'confidence': result.confidence,
-                'timestamp': pd.Timestamp.now(),
-                'supporting_data': json.dumps(result.supporting_data),
-            }])
-        ], ignore_index=True)
-
-[Rest of the file content remains unchanged until the end, excluding the duplicate ValidationError class]
