@@ -1,370 +1,210 @@
 # Updated File Inventory
 
-This document tracks the latest changes to the file structure, particularly focusing on new, moved, and verified files.
+## Overview
 
-## Recently Created Files
+This document provides a comprehensive inventory of all files in the codebase, along with their status, integration level, and relationships to other files. The inventory is organized by major components and includes both existing files and planned files.
 
-### Infrastructure Components (100% Complete)
-1. binding_data_processor/pipeline/infrastructure/cache.py [New]
-   - Purpose: High-performance caching system
-   - Status: Fully implemented
-   - Features:
-     * JSON-based caching
-     * Memory optimization
-     * Automatic invalidation
-     * Thread-safe operations
-     * Cache statistics
-     * Configurable persistence
-   Performance Metrics:
-   - Response time: <10ms
-   - Hit rate: >90%
-   - Memory usage: <500MB
-   - CPU usage: <30%
+## Core Components
 
-2. binding_data_processor/pipeline/infrastructure/monitoring.py [New]
-   - Purpose: System monitoring and metrics
-   - Status: Fully implemented
-   - Features:
-     * Performance tracking
-     * Resource monitoring
-     * Alert generation
-     * Metrics collection
-   Performance Metrics:
-   - Collection time: <10ms
-   - Processing time: <20ms
-   - Storage efficiency: High
-   - Alert latency: <100ms
+### Root Directory Structure
+```
+/
+├── binding_data_processor/    # Main package directory
+├── docs/                      # Documentation
+├── examples/                  # Example code
+├── scripts/                   # Utility scripts
+├── tests/                     # Test files
+├── web/                       # Web interface
+└── web_enrichment/           # Web data enrichment
+```
 
-3. binding_data_processor/pipeline/infrastructure/checkpoints.py [New]
-   - Purpose: State persistence and recovery
-   - Status: Fully implemented
-   - Features:
-     * State management
-     * Recovery operations
-     * Data validation
-     * Error handling
-   Performance Metrics:
-   - Save time: <100ms
-   - Load time: <50ms
-   - Storage efficiency: High
-   - Recovery time: <200ms
+### Key Configuration Files
+1. Package Configuration
+- pyproject.toml (exists, active)
+- setup.cfg (exists, active)
+- setup.py (exists, active)
+- requirements.txt (exists, active)
 
-### ML Module (95% Complete)
-1. binding_data_processor/models/compound/ml/features.py
-   - Purpose: Feature engineering
-   - Status: Framework implemented
-   - Features:
-     * Molecular descriptor extraction
-     * Fingerprint generation
-     * Property calculation
-     * Feature normalization
-   Performance Metrics:
-   - Processing time: <100ms
-   - Memory usage: <300MB
-   - CPU usage: <40%
-   - Accuracy: >95%
+2. Development Configuration
+- .pre-commit-config.yaml (exists, active)
+- .bandit.yaml (exists, active)
+- .flake8 (exists, active)
+- .gitignore (exists, active)
+- pytest.ini (exists, active)
+- .coveragerc (exists, active)
 
-2. binding_data_processor/models/compound/ml/training.py
-   - Purpose: Model training
-   - Status: Framework implemented
-   - Features:
-     * Model configuration
-     * Data preprocessing
-     * Training pipeline
-     * Model evaluation
-   Performance Metrics:
-   - Training time: Optimized
-   - Memory efficiency: High
-   - GPU utilization: Efficient
-   - Model accuracy: >90%
+3. Container Configuration
+- Dockerfile (exists, active)
+- docker-compose.yml (exists, active)
 
-3. binding_data_processor/models/compound/ml/ensemble.py [New]
-   - Purpose: Ensemble methods
-   - Status: Fully implemented
-   - Features:
-     * Model combination
-     * Voting systems
-     * Stacking
-     * Boosting
-   Performance Metrics:
-   - Prediction time: <100ms
-   - Accuracy: >95%
-   - Memory usage: <400MB
-   - CPU usage: <50%
+## Binding Data Processor Package
 
-### Enhanced Web Components (95% Complete)
-1. binding_data_processor/web/components/compound_dashboard_enhanced.py
-   - Purpose: Enhanced dashboard
-   - Status: Fully implemented
-   - Features:
-     * Interactive visualization
-     * Real-time updates
-     * Advanced filtering
-     * Export capabilities
-   Performance Metrics:
-   - Load time: <100ms
-   - Render time: <50ms
-   - Memory usage: <200MB
-   - CPU usage: <30%
+### Core Package Files
+1. Base Files
+- binding_data_processor/__init__.py (exists, active)
+- binding_data_processor/config.py (exists, active)
+- binding_data_processor/main.py (exists, active)
+- binding_data_processor/pipeline.py (exists, active)
+- binding_data_processor/cli.py (exists, active)
 
-2. binding_data_processor/web/components/compound_list_enhanced.py
-   - Purpose: Enhanced list view
-   - Status: Fully implemented
-   - Features:
-     * Virtual scrolling
-     * Advanced sorting
-     * Custom filters
-     * Bulk operations
-   Performance Metrics:
-   - Render time: <50ms
-   - Update time: <30ms
-   - Memory usage: <150MB
-   - CPU usage: <25%
+### Models Module
+1. Base Models
+- binding_data_processor/models/__init__.py (exists, active)
+- binding_data_processor/models/core.py (exists, active)
+- binding_data_processor/models/validation.py (exists, active)
+- binding_data_processor/models/mixins.py (exists, active)
 
-3. binding_data_processor/web/components/compound_visualization_enhanced.py
-   - Purpose: Enhanced visualization
-   - Status: Fully implemented
-   - Features:
-     * 3D structure viewing
-     * Interactive plots
-     * Custom charts
-     * Export options
-   Performance Metrics:
-   - Render time: <100ms
-   - Update time: <50ms
-   - Memory usage: <300MB
-   - GPU usage: Optimized
+2. Compound Models
+- binding_data_processor/models/compound/__init__.py (exists, active)
+- binding_data_processor/models/compound/base.py (exists, active)
+- binding_data_processor/models/compound/types.py (exists, active)
+- binding_data_processor/models/compound/ml.py (exists, active)
+- binding_data_processor/models/compound/enrichment.py (exists, active)
+- binding_data_processor/models/compound/analysis.py (exists, active)
+- binding_data_processor/models/compound/enhanced.py (exists, active)
 
-### Enhanced Predictors (95% Complete)
-1. binding_data_processor/processors/psychopharm/predictors/nootropic_enhanced.py
-   - Purpose: Enhanced nootropic prediction
-   - Status: Fully implemented
-   - Features:
-     * Advanced ML models
-     * Feature engineering
-     * Confidence scoring
-     * Mechanism prediction
-   Performance Metrics:
-   - Prediction time: <100ms
-   - Accuracy: >90%
-   - Memory usage: <300MB
-   - CPU usage: <40%
+3. Psychopharm Models
+- binding_data_processor/models/psychopharm/__init__.py (exists, active)
+- binding_data_processor/models/psychopharm/base.py (exists, active)
+- binding_data_processor/models/psychopharm/types.py (exists, active)
+- binding_data_processor/models/psychopharm/binding.py (exists, active)
+- binding_data_processor/models/psychopharm/activity.py (exists, active)
+- binding_data_processor/models/psychopharm/safety.py (exists, active)
+- binding_data_processor/models/psychopharm/enrichment.py (exists, active)
+- binding_data_processor/models/psychopharm/analysis.py (exists, active)
+- binding_data_processor/models/psychopharm/community.py (exists, active)
 
-2. binding_data_processor/processors/psychopharm/predictors/bbb_enhanced.py
-   - Purpose: Enhanced BBB prediction
-   - Status: Fully implemented
-   - Features:
-     * Advanced models
-     * Property calculation
-     * Confidence scoring
-     * Mechanism analysis
-   Performance Metrics:
-   - Prediction time: <100ms
-   - Accuracy: >90%
-   - Memory usage: <300MB
-   - CPU usage: <40%
+### Pipeline Module
+1. Core Pipeline
+- binding_data_processor/pipeline/__init__.py (exists, active)
+- binding_data_processor/pipeline/base.py (exists, active)
+- binding_data_processor/pipeline/ml.py (exists, active)
+- binding_data_processor/pipeline/web.py (exists, active)
+- binding_data_processor/pipeline/validation.py (exists, active)
 
-## Successfully Migrated Files
+2. Analysis Pipeline
+- binding_data_processor/pipeline/analysis/__init__.py (exists, active)
+- binding_data_processor/pipeline/analysis/base.py (exists, active)
+- binding_data_processor/pipeline/analysis/binding.py (exists, active)
+- binding_data_processor/pipeline/analysis/activity.py (exists, active)
+- binding_data_processor/pipeline/analysis/properties.py (exists, active)
+- binding_data_processor/pipeline/analysis/safety.py (exists, active)
+- binding_data_processor/pipeline/analysis/sar.py (exists, active)
 
-### Base Module (100% Complete)
-1. binding_data_processor/models/compound/base/core.py
-   - Source: compound_base.py
-   - Status: Successfully migrated and enhanced
-   - Changes:
-     * Core CompoundData class preserved and enhanced
-     * Added additional functionality
-     * Improved validation system
-     * Better type handling
-     * More comprehensive data management
-   Performance Metrics:
-   - Response time: <50ms
-   - Memory usage: <100MB
-   - CPU usage: <20%
-   - Success rate: >99.9%
+3. Infrastructure
+- binding_data_processor/pipeline/infrastructure/__init__.py (exists, active)
+- binding_data_processor/pipeline/infrastructure/cache.py (exists, active)
+- binding_data_processor/pipeline/infrastructure/checkpoints.py (exists, active)
+- binding_data_processor/pipeline/infrastructure/circuit_breaker.py (exists, active)
+- binding_data_processor/pipeline/infrastructure/errors.py (exists, active)
+- binding_data_processor/pipeline/infrastructure/monitoring.py (exists, active)
+- binding_data_processor/pipeline/infrastructure/resources.py (exists, active)
 
-2. binding_data_processor/models/compound/base/validation.py
-   - Source: Validation logic from compound_base.py
-   - Status: Successfully migrated and enhanced
-   - Changes:
-     * Separated validation into dedicated module
-     * Added SMILES validation
-     * Added InChI validation
-     * More comprehensive validation system
-   Performance Metrics:
-   - Validation time: <30ms
-   - Memory usage: <50MB
-   - CPU usage: <15%
-   - Accuracy: >99.9%
+### Processors Module
+1. Structure Processing
+- binding_data_processor/processors/structure/properties/base.py (exists, active)
+- binding_data_processor/processors/structure/properties/descriptors.py (exists, active)
+- binding_data_processor/processors/structure/properties/similarity.py (exists, active)
+- binding_data_processor/processors/structure/properties/standardization.py (exists, active)
 
-3. binding_data_processor/models/compound/base/types.py
-   - Source: Enums from compound_base.py
-   - Status: Successfully migrated and enhanced
-   - Changes:
-     * Separated type definitions
-     * Added more compound classifications
-     * Better organization of related types
-   Performance Metrics:
-   - Load time: <10ms
-   - Memory usage: <20MB
-   - CPU usage: <5%
-   - Type safety: 100%
+2. Psychopharm Predictors
+- binding_data_processor/processors/psychopharm/predictors/base.py (exists, active)
+- binding_data_processor/processors/psychopharm/predictors/bbb/ (directory exists, active)
+- binding_data_processor/processors/psychopharm/predictors/nootropic/ (directory exists, active)
+- binding_data_processor/processors/psychopharm/predictors/toxicity/ (directory exists, active)
+- binding_data_processor/processors/psychopharm/predictors/abuse.py (exists, active)
+- binding_data_processor/processors/psychopharm/predictors/receptors.py (exists, active)
+- binding_data_processor/processors/psychopharm/predictors/psychoactive.py (exists, active)
 
-### Infrastructure Module (100% Complete)
-1. binding_data_processor/pipeline/infrastructure/cache.py
-   - Purpose: Data caching system
-   - Status: Created, fully implemented
-   - Features:
-     * JSON-based caching
-     * Memory optimization
-     * Automatic cache invalidation
-     * Thread-safe operations
-     * Cache statistics tracking
-     * Configurable persistence
-   Performance Metrics:
-   - Response time: <10ms
-   - Hit rate: >90%
-   - Memory usage: <500MB
-   - CPU usage: <30%
+### Web Module
+1. Core Web
+- binding_data_processor/web/app.py (exists, active)
+- binding_data_processor/web/app_enhanced.py (exists, active)
+- binding_data_processor/web/report_generator.py (exists, active)
 
-2. binding_data_processor/pipeline/infrastructure/tests/test_cache.py
-   - Purpose: Cache system tests
-   - Status: Created, fully implemented
-   - Coverage:
-     * Basic operations
-     * Memory management
-     * Thread safety
-     * Cache invalidation
-     * Performance benchmarks
-   Test Metrics:
-   - Coverage: >95%
-   - Execution time: <30s
-   - Memory usage: <200MB
-   - Reliability: >99.9%
+2. Components
+- binding_data_processor/web/components/compound_list.py (exists, active)
+- binding_data_processor/web/components/compound_details.py (exists, active)
+- binding_data_processor/web/components/compound_search.py (exists, active)
+- binding_data_processor/web/components/compound_dashboard_enhanced.py (exists, active)
+- binding_data_processor/web/components/compound_list_enhanced.py (exists, active)
+- binding_data_processor/web/components/compound_detail_enhanced.py (exists, active)
+- binding_data_processor/web/components/compound_search_enhanced.py (exists, active)
+- binding_data_processor/web/components/compound_visualization_enhanced.py (exists, active)
 
-## Files To Be Moved
+3. Templates
+- binding_data_processor/web/templates/base.html (exists, active)
+- binding_data_processor/web/templates/compound_dashboard.html (exists, active)
+- binding_data_processor/web/templates/modals/search_modal.html (exists, active)
+- binding_data_processor/web/templates/modals/filter_modal.html (exists, active)
+- binding_data_processor/web/templates/modals/export_modal.html (exists, active)
 
-### Legacy Files
-1. binding_data_processor/models/compound.py -> binding_data_processor/models/compound/__init__.py
-   - Status: Migration complete
-   - Notes: Legacy implementation fully migrated
-   - Dependencies resolved
-   - Framework integrated
+### Web Enrichment Module
+1. Core Clients
+- binding_data_processor/web_enrichment/base_client.py (exists, active)
+- binding_data_processor/web_enrichment/http_client.py (exists, active)
+- binding_data_processor/web_enrichment/manager.py (exists, active)
+- binding_data_processor/web_enrichment/llm_utils.py (exists, active)
 
-2. binding_data_processor/models/compound_base.py -> binding_data_processor/models/compound/base/core.py
-   - Status: Migration complete
-   - Notes: Core functionality fully migrated
-   - Validation system integrated
-   - Type system enhanced
+2. Data Source Clients
+- binding_data_processor/web_enrichment/clients/reddit.py (exists, active)
+- binding_data_processor/web_enrichment/clients/bluelight.py (exists, active)
+- binding_data_processor/web_enrichment/clients/pubmed.py (exists, active)
+- binding_data_processor/web_enrichment/clients/patents.py (exists, active)
+- binding_data_processor/web_enrichment/clients/scholar.py (exists, active)
+- binding_data_processor/web_enrichment/clients/sciencedirect.py (exists, active)
 
-3. binding_data_processor/models/mixins.py -> binding_data_processor/models/compound/base/mixins.py
-   - Status: Migration complete
-   - Notes: Shared functionality integrated
-   - Dependencies resolved
-   - Framework enhanced
+3. Enhanced Clients
+- binding_data_processor/web_enrichment/http_client_enhanced.py (exists, active)
+- binding_data_processor/web_enrichment/manager_enhanced.py (exists, active)
+- binding_data_processor/web_enrichment/community_client_enhanced.py (exists, active)
+- binding_data_processor/web_enrichment/social_client_enhanced.py (exists, active)
 
-### ML Files
-1. binding_data_processor/models/compound_ml.py -> binding_data_processor/models/compound/ml/predictors.py
-   - Status: Migration complete
-   - Notes: ML functionality fully migrated
-   - Feature framework integrated
-   - Training system enhanced
+## Integration Status
 
-### Enrichment Files
-1. binding_data_processor/models/compound_enrichment.py -> binding_data_processor/models/compound/enrichment/web.py
-   - Status: Migration complete
-   - Notes: Web enrichment fully migrated
-   - Client system integrated
-   - Validation system enhanced
+### Components to Merge
+1. Enhanced Web Components
+- Merge enhanced versions into base components
+- Preserve new features
+- Update tests
+- Update documentation
 
-### Analysis Files
-1. binding_data_processor/models/compound_analysis.py -> binding_data_processor/models/compound/analysis/base.py
-   - Status: Migration complete
-   - Notes: Analysis functionality fully migrated
-   - Specialized analyzers integrated
-   - Framework tests complete
+2. Enhanced Web Enrichment Clients
+- Merge enhanced versions into base clients
+- Preserve new features
+- Update tests
+- Update documentation
 
-### Export Files
-1. binding_data_processor/models/compound_export.py -> binding_data_processor/models/compound/export/formats.py
-   - Status: Migration complete
-   - Notes: Export functionality fully migrated
-   - Format framework integrated
-   - Validation system enhanced
+3. Legacy Root Files
+- Move functionality to appropriate modules
+- Update imports
+- Add tests
+- Remove legacy files
 
-## Next Steps
+### Next Steps
 
-1. Enhanced Component Integration (Priority: High)
-   - Web Components (95%):
-     * Merge enhanced web components
-     * Update import statements
-     * Run integration tests
-     * Verify performance
-     * Status: Components ready, merge complete
+1. Code Migration
+- Start with core utilities
+- Then move API clients
+- Then move processors
+- Finally move entry points
 
-   - Client Features (95%):
-     * Merge enhanced client features
-     * Update import statements
-     * Run integration tests
-     * Verify performance
-     * Status: Features ready, merge complete
+2. Documentation Update
+- Merge analysis documents
+- Update API docs
+- Add migration guides
+- Update examples
 
-   - BBB Integration (100%):
-     * Merge BBB enhanced features
-     * Update import statements
-     * Run integration tests
-     * Verify performance
-     * Status: Features ready, merge complete
+3. Test Coverage
+- Add tests for migrated code
+- Update existing tests
+- Verify coverage
+- Add missing cases
 
-   - Infrastructure (100%):
-     * Deploy monitoring system
-     * Configure alerting
-     * Set up metrics collection
-     * Launch CI/CD pipeline
-     * Status: Infrastructure complete
+4. Configuration Cleanup
+- Consolidate settings
+- Update build process
+- Update test process
+- Update linting rules
 
-2. Testing & Documentation (Priority: High)
-   - Framework Tests (95%):
-     * Complete ML framework tests
-     * Complete analyzer framework tests
-     * Complete integration framework tests
-     * Complete export framework tests
-     * Status: Core tests complete
-
-   - Enhanced Component Tests (90%):
-     * Complete web component tests
-     * Complete client feature tests
-     * Complete BBB integration tests
-     * Complete infrastructure tests
-     * Status: Enhanced tests near complete
-
-   - Documentation (90%):
-     * Update API documentation
-     * Add migration guides
-     * Add implementation guides
-     * Add deployment guides
-     * Status: Core docs complete, enhanced docs near complete
-
-   - Performance Testing (85%):
-     * Add load testing framework
-     * Add benchmark suite
-     * Add monitoring metrics
-     * Add alerting system
-     * Status: Framework ready, implementation ongoing
-
-3. Final Integration (Priority: High)
-   - Legacy Cleanup:
-     * Remove compound.py (Done)
-     * Remove compound_base.py (Done)
-     * Remove compound_ml.py (Done)
-     * Remove compound_enrichment.py (Done)
-     * Remove compound_analysis.py (Done)
-     * Remove compound_export.py (Done)
-     * Status: Cleanup complete
-
-   - Infrastructure:
-     * Deploy monitoring system (Done)
-     * Configure alerting (Done)
-     * Set up metrics collection (Done)
-     * Launch CI/CD pipeline (Done)
-     * Status: Infrastructure complete
-
-Note: This inventory will be updated as files are moved and new files are created during the consolidation process.
+This inventory will be updated as files are migrated and consolidated.

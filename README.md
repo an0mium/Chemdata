@@ -1,6 +1,6 @@
 # ChemData
 
-A comprehensive pipeline for processing and analyzing chemical compound data, with a focus on psychopharmacological compounds. The system combines data from multiple scientific sources with web-enriched information, patent data, and machine learning predictions.
+A comprehensive pipeline for processing and analyzing chemical compound data, with a focus on psychopharmacological compounds. The system combines data from multiple scientific sources with web-enriched information, patent data, machine learning predictions, and document processing.
 
 ## Features
 
@@ -29,25 +29,53 @@ A comprehensive pipeline for processing and analyzing chemical compound data, wi
   - Example data and scripts added ✓
   - Documentation complete ✓
 
-### Community Integration (Priority)
-- **Reddit Integration (30%)**
-  - Basic API integration complete
-  - OAuth flow needed
-  - Content monitoring needed
-  - Analysis needed
-  - Trend detection needed
+### Community Integration (80% Complete)
+- **Reddit Integration (80% Complete) ✓**
+  - OAuth flow implemented ✓
+  - Token management working ✓
+  - Rate limiting implemented ✓
+  - Content monitoring working ✓
+  - Safety analysis working ✓
+  - Trend detection working ✓
+  - Dashboard needed
+  - Alert notifications needed
 
-- **Bluelight Integration (Planned)**
-  - Web scraping setup needed
-  - Content extraction needed
-  - Safety monitoring needed
-  - Trend analysis needed
+- **Bluelight Integration (70% Complete) ✓**
+  - Web scraping implemented ✓
+  - Content extraction working ✓
+  - Safety monitoring working ✓
+  - Storage system working ✓
+  - Dashboard needed
+  - Error recovery needed
+  - Trend visualization needed
 
-- **Safety Analysis (Priority)**
-  - Content analysis needed
-  - Risk assessment needed
-  - Alert system needed
-  - Reporting tools needed
+### Document Processing (New Priority)
+- **Core Implementation (80% Complete)**
+  - PDF text extraction working ✓
+  - Structure recognition working ✓
+  - Directory monitoring working ✓
+  - Processing pipeline working ✓
+  - Storage system working ✓
+  - API endpoints working ✓
+
+- **Web Interface (40% Complete)**
+  - Upload endpoints working ✓
+  - Directory config working ✓
+  - Batch upload UI needed
+  - Progress tracking needed
+  - Status dashboard needed
+
+- **Integration Features (Needed)**
+  - Bulk upload support needed
+  - Directory watching UI needed
+  - Processing queue needed
+  - Result visualization needed
+
+- **Document Types**
+  - PDF support complete ✓
+  - Word documents planned
+  - HTML/XML planned
+  - Plain text planned
 
 ### Machine Learning
 - **Binding Predictions**
@@ -220,7 +248,20 @@ make html
 
 ### Command Line Interface
 
-Process compounds from BindingDB:
+Process documents:
+```bash
+python -m binding_data_processor.cli process-documents \
+    --input-dir documents/ \
+    --output-dir results/ \
+    --watch \
+    --batch-size 100 \
+    --formats "pdf,docx,html" \
+    --extract-compounds \
+    --extract-structures \
+    --analyze
+```
+
+Process compounds:
 ```bash
 python -m binding_data_processor.cli process-compounds \
     --input bindingdb.tsv \
@@ -254,6 +295,32 @@ streamlit run examples/web_app/app.py
 ```python
 from binding_data_processor.pipeline import ProcessingPipeline
 from binding_data_processor.pipeline.config import ProcessingConfig
+from binding_data_processor.processors.document import PDFProcessor, DirectoryMonitor
+
+# Create document processor
+processor = PDFProcessor(
+    extract_compounds=True,
+    extract_structures=True,
+    analyze_content=True,
+)
+
+# Set up directory monitoring
+monitor = DirectoryMonitor(
+    processor=processor,
+    watch_dirs={
+        "documents/": {"*.pdf", "*.docx", "*.html"},
+        "patents/": {"*.pdf"},
+    },
+)
+
+# Start monitoring
+async with monitor:
+    # Process existing files
+    await monitor.process_existing()
+    
+    # Monitor continues running in background
+    while True:
+        await asyncio.sleep(1)
 
 # Create pipeline
 pipeline = ProcessingPipeline(
@@ -312,6 +379,17 @@ for patent in results:
 ### Data Processing Scripts
 
 ```bash
+# Process documents
+./scripts/process_documents.sh \
+    --input-dir documents/ \
+    --output-dir results/ \
+    --watch \
+    --batch-size 100 \
+    --formats "pdf,docx,html" \
+    --extract-compounds \
+    --extract-structures \
+    --analyze
+
 # Process BindingDB data
 ./scripts/process_bindingdb.sh \
     --input data/raw/BindingDB_All.tsv \
@@ -358,20 +436,17 @@ binding_data_processor/
 │   │   ├── espacenet.py # Espacenet integration ✓
 │   │   ├── uspto.py     # USPTO integration ✓
 │   │   └── google.py    # Google Patents integration ✓
-│   └── community/       # Community sources (Priority)
-│       ├── reddit.py    # Reddit integration (30%)
-│       └── bluelight.py # Bluelight integration (Planned)
-├── models/              # Data models and ML
-│   ├── compound/       # Compound data models
-│   └── psychopharm/    # Psychopharm models
-├── pipeline/           # Processing pipeline
-│   ├── base.py        # Pipeline coordination
-│   ├── ml.py         # ML predictions
-│   └── web.py        # Web enrichment
-├── processors/        # Data processors
-│   ├── structure/    # Structure processing
-│   ├── patent/      # Patent analysis ✓
-│   └── psychopharm/ # Psychopharm analysis
+│   └── community/       # Community sources (80%)
+│       ├── reddit.py    # Reddit integration (80%) ✓
+│       └── bluelight.py # Bluelight integration (70%) ✓
+├── processors/          # Data processors
+│   ├── document/       # Document processing (New)
+│   │   ├── base.py    # Base document processor ✓
+│   │   ├── pdf.py     # PDF processor ✓
+│   │   └── monitor.py # Directory monitor ✓
+│   ├── structure/     # Structure processing
+│   ├── patent/       # Patent analysis ✓
+│   └── psychopharm/  # Psychopharm analysis
 ├── web_enrichment/   # Web data enrichment
 │   ├── manager.py   # Enrichment coordination
 │   ├── swiss/      # Swiss tools integration ✓
@@ -393,6 +468,7 @@ CHEMDATA_CACHE_DIR=./cache
 CHEMDATA_LOG_DIR=./logs
 CHEMDATA_OUTPUT_DIR=./output
 CHEMDATA_MODEL_DIR=./models
+CHEMDATA_DOCUMENT_DIR=./documents
 
 # API credentials
 REDDIT_CLIENT_ID=your_client_id

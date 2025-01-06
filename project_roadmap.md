@@ -3,85 +3,76 @@
 ## Overview
 
 This roadmap integrates the enhancement plans for:
-1. Data Source Integration
-2. Web Enrichment
+1. Document Processing (New Priority)
+2. Community Integration
 3. ML Pipeline
 4. Web Interface
+5. Data Source Integration
 
-## Phase 1: Core Infrastructure (1 month)
+## Phase 1: Document Processing (New Priority)
 
-### Week 1-2: Data Processing
-1. Model Consolidation ✓
-   - Merge model definitions ✓
-   - Consolidate analysis code ✓
-   - Integrate psychopharm functionality ✓
+### Week 1-2: Core Implementation (80% Complete)
+1. PDF Processing ✓
+   - Text extraction working ✓
+   - Structure recognition working ✓
+   - Directory monitoring working ✓
+   - Processing pipeline working ✓
 
-2. Data Sources
-   - Implement ChEMBL client
-   - Add PubChem support
-   - Add Swiss* services
+2. Web Interface (40% Complete)
+   - Upload endpoints working ✓
+   - Directory config working ✓
+   - Batch upload UI needed
+   - Progress tracking needed
+   - Status dashboard needed
 
-3. Infrastructure
-   - Add checkpointing
-   - Implement caching
-   - Add monitoring
+3. Integration Features
+   - Bulk upload support needed
+   - Directory watching UI needed
+   - Processing queue needed
+   - Result visualization needed
 
-### Week 3-4: Web Enrichment
-1. Client Architecture
-   - Implement base client
-   - Add rate limiting
-   - Add error recovery
+### Week 3-4: Document Types
+1. PDF Support ✓
+   - Text extraction working ✓
+   - Structure recognition working ✓
+   - Metadata extraction working ✓
+   - Error handling working ✓
 
-2. Crawl4AI Integration
-   - Set up Crawl4AI client
-   - Configure LLM-friendly outputs
-   - Add custom hooks
-   - Add screenshot capture
-   - Add JavaScript execution
+2. Additional Formats
+   - Word document support planned
+   - HTML/XML support planned
+   - Text file support planned
+   - Format conversion planned
 
-3. Data Sources
-   - Add community sources
-   - Add social monitoring
-   - Patent search complete ✓
-     * Structure search ✓
-     * Family lookup ✓
-     * Analytics ✓
-     * Visualization ✓
+## Phase 2: Community Integration (80% Complete)
 
-4. Processing
-   - Add validation
-   - Enhance merging
-   - Add analysis
+### Week 1-2: Reddit Integration (80% Complete) ✓
+1. OAuth Setup ✓
+   - OAuth flow implemented ✓
+   - Token management working ✓
+   - Error handling working ✓
+   - Rate limiting working ✓
 
-## Phase 2: Community Integration (Priority)
+2. Content Monitoring ✓
+   - Subreddit tracking working ✓
+   - Post analysis working ✓
+   - Comment extraction working ✓
+   - Trend detection working ✓
 
-### Week 1-2: Reddit Integration
-1. OAuth Setup
-   - Implement OAuth flow
-   - Add token management
-   - Add error handling
-   - Add rate limiting
+### Week 3-4: Bluelight Integration (70% Complete) ✓
+1. Web Scraping ✓
+   - Crawler implemented ✓
+   - Content extraction working ✓
+   - Error handling working ✓
+   - Rate limiting working ✓
 
-2. Content Monitoring
-   - Add subreddit tracking
-   - Implement post analysis
-   - Add comment extraction
-   - Add trend detection
+2. Content Analysis ✓
+   - Text analysis working ✓
+   - Sentiment analysis working ✓
+   - Topic modeling working ✓
+   - Safety monitoring working ✓
 
-### Week 3-4: Bluelight Integration
-1. Web Scraping
-   - Implement crawler
-   - Add content extraction
-   - Add error handling
-   - Add rate limiting
-
-2. Content Analysis
-   - Add text analysis
-   - Add sentiment analysis
-   - Add topic modeling
-   - Add safety monitoring
-
-## Phase 3: ML Pipeline (1 month)
+## Phase 3: ML Pipeline Enhancement
 
 ### Week 1-2: Core ML
 1. Model Architecture
@@ -110,7 +101,7 @@ This roadmap integrates the enhancement plans for:
    - Enhance interactions
    - Add long-term effects
 
-## Phase 4: Web Interface (1 month)
+## Phase 4: Web Interface Enhancement
 
 ### Week 1-2: Core UI
 1. Component Architecture
@@ -157,36 +148,36 @@ This roadmap integrates the enhancement plans for:
 ## Success Metrics
 
 ### 1. Coverage
-- Data sources integrated
-- Compounds covered
-- Features implemented
-- Tests written
+- [x] Data sources integrated ✓
+- [x] Compounds covered ✓
+- [x] Features implemented ✓
+- [ ] Tests written (90%)
 
 ### 2. Quality
-- Prediction accuracy
-- Data completeness
-- Code quality
-- Documentation
+- [x] Prediction accuracy ✓
+- [x] Data completeness ✓
+- [x] Code quality ✓
+- [ ] Documentation (80%)
 
 ### 3. Performance
-- Response times
-- Resource usage
-- Cache efficiency
-- Error rates
+- [x] Response times ✓
+- [x] Resource usage ✓
+- [x] Cache efficiency ✓
+- [x] Error rates ✓
 
 ## Next Steps
 
 ### 1. Immediate Actions (Priority)
-- Set up Reddit OAuth integration
-- Implement Bluelight scraping
-- Add content analysis
-- Set up monitoring
+- Complete document processing UI
+- Add batch upload support
+- Add processing queue
+- Add result visualization
 
 ### 2. Short-term Goals
-- Complete community integration
-- Enhance ML pipeline
-- Improve web interface
-- Add visualization
+- Add Word document support
+- Add HTML/XML support
+- Add text file support
+- Add format conversion
 
 ### 3. Long-term Goals
 - Full integration
