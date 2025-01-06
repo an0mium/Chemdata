@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Script to run the web application.
+"""Script to run the enhanced web application.
 
 This script provides a convenient way to:
-1. Start the web application
+1. Start the enhanced web application
 2. Configure settings
 3. Load data
 4. Handle errors
+
+The enhanced app provides:
+1. BindingDB data processing
+2. Web data enrichment (community, social, patents, literature)
+3. ML predictions (activity, toxicity, abuse potential, BBB)
+4. Rich visualization and analysis
+5. Flexible export options
 """
 
 import os
@@ -19,8 +26,8 @@ os.environ.setdefault("PYTHONPATH", str(project_root))
 os.environ.setdefault("PYTHONUNBUFFERED", "1")
 
 # Import after path setup
-from binding_data_processor.processors.psychopharm.predictors.cli import main  # noqa: E402
+from binding_data_processor.web.app_enhanced import main  # noqa: E402
 
 if __name__ == "__main__":
-    # Run application
+    # Run enhanced application
     main()

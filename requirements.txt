@@ -28,6 +28,7 @@ praw>=7.5.0
 tweepy>=4.4.0
 discord.py>=2.0.0
 atproto>=0.0.20
+epo-ops-client>=4.0.0  # Added for Espacenet API access
 
 # Web interface
 dash>=2.0.0
