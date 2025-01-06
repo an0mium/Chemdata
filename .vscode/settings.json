@@ -2,12 +2,13 @@
     "python.linting.enabled": true,
     "python.linting.flake8Enabled": true,
     "python.linting.flake8Args": [
-        "--max-line-length=100"
+        "--max-line-length=180",
+        "--ignore=F401"
     ],
     "python.formatting.provider": "black",
     "editor.formatOnSave": true,
     "editor.rulers": [
-        100
+        180
     ],
     "files.exclude": {
         "**/__pycache__": true,
@@ -24,6 +25,9 @@
     "[python]": {
         "editor.codeActionsOnSave": {
             "source.organizeImports": "explicit"
-        }
+        },
+        "editor.rulers": [
+            180
+        ]
     }
 }

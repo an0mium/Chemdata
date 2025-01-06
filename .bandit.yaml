@@ -191,6 +191,27 @@ hardcoded_password_string:
     - "auth"
     - "credentials"
 
+# Severity levels
+any_other_function_with_shell_equals_true: HIGH
+assert_used: LOW
+hardcoded_bind_all_interfaces: MEDIUM
+hardcoded_password_default: LOW
+hardcoded_password_funcarg: HIGH
+hardcoded_password_string: HIGH
+hardcoded_sql_expressions: MEDIUM
+hardcoded_tmp_directory: MEDIUM
+jinja2_autoescape_false: MEDIUM
+linux_commands_wildcard_injection: MEDIUM
+missing_function_docstring: LOW
+password_config_option_not_marked_secret: MEDIUM
+request_with_no_cert_validation: HIGH
+set_bad_file_permissions: MEDIUM
+subprocess_popen_with_shell_equals_true: HIGH
+subprocess_without_shell_equals_true: HIGH
+try_except_continue: LOW
+try_except_pass: LOW
+weak_cryptographic_key: HIGH
+
 # Output settings
 output_format: text
 output_level: LOW
@@ -198,10 +219,6 @@ msg_template: "{abspath}:{line}: {test_id}[{severity}]: {msg}"
 output_colors: True
 verbose: True
 quiet: False
-
-# Severity and confidence thresholds
-severity: HIGH
-confidence: HIGH
 
 # Number of lines of context to display for each issue
 context_lines: 3
