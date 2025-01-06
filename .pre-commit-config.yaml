@@ -1,0 +1,147 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+    -   id: check-json
+    -   id: check-added-large-files
+        args: ['--maxkb=1024']
+    -   id: check-ast
+    -   id: check-byte-order-marker
+    -   id: check-case-conflict
+    -   id: check-docstring-first
+    -   id: check-executables-have-shebangs
+    -   id: check-merge-conflict
+    -   id: check-symlinks
+    -   id: check-toml
+    -   id: check-xml
+    -   id: debug-statements
+    -   id: detect-private-key
+    -   id: mixed-line-ending
+        args: ['--fix=lf']
+    -   id: requirements-txt-fixer
+
+-   repo: https://github.com/psf/black
+    rev: 23.3.0
+    hooks:
+    -   id: black
+        language_version: python3.8
+        args: [--config=setup.cfg]
+
+-   repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+    -   id: isort
+        args: [--settings-path=setup.cfg]
+
+-   repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+    -   id: flake8
+        additional_dependencies:
+            - flake8-docstrings
+            - flake8-bugbear
+            - flake8-comprehensions
+            - flake8-simplify
+        args: [--config=setup.cfg]
+
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.3.0
+    hooks:
+    -   id: mypy
+        additional_dependencies:
+            - types-requests
+            - types-PyYAML
+            - types-setuptools
+            - types-tqdm
+            - types-beautifulsoup4
+        args: [--config-file=setup.cfg]
+
+-   repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+    -   id: bandit
+        args: [--configfile=.bandit.yaml]
+
+-   repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+    rev: v1.3.1
+    hooks:
+    -   id: python-safety-dependencies-check
+        files: requirements.txt
+
+-   repo: https://github.com/asottile/pyupgrade
+    rev: v3.15.0
+    hooks:
+    -   id: pyupgrade
+        args: ['--py38-plus']
+
+-   repo: https://github.com/PyCQA/docformatter
+    rev: v1.7.5
+    hooks:
+    -   id: docformatter
+        args: ['--in-place', '--wrap-summaries=100', '--wrap-descriptions=100']
+
+-   repo: https://github.com/kynan/nbstripout
+    rev: 0.6.1
+    hooks:
+    -   id: nbstripout
+
+-   repo: local
+    hooks:
+    -   id: pytest-check
+        name: pytest-check
+        entry: pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        args: [
+            "--cov=binding_data_processor",
+            "--cov=web_enrichment",
+            "--cov=web",
+            "--cov-fail-under=80",
+        ]
+
+    -   id: check-large-files
+        name: Check for large files
+        entry: python -c 'import sys, os; sys.exit(any(os.path.getsize(f) > 1024*1024 for f in sys.argv[1:]))'
+        language: system
+        files: \.(py|json|yaml|yml|txt|md|csv|tsv)$
+
+    -   id: check-model-files
+        name: Check ML model files
+        entry: python -c 'import sys, os; sys.exit(any(os.path.getsize(f) > 100*1024*1024 for f in sys.argv[1:]))'
+        language: system
+        files: \.(pt|pth|h5|pkl|joblib)$
+
+    -   id: check-data-files
+        name: Check data files
+        entry: python -c 'import sys, os; sys.exit(any(os.path.getsize(f) > 50*1024*1024 for f in sys.argv[1:]))'
+        language: system
+        files: \.(csv|tsv|json|parquet)$
+
+# Settings for all hooks
+default_language_version:
+    python: python3.8
+
+exclude: |
+    (?x)^(
+        docs/.*|
+        tests/data/.*|
+        \.venv/.*|
+        venv/.*|
+        \.env/.*|
+        \.git/.*|
+        \.tox/.*|
+        build/.*|
+        dist/.*|
+        .*\.egg-info/.*|
+        \.eggs/.*
+    )$
+
+ci:
+    autofix_commit_msg: 'style: auto fixes from pre-commit hooks'
+    autoupdate_commit_msg: 'chore: update pre-commit hooks'
