@@ -1,196 +1,220 @@
-# ChemData Project Master Plan
+# ChemData Project Plan
 
-## 1. Immediate Integration Priorities
+## Current Status
 
-### A. BBB Prediction Consolidation
-- [ ] Consolidate BBB prediction files:
-  * Move bbb_base.py into bbb/base.py
-  * Move bbb_enhanced.py into bbb/enhanced.py
-  * Move bbb_web_enrichment.py into bbb/enrichment.py
-  * Update imports across codebase
-  * Add integration tests
+### Completed Components ✓
 
-### B. Compound Model Consolidation
-- [ ] Merge legacy compound models into psychopharm structure:
-  ```
-  models/psychopharm/
-  ├── base.py (from compound_base.py)
-  ├── compound.py (from compound.py)
-  ├── binding.py (from compound_ml.py)
-  ├── enrichment.py (from compound_enrichment.py)
-  └── analysis.py (from compound_analysis.py)
-  ```
-- [ ] Update all imports
-- [ ] Add integration tests
-- [ ] Remove legacy files
+1. Core Infrastructure ✓
+   - Base models complete and tested
+   - Compound models consolidated
+   - Psychopharm models integrated
+   - ML models enhanced
+   - Analysis models working
 
-### C. Web Interface Enhancement
-- [ ] Add structure viewer component
-- [ ] Enhance compound search
-- [ ] Improve data visualization
-- [ ] Add export features
+2. Scientific Sources ✓
+   - BindingDB integration complete
+   - ChEMBL integration complete
+   - PubChem integration complete
+   - PubMed integration complete
+   - Swiss* services complete
 
-## 2. Core Features (Complete ✓)
+3. Patent Integration ✓
+   - Espacenet integration complete
+   - USPTO integration complete
+   - Google Patents integration complete
+   - Patent analytics working
+   - Documentation complete
 
-### A. Data Sources Integration
-- [x] BindingDB processing
-- [x] ChEMBL integration
-- [x] PubChem integration
-- [x] Patent data integration
+4. Web Interface Base ✓
+   - Base components complete
+   - Enhanced components integrated
+   - Dashboard working
+   - Search functionality complete
+   - Export system working
 
-### B. Web Enrichment
-- [x] Social media monitoring
-- [x] Community data integration
-- [x] Literature mining
-- [x] Patent analysis
+## Current Priorities
 
-### C. ML Pipeline
-- [x] BBB prediction
-- [x] Toxicity prediction
-- [x] Abuse potential
-- [x] Activity prediction
+### 1. Community Integration
 
-## 3. Infrastructure Enhancement
+#### Reddit Integration (30%)
+1. OAuth Flow
+   - Implement authentication
+   - Add token management
+   - Add error handling
+   - Add rate limiting
 
-### A. Testing
-- [ ] Add missing integration tests
-- [ ] Add performance tests
-- [ ] Add web component tests
-- [ ] Add ML model tests
+2. Content Monitoring
+   - Subreddit tracking
+   - Post analysis
+   - Comment extraction
+   - Trend detection
 
-### B. Documentation
-- [ ] Update API documentation
-- [ ] Add usage examples
-- [ ] Create tutorials
-- [ ] Update architecture docs
+3. Safety Analysis
+   - Content analysis
+   - Risk assessment
+   - Alert system
+   - Reporting tools
 
-### C. Performance
-- [ ] Add caching for API calls
-- [ ] Optimize ML predictions
-- [ ] Improve data loading
-- [ ] Add monitoring
+#### Bluelight Integration (Planned)
+1. Web Scraping
+   - Implement crawler
+   - Add content extraction
+   - Add error handling
+   - Add rate limiting
 
-## 4. Feature Roadmap
+2. Safety Monitoring
+   - Experience reports
+   - Safety data
+   - Risk assessment
+   - Alert system
 
-### A. Data Enhancement
-- [ ] Add more data sources:
-  * PsychonautWiki
-  * Erowid
-  * TripSit
-  * Scientific literature
-- [ ] Enhance data validation
-- [ ] Add data versioning
-- [ ] Improve data quality
+3. Analysis Tools
+   - Text analysis
+   - Sentiment analysis
+   - Trend detection
+   - Visualization
 
-### B. ML Enhancement
-- [ ] Add new prediction models:
-  * Mechanism prediction
-  * Duration prediction
-  * Interaction prediction
-  * Risk assessment
-- [ ] Improve model accuracy
-- [ ] Add uncertainty estimation
-- [ ] Add model explanations
+### 2. Safety Analysis
 
-### C. Web Features
-- [ ] Add advanced search:
-  * Structure similarity
-  * Property ranges
-  * Activity profiles
-  * Safety profiles
-- [ ] Add visualization:
-  * Structure viewer
-  * Activity plots
-  * Property charts
-  * Network graphs
-- [ ] Add export options:
-  * TSV/CSV export
-  * SDF export
-  * Report generation
-  * Batch processing
+1. Content Analysis
+   - Text processing
+   - Pattern detection
+   - Risk identification
+   - Trend analysis
 
-## 5. Quality Assurance
+2. Risk Assessment
+   - Safety scoring
+   - Interaction checking
+   - Alert generation
+   - Report creation
 
-### A. Code Quality
-- [ ] All files under 700 lines
-- [ ] >90% test coverage
-- [ ] No duplicate code
-- [ ] Clear documentation
+3. Monitoring System
+   - Real-time tracking
+   - Alert management
+   - Trend detection
+   - Visualization
 
-### B. Performance
-- [ ] API response <200ms
-- [ ] ML prediction <1s
-- [ ] Export time <30s
-- [ ] Memory usage <2GB
+### 3. Model Enhancement
 
-### C. Reliability
-- [ ] Error handling
-- [ ] Data validation
-- [ ] Recovery system
-- [ ] Monitoring
+1. Compound Models
+   - Merge base classes
+   - Update inheritance
+   - Clean up duplicates
+   - Add type hints
 
-## 6. Implementation Timeline
+2. ML Integration
+   - Update predictors
+   - Add ensemble methods
+   - Improve uncertainty
+   - Add validation
 
-### Week 1: Integration
-- [ ] BBB prediction consolidation
-- [ ] Compound model consolidation
-- [ ] Import updates
-- [ ] Integration tests
+3. Analysis Tools
+   - Merge analysis modules
+   - Update pipelines
+   - Add new features
+   - Improve reporting
 
-### Week 2: Web Interface
-- [ ] Structure viewer
-- [ ] Search enhancement
-- [ ] Visualization
-- [ ] Export system
+## Implementation Timeline
 
-### Week 3: Testing
-- [ ] Integration tests
-- [ ] Performance tests
-- [ ] Web tests
-- [ ] ML tests
+### Week 1: Community Integration
+1. Reddit OAuth Flow
+   - Authentication system
+   - Token management
+   - Error handling
+   - Rate limiting
 
-### Week 4: Documentation
-- [ ] API docs
-- [ ] Examples
-- [ ] Tutorials
-- [ ] Architecture docs
+2. Content Monitoring
+   - Subreddit tracking
+   - Post analysis
+   - Comment extraction
+   - Trend detection
 
-## 7. Success Metrics
+3. Safety Analysis
+   - Content analysis
+   - Risk assessment
+   - Alert system
+   - Reporting tools
+
+### Week 2: Bluelight Integration
+1. Web Scraping
+   - Crawler setup
+   - Content extraction
+   - Error handling
+   - Rate limiting
+
+2. Safety Monitoring
+   - Experience analysis
+   - Safety tracking
+   - Risk assessment
+   - Alert system
+
+3. Analysis Tools
+   - Text processing
+   - Sentiment analysis
+   - Trend detection
+   - Visualization
+
+### Week 3: Model Enhancement
+1. Code Cleanup
+   - Merge models
+   - Update inheritance
+   - Remove duplicates
+   - Add type hints
+
+2. ML Pipeline
+   - Update predictors
+   - Add ensembles
+   - Add uncertainty
+   - Add validation
+
+3. Analysis Tools
+   - Update modules
+   - Enhance pipelines
+   - Add features
+   - Improve reporting
+
+## Success Metrics
 
 ### Code Quality
-- [ ] Test coverage >90%
-- [ ] Documentation complete
-- [ ] No duplicate code
-- [ ] Clean architecture
+- [ ] No duplicate code in community integration
+- [ ] Clear inheritance in community clients
+- [ ] Complete type hints in community code
+- [ ] Full docstrings in community code
 
-### Performance
-- [ ] Fast response times
-- [ ] Efficient memory use
-- [ ] Good scalability
-- [ ] Reliable caching
+### Functionality
+- [ ] Community integration working
+- [ ] Safety analysis working
+- [ ] ML integration complete
+- [ ] Analysis tools enhanced
 
-### Usability
-- [ ] Clear interface
-- [ ] Good documentation
-- [ ] Easy deployment
-- [ ] Helpful examples
+### Testing
+- [ ] Community tests passing
+- [ ] Safety tests passing
+- [ ] 90%+ coverage
+- [ ] Performance validated
 
-## 8. Required Resources
+### Documentation
+- [ ] Community docs complete
+- [ ] Safety docs complete
+- [ ] Architecture documented
+- [ ] Best practices defined
+
+## Required Resources
 
 ### Development
-- [x] Python 3.8+
-- [x] RDKit
-- [x] ML libraries
-- [x] Web frameworks
+- Python 3.8+
+- RDKit
+- ML libraries
+- Web frameworks
 
 ### Infrastructure
-- [x] Redis cache
-- [x] PostgreSQL database
-- [x] Docker support
-- [x] CI/CD pipeline
+- Redis cache
+- PostgreSQL database
+- Docker support
+- CI/CD pipeline
 
-## 9. Notes
-1. Focus on integration first
+## Notes
+1. Focus on community integration first
 2. Maintain test coverage
 3. Update documentation
 4. Monitor performance
