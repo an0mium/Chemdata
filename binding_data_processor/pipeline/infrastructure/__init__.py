@@ -6,8 +6,10 @@ This module provides core infrastructure components:
 3. Resource manager for system resources
 4. Error manager for error handling
 5. Monitoring manager for metrics tracking
+6. Cache manager for data caching and performance optimization
 """
 
+from .cache import CacheManager
 from .circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -36,29 +38,27 @@ from .monitoring import (
 )
 
 __all__ = [
+    # Cache manager
+    "CacheManager",
     # Circuit breaker
-    'CircuitBreaker',
-    'CircuitBreakerConfig',
-    'CircuitState',
-    'CircuitBreakerError',
-    
+    "CircuitBreaker",
+    "CircuitBreakerConfig",
+    "CircuitState",
+    "CircuitBreakerError",
     # Checkpoint manager
-    'CheckpointManager',
-    'CheckpointConfig',
-    'CheckpointStats',
-    
+    "CheckpointManager",
+    "CheckpointConfig",
+    "CheckpointStats",
     # Resource manager
-    'ResourceManager',
-    'ResourceConfig',
-    'ResourceStats',
-    
+    "ResourceManager",
+    "ResourceConfig",
+    "ResourceStats",
     # Error manager
-    'ErrorManager',
-    'ErrorConfig',
-    'ErrorStats',
-    
+    "ErrorManager",
+    "ErrorConfig",
+    "ErrorStats",
     # Monitoring manager
-    'MonitoringManager',
-    'MonitoringConfig',
-    'MonitoringStats',
+    "MonitoringManager",
+    "MonitoringConfig",
+    "MonitoringStats",
 ]

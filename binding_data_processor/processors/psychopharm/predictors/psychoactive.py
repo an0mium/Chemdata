@@ -20,7 +20,7 @@ from sklearn.preprocessing import StandardScaler
 from .base import WebEnrichedPredictor, PredictorConfig
 from ....models.compound import PsychoactiveCompound
 from ....models.psychopharm import PsychoactiveClass
-from ....models.predictions import PredictionResult
+from ....models.compound.ml.predictors import PredictionResult
 from ....web_enrichment.manager import WebEnrichmentManager
 
 

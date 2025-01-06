@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from ....models.compound import PsychoactiveCompound
-from ....models.predictions import PredictionResult
+from ....models.compound.ml.predictors import PredictionResult
 from ...structure.ml.features import EnhancedFeatureExtractor
 from ...structure.ml.fingerprints import FingerprintGenerator
 from ...structure.ml.descriptors import DescriptorGenerator

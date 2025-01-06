@@ -29,18 +29,18 @@ Usage:
     suggestions = analysis.get_optimization_suggestions()
 """
 
-from .base import CompoundAnalysis
-from .binding_analysis import BindingAnalysisMixin
-from .activity_analysis import ActivityAnalysisMixin
-from .safety_analysis import SafetyAnalysisMixin
-from .property_analysis import PropertyAnalysisMixin
-from .sar_analysis import SARAnalysisMixin
+from .base import AnalyzedCompound
+from .binding_analysis import BindingAnalyzer
+from .activity_analysis import ActivityAnalyzer
+from .safety_analysis import SafetyAnalyzer
+from .property_analysis import PropertyAnalyzer
+from .sar_analysis import SARAnalyzer
 
 __all__ = [
-    'CompoundAnalysis',
-    'BindingAnalysisMixin',
-    'ActivityAnalysisMixin',
-    'SafetyAnalysisMixin',
-    'PropertyAnalysisMixin',
-    'SARAnalysisMixin',
+    'AnalyzedCompound',
+    'BindingAnalyzer',
+    'ActivityAnalyzer',
+    'SafetyAnalyzer',
+    'PropertyAnalyzer',
+    'SARAnalyzer',
 ]

@@ -15,9 +15,9 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 
-from .base import PredictorBase, PredictorConfig, WebEnrichedPredictor
+from .base import PredictorConfig, WebEnrichedPredictor
 from ....models.compound import PsychoactiveCompound
-from ....models.predictions import PredictionResult
+from ....models.compound.ml.predictors import PredictionResult
 from ...structure.ml.features import EnhancedFeatureExtractor
 from ...structure.ml.fingerprints import FingerprintGenerator
 from ....web_enrichment.manager import WebEnrichmentManager

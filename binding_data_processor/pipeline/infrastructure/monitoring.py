@@ -6,6 +6,7 @@ This module provides the MonitoringManager class that:
 3. Collects metrics
 4. Generates reports
 5. Handles alerts
+6. Manages log rotation
 """
 
 import logging
@@ -15,58 +16,73 @@ from typing import Dict, Optional, Any, List
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import json
+import shutil
 
 
 @dataclass
 class MonitoringConfig:
     """Monitoring configuration."""
-    
+
     # Progress settings
     monitor_progress: bool = True
     progress_interval: int = 5  # seconds
-    
+
     # Performance settings
     monitor_performance: bool = True
     performance_interval: int = 60  # seconds
-    
+
     # Metric settings
     collect_metrics: bool = True
     metric_interval: int = 300  # seconds
-    
+
     # Alert settings
     enable_alerts: bool = True
-    alert_thresholds: Dict[str, float] = field(default_factory=lambda: {
-        "error_rate": 0.1,  # 10%
-        "failure_rate": 0.05,  # 5%
-        "latency": 1000.0,  # ms
-    })
-    
+    alert_thresholds: Dict[str, float] = field(
+        default_factory=lambda: {
+            "error_rate": 0.1,  # 10%
+            "failure_rate": 0.05,  # 5%
+            "latency": 1000.0,  # ms
+        }
+    )
+
     # Report settings
     generate_reports: bool = True
     report_dir: Optional[Path] = None
     report_format: str = "json"
 
+    # Log settings
+    log_dir: Optional[Path] = None
+    log_format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    log_level: str = "INFO"
+    log_retention_days: int = 30
+
 
 @dataclass
 class MonitoringStats:
     """Monitoring statistics."""
-    
+
     # Progress stats
     total_operations: int = 0
     completed_operations: int = 0
     failed_operations: int = 0
     start_time: Optional[datetime] = None
-    
+
     # Performance stats
     operation_times: List[float] = field(default_factory=list)
     peak_latency: float = 0.0
     avg_latency: float = 0.0
-    
+
     # Metric stats
     total_errors: int = 0
     error_types: Dict[str, int] = field(default_factory=dict)
     component_stats: Dict[str, Dict] = field(default_factory=dict)
-    
+
+    # Log stats
+    total_log_entries: int = 0
+    log_levels: Dict[str, int] = field(default_factory=dict)
+    current_log_size: int = 0
+    archived_log_size: int = 0
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert stats to dictionary format."""
         return {
@@ -89,18 +105,20 @@ class MonitoringStats:
                 },
                 "components": self.component_stats,
             },
+            "logging": {
+                "entries": self.total_log_entries,
+                "levels": self.log_levels,
+                "current_size": self.current_log_size,
+                "archived_size": self.archived_log_size,
+            },
         }
-    
+
     def _get_success_rate(self) -> Optional[float]:
         """Get operation success rate."""
         if not self.total_operations:
             return None
-        return (
-            self.completed_operations / self.total_operations
-            if self.total_operations > 0
-            else 0.0
-        )
-    
+        return self.completed_operations / self.total_operations if self.total_operations > 0 else 0.0
+
     def _get_duration(self) -> Optional[float]:
         """Get total duration in seconds."""
         if not self.start_time:
@@ -119,7 +137,7 @@ class MonitoringManager:
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize monitoring manager.
-        
+
         Args:
             monitor_resources: Whether to monitor resources
             monitor_progress: Whether to monitor progress
@@ -128,40 +146,150 @@ class MonitoringManager:
         """
         self.config = MonitoringConfig(
             monitor_progress=monitor_progress,
+            log_level=log_level,
         )
         self.logger = logger or logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(log_level)
-        
+
         # Initialize stats
         self.stats = MonitoringStats()
-        
+
         # Initialize state
         self._lock = threading.Lock()
         self._active = False
         self._monitor_thread = None
-        
-        # Initialize report directory
-        self._init_report_dir()
+        self._current_log_file = None
+        self._current_log_handler = None
 
-    def _init_report_dir(self) -> None:
-        """Initialize report directory."""
+        # Initialize directories
+        self._init_directories()
+
+    def _init_directories(self) -> None:
+        """Initialize directories."""
         try:
+            # Create report directory
             if self.config.report_dir:
                 self.config.report_dir.mkdir(parents=True, exist_ok=True)
-                
+
+            # Create log directory
+            if self.config.log_dir:
+                self.config.log_dir.mkdir(parents=True, exist_ok=True)
+                archive_dir = self.config.log_dir / "archive"
+                archive_dir.mkdir(exist_ok=True)
+
+                # Set up logging
+                self._setup_logging()
+
         except Exception as e:
-            self.logger.error(f"Failed to initialize report directory: {str(e)}")
+            self.logger.error(f"Failed to initialize directories: {str(e)}")
             raise
+
+    def _setup_logging(self) -> None:
+        """Configure logging with daily rotation."""
+        if not self.config.log_dir:
+            return
+
+        try:
+            # Create formatter
+            formatter = logging.Formatter(self.config.log_format)
+
+            # Create new log file for today
+            today = datetime.now().strftime("%Y%m%d")
+            self._current_log_file = self.config.log_dir / f"pipeline_{today}.log"
+
+            # Remove old handler if exists
+            if self._current_log_handler:
+                self.logger.removeHandler(self._current_log_handler)
+
+            # Create new handler
+            self._current_log_handler = logging.FileHandler(self._current_log_file)
+            self._current_log_handler.setFormatter(formatter)
+            self._current_log_handler.setLevel(self.config.log_level)
+
+            # Add handler to logger
+            self.logger.addHandler(self._current_log_handler)
+
+            # Update stats
+            self._update_log_stats()
+
+        except Exception as e:
+            self.logger.error(f"Failed to setup logging: {str(e)}")
+
+    def _update_log_stats(self) -> None:
+        """Update logging statistics."""
+        try:
+            # Get current log stats
+            if self._current_log_file and self._current_log_file.exists():
+                self.stats.current_log_size = self._current_log_file.stat().st_size
+
+            # Get archive stats
+            if self.config.log_dir:
+                archive_dir = self.config.log_dir / "archive"
+                archive_files = list(archive_dir.glob("pipeline_*.log"))
+                self.stats.archived_log_size = sum(f.stat().st_size for f in archive_files)
+
+        except Exception as e:
+            self.logger.error(f"Failed to update log stats: {str(e)}")
+
+    def _rotate_logs(self) -> None:
+        """Rotate log files and archive old logs."""
+        if not self.config.log_dir:
+            return
+
+        try:
+            # Check if we need to rotate
+            today = datetime.now().strftime("%Y%m%d")
+            current_log_date = self._current_log_file.stem.split("_")[1]
+
+            if current_log_date != today:
+                # Archive old log
+                archive_dir = self.config.log_dir / "archive"
+                archive_path = archive_dir / self._current_log_file.name
+                shutil.move(str(self._current_log_file), str(archive_path))
+
+                # Setup new log file
+                self._setup_logging()
+
+            # Clean old archives
+            self._clean_old_logs()
+
+        except Exception as e:
+            self.logger.error(f"Failed to rotate logs: {str(e)}")
+
+    def _clean_old_logs(self) -> None:
+        """Clean log files older than retention period."""
+        if not self.config.log_dir:
+            return
+
+        try:
+            archive_dir = self.config.log_dir / "archive"
+            cutoff = datetime.now() - timedelta(days=self.config.log_retention_days)
+
+            for log_file in archive_dir.glob("pipeline_*.log"):
+                try:
+                    # Extract date from filename
+                    date_str = log_file.stem.split("_")[1]
+                    log_date = datetime.strptime(date_str, "%Y%m%d")
+
+                    if log_date < cutoff:
+                        log_file.unlink()
+
+                except (ValueError, IndexError):
+                    self.logger.warning(f"Invalid log filename: {log_file}")
+                    continue
+
+        except Exception as e:
+            self.logger.error(f"Failed to clean old logs: {str(e)}")
 
     def start(self) -> None:
         """Start monitoring manager."""
         with self._lock:
             if self._active:
                 return
-            
+
             self._active = True
             self.stats.start_time = datetime.now()
-            
+
             # Start monitoring thread
             if self.config.monitor_progress:
                 self._monitor_thread = threading.Thread(
@@ -170,7 +298,7 @@ class MonitoringManager:
                     daemon=True,
                 )
                 self._monitor_thread.start()
-            
+
             self.logger.info("Monitoring manager started")
 
     def stop(self) -> None:
@@ -178,17 +306,20 @@ class MonitoringManager:
         with self._lock:
             if not self._active:
                 return
-            
+
             self._active = False
-            
+
             # Wait for monitor thread
             if self._monitor_thread:
                 self._monitor_thread.join(timeout=5)
-            
+
             # Generate final report
             if self.config.generate_reports:
                 self._generate_report()
-            
+
+            # Rotate logs if needed
+            self._rotate_logs()
+
             self.logger.info("Monitoring manager stopped")
 
     def update_progress(
@@ -197,7 +328,7 @@ class MonitoringManager:
         failed: bool = False,
     ) -> None:
         """Update progress counters.
-        
+
         Args:
             operations: Number of operations completed
             failed: Whether operations failed
@@ -214,7 +345,7 @@ class MonitoringManager:
         latency: float,
     ) -> None:
         """Record operation latency.
-        
+
         Args:
             latency: Operation latency in milliseconds
         """
@@ -224,19 +355,11 @@ class MonitoringManager:
                 self.stats.peak_latency,
                 latency,
             )
-            self.stats.avg_latency = (
-                sum(self.stats.operation_times) /
-                len(self.stats.operation_times)
-            )
-            
+            self.stats.avg_latency = sum(self.stats.operation_times) / len(self.stats.operation_times)
+
             # Check alert threshold
-            if (
-                self.config.enable_alerts and
-                latency > self.config.alert_thresholds["latency"]
-            ):
-                self.logger.warning(
-                    f"High latency detected: {latency:.1f}ms"
-                )
+            if self.config.enable_alerts and latency > self.config.alert_thresholds["latency"]:
+                self.logger.warning(f"High latency detected: {latency:.1f}ms")
 
     def record_error(
         self,
@@ -244,27 +367,20 @@ class MonitoringManager:
         error: Exception,
     ) -> None:
         """Record error occurrence.
-        
+
         Args:
             error_type: Type of error
             error: Exception instance
         """
         with self._lock:
             self.stats.total_errors += 1
-            self.stats.error_types[error_type] = (
-                self.stats.error_types.get(error_type, 0) + 1
-            )
-            
+            self.stats.error_types[error_type] = self.stats.error_types.get(error_type, 0) + 1
+
             # Check alert threshold
             if self.config.enable_alerts:
-                error_rate = (
-                    self.stats.total_errors /
-                    max(self.stats.total_operations, 1)
-                )
+                error_rate = self.stats.total_errors / max(self.stats.total_operations, 1)
                 if error_rate > self.config.alert_thresholds["error_rate"]:
-                    self.logger.warning(
-                        f"High error rate detected: {error_rate:.1%}"
-                    )
+                    self.logger.warning(f"High error rate detected: {error_rate:.1%}")
 
     def update_component_stats(
         self,
@@ -272,7 +388,7 @@ class MonitoringManager:
         stats: Dict[str, Any],
     ) -> None:
         """Update component statistics.
-        
+
         Args:
             component: Component name
             stats: Component statistics
@@ -285,39 +401,38 @@ class MonitoringManager:
         last_progress = 0
         last_performance = 0
         last_metric = 0
-        
+        last_log_rotation = 0
+
         while self._active:
             try:
                 now = datetime.now()
-                
+
                 # Check progress interval
-                if (
-                    self.config.monitor_progress and
-                    (now - last_progress).seconds >= self.config.progress_interval
-                ):
+                if self.config.monitor_progress and (now - last_progress).seconds >= self.config.progress_interval:
                     self._log_progress()
                     last_progress = now
-                
+
                 # Check performance interval
                 if (
-                    self.config.monitor_performance and
-                    (now - last_performance).seconds >= 
-                    self.config.performance_interval
+                    self.config.monitor_performance
+                    and (now - last_performance).seconds >= self.config.performance_interval
                 ):
                     self._log_performance()
                     last_performance = now
-                
+
                 # Check metric interval
-                if (
-                    self.config.collect_metrics and
-                    (now - last_metric).seconds >= self.config.metric_interval
-                ):
+                if self.config.collect_metrics and (now - last_metric).seconds >= self.config.metric_interval:
                     self._collect_metrics()
                     last_metric = now
-                
+
+                # Check log rotation (daily)
+                if (now - last_log_rotation).seconds >= 3600:  # hourly check
+                    self._rotate_logs()
+                    last_log_rotation = now
+
                 # Sleep until next check
                 threading.Event().wait(1)
-                
+
             except Exception as e:
                 self.logger.error(f"Monitoring error: {str(e)}")
                 threading.Event().wait(5)
@@ -330,21 +445,16 @@ class MonitoringManager:
             completed = self.stats.completed_operations
             failed = self.stats.failed_operations
             success_rate = completed / total
-            
+
             # Log progress
-            self.logger.info(
-                f"Progress: {completed}/{total} operations "
-                f"({success_rate:.1%} success rate)"
-            )
-            
+            self.logger.info(f"Progress: {completed}/{total} operations " f"({success_rate:.1%} success rate)")
+
             # Check failure threshold
             if self.config.enable_alerts:
                 failure_rate = failed / total
                 if failure_rate > self.config.alert_thresholds["failure_rate"]:
-                    self.logger.warning(
-                        f"High failure rate detected: {failure_rate:.1%}"
-                    )
-            
+                    self.logger.warning(f"High failure rate detected: {failure_rate:.1%}")
+
         except Exception as e:
             self.logger.error(f"Progress logging error: {str(e)}")
 
@@ -355,61 +465,58 @@ class MonitoringManager:
             if self.stats.operation_times:
                 avg_latency = self.stats.avg_latency
                 peak_latency = self.stats.peak_latency
-                
+
                 # Log metrics
-                self.logger.info(
-                    f"Performance: {avg_latency:.1f}ms avg, "
-                    f"{peak_latency:.1f}ms peak"
-                )
-            
+                self.logger.info(f"Performance: {avg_latency:.1f}ms avg, " f"{peak_latency:.1f}ms peak")
+
         except Exception as e:
             self.logger.error(f"Performance logging error: {str(e)}")
 
     def _collect_metrics(self) -> None:
         """Collect pipeline metrics."""
         try:
+            # Update log stats
+            self._update_log_stats()
+
             # Generate metrics
             metrics = {
                 "timestamp": datetime.now().isoformat(),
                 "stats": self.stats.to_dict(),
             }
-            
+
             # Save metrics
             if self.config.report_dir:
-                metrics_file = (
-                    self.config.report_dir /
-                    f"metrics_{self._get_timestamp()}.json"
-                )
+                metrics_file = self.config.report_dir / f"metrics_{self._get_timestamp()}.json"
                 with open(metrics_file, "w") as f:
                     json.dump(metrics, f, indent=2)
-            
+
         except Exception as e:
             self.logger.error(f"Metric collection error: {str(e)}")
 
     def _generate_report(self) -> None:
         """Generate monitoring report."""
         try:
+            # Update log stats
+            self._update_log_stats()
+
             # Generate report
             report = {
                 "timestamp": datetime.now().isoformat(),
                 "duration": self.stats._get_duration(),
                 "stats": self.stats.to_dict(),
             }
-            
+
             # Save report
             if self.config.report_dir:
-                report_file = (
-                    self.config.report_dir /
-                    f"report_{self._get_timestamp()}.{self.config.report_format}"
-                )
-                
+                report_file = self.config.report_dir / f"report_{self._get_timestamp()}.{self.config.report_format}"
+
                 if self.config.report_format == "json":
                     with open(report_file, "w") as f:
                         json.dump(report, f, indent=2)
                 else:
                     with open(report_file, "w") as f:
                         f.write(self._format_report(report))
-            
+
         except Exception as e:
             self.logger.error(f"Report generation error: {str(e)}")
 
@@ -418,10 +525,10 @@ class MonitoringManager:
         report: Dict[str, Any],
     ) -> str:
         """Format report as markdown.
-        
+
         Args:
             report: Report data
-            
+
         Returns:
             Formatted report string
         """
@@ -433,39 +540,48 @@ class MonitoringManager:
             "",
             "## Progress",
             "",
-            "- Total operations: "
-            f"{report['stats']['progress']['total']}",
-            "- Completed operations: "
-            f"{report['stats']['progress']['completed']}",
-            "- Failed operations: "
-            f"{report['stats']['progress']['failed']}",
-            "- Success rate: "
-            f"{report['stats']['progress']['success_rate']:.1%}",
+            "- Total operations: " f"{report['stats']['progress']['total']}",
+            "- Completed operations: " f"{report['stats']['progress']['completed']}",
+            "- Failed operations: " f"{report['stats']['progress']['failed']}",
+            "- Success rate: " f"{report['stats']['progress']['success_rate']:.1%}",
             "",
             "## Performance",
             "",
-            "- Peak latency: "
-            f"{report['stats']['performance']['peak_latency']:.1f}ms",
-            "- Average latency: "
-            f"{report['stats']['performance']['avg_latency']:.1f}ms",
-            "- Operation count: "
-            f"{report['stats']['performance']['operation_count']}",
+            "- Peak latency: " f"{report['stats']['performance']['peak_latency']:.1f}ms",
+            "- Average latency: " f"{report['stats']['performance']['avg_latency']:.1f}ms",
+            "- Operation count: " f"{report['stats']['performance']['operation_count']}",
             "",
             "## Errors",
             "",
-            "- Total errors: "
-            f"{report['stats']['metrics']['errors']['total']}",
+            "- Total errors: " f"{report['stats']['metrics']['errors']['total']}",
             "",
             "### Error Types",
             "",
         ]
-        
+
         # Add error types
-        for error_type, count in report["stats"]["metrics"]["errors"][
-            "types"
-        ].items():
+        for error_type, count in report["stats"]["metrics"]["errors"]["types"].items():
             lines.append(f"- {error_type}: {count}")
-        
+
+        # Add logging stats
+        lines.extend(
+            [
+                "",
+                "## Logging",
+                "",
+                "- Total entries: " f"{report['stats']['logging']['entries']}",
+                "- Current log size: " f"{report['stats']['logging']['current_size']} bytes",
+                "- Archived log size: " f"{report['stats']['logging']['archived_size']} bytes",
+                "",
+                "### Log Levels",
+                "",
+            ]
+        )
+
+        # Add log levels
+        for level, count in report["stats"]["logging"]["levels"].items():
+            lines.append(f"- {level}: {count}")
+
         return "\n".join(lines)
 
     def _get_timestamp(self) -> str:

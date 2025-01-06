@@ -3,12 +3,12 @@
 import pytest
 from datetime import datetime
 
-from ..base import (
+from binding_data_processor.models.psychopharm.base import (
     PsychoactiveClass,
     NootropicMechanism,
     RiskLevel,
 )
-from ..compound import PsychoactiveCompound
+from binding_data_processor.models.psychopharm.compound import PsychoactiveCompound
 
 
 class TestPsychoactiveCompound:

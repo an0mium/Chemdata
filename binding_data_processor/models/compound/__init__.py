@@ -15,7 +15,9 @@ AnalyzedCompound (extends MLCompound)
     Analysis capabilities
 """
 
-from .types import (
+from .base import (
+    BaseCompound,
+    ValidationError,
     CompoundType,
     LegalStatus,
     PsychoactiveClass,
@@ -26,7 +28,6 @@ from .types import (
     RiskLevel,
     TargetData,
 )
-from .base import BaseCompound, ValidationError
 from .enrichment import EnrichedCompound
 from .ml import MLCompound
 from .analysis import AnalyzedCompound
