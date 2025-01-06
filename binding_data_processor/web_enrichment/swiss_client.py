@@ -15,6 +15,19 @@ from typing import Optional, Dict, Any, Union
 from .base_client import BaseWebClient
 from .base import WebClientError
 from .http_client import HTTPClient
+from ..pipeline.infrastructure.rate_limiter import RateLimiter, RateLimit
+from ..pipeline.infrastructure.circuit_breaker import CircuitBreaker, ErrorCode, McpError
+
+# API Rate Limits
+SWISSPROT_RATE_LIMIT = RateLimit(requests=3, period=1)  # 3 requests per second
+SWISSADME_RATE_LIMIT = RateLimit(requests=2, period=1)  # 2 requests per second
+SWISSSIMILARITY_RATE_LIMIT = RateLimit(requests=2, period=1)  # 2 requests per second
+SWISSTARGET_RATE_LIMIT = RateLimit(requests=2, period=1)  # 2 requests per second
+
+# Circuit Breaker Config
+CIRCUIT_FAILURE_THRESHOLD = 5
+CIRCUIT_RESET_TIMEOUT = 300  # 5 minutes
+CIRCUIT_HALF_OPEN_TIMEOUT = 60  # 1 minute
 
 
 class SwissClient(BaseWebClient):
@@ -39,6 +52,39 @@ class SwissClient(BaseWebClient):
         self.swisssimilarity_url = "https://www.swisssimilarity.ch/api"
         self.swisstargetprediction_url = "https://www.swisstargetprediction.ch/api"
 
+        # Initialize rate limiters
+        self.rate_limiter = RateLimiter()
+        self.rate_limiter.add_limit("swissprot", SWISSPROT_RATE_LIMIT)
+        self.rate_limiter.add_limit("swissadme", SWISSADME_RATE_LIMIT)
+        self.rate_limiter.add_limit("swisssimilarity", SWISSSIMILARITY_RATE_LIMIT)
+        self.rate_limiter.add_limit("swisstarget", SWISSTARGET_RATE_LIMIT)
+
+        # Initialize circuit breakers
+        self.swissprot_circuit = CircuitBreaker(
+            "swissprot",
+            failure_threshold=CIRCUIT_FAILURE_THRESHOLD,
+            reset_timeout=CIRCUIT_RESET_TIMEOUT,
+            half_open_timeout=CIRCUIT_HALF_OPEN_TIMEOUT,
+        )
+        self.swissadme_circuit = CircuitBreaker(
+            "swissadme",
+            failure_threshold=CIRCUIT_FAILURE_THRESHOLD,
+            reset_timeout=CIRCUIT_RESET_TIMEOUT,
+            half_open_timeout=CIRCUIT_HALF_OPEN_TIMEOUT,
+        )
+        self.swisssimilarity_circuit = CircuitBreaker(
+            "swisssimilarity",
+            failure_threshold=CIRCUIT_FAILURE_THRESHOLD,
+            reset_timeout=CIRCUIT_RESET_TIMEOUT,
+            half_open_timeout=CIRCUIT_HALF_OPEN_TIMEOUT,
+        )
+        self.swisstarget_circuit = CircuitBreaker(
+            "swisstarget",
+            failure_threshold=CIRCUIT_FAILURE_THRESHOLD,
+            reset_timeout=CIRCUIT_RESET_TIMEOUT,
+            half_open_timeout=CIRCUIT_HALF_OPEN_TIMEOUT,
+        )
+
     def get_swissprot_data(
         self,
         accession: str,
@@ -56,21 +102,40 @@ class SwissClient(BaseWebClient):
         Raises:
             WebClientError: If API request fails
         """
-        self._validate_accession(accession)
-        self._validate_name(name)
+        # Check circuit breaker
+        if not self.swissprot_circuit.allow_request():
+            raise McpError(
+                ErrorCode.ServiceUnavailable,
+                "SwissProt circuit breaker open",
+            )
 
-        response = self.http.get(
-            url=f"{self.swissprot_url}/{accession}",
-            params={
-                "name": name,
-                "format": "json",
-                "include_features": True,
-            },
-            headers={"Accept": "application/json"},
-        )
+        try:
+            # Wait for rate limit
+            self.rate_limiter.wait("swissprot")
 
-        self._validate_swissprot_response(response)
-        return response
+            self._validate_accession(accession)
+            self._validate_name(name)
+
+            response = self.http.get(
+                url=f"{self.swissprot_url}/{accession}",
+                params={
+                    "name": name,
+                    "format": "json",
+                    "include_features": True,
+                },
+                headers={"Accept": "application/json"},
+            )
+
+            self._validate_swissprot_response(response)
+            self.swissprot_circuit.record_success()
+            return response
+
+        except Exception as e:
+            self.swissprot_circuit.record_failure()
+            raise McpError(
+                ErrorCode.ServiceError,
+                f"SwissProt request failed: {str(e)}",
+            )
 
     def get_swissadme_data(
         self,
@@ -87,19 +152,38 @@ class SwissClient(BaseWebClient):
         Raises:
             WebClientError: If API request fails
         """
-        self._validate_smiles(smiles)
+        # Check circuit breaker
+        if not self.swissadme_circuit.allow_request():
+            raise McpError(
+                ErrorCode.ServiceUnavailable,
+                "SwissADME circuit breaker open",
+            )
 
-        response = self.http.get(
-            url=f"{self.swissadme_url}/predict",
-            params={
-                "smiles": smiles,
-                "format": "json",
-            },
-            headers={"Accept": "application/json"},
-        )
+        try:
+            # Wait for rate limit
+            self.rate_limiter.wait("swissadme")
 
-        self._validate_swissadme_response(response)
-        return response
+            self._validate_smiles(smiles)
+
+            response = self.http.get(
+                url=f"{self.swissadme_url}/predict",
+                params={
+                    "smiles": smiles,
+                    "format": "json",
+                },
+                headers={"Accept": "application/json"},
+            )
+
+            self._validate_swissadme_response(response)
+            self.swissadme_circuit.record_success()
+            return response
+
+        except Exception as e:
+            self.swissadme_circuit.record_failure()
+            raise McpError(
+                ErrorCode.ServiceError,
+                f"SwissADME request failed: {str(e)}",
+            )
 
     def get_swisssimilarity_data(
         self,
@@ -122,24 +206,43 @@ class SwissClient(BaseWebClient):
         Raises:
             WebClientError: If API request fails
         """
-        self._validate_smiles(smiles)
-        self._validate_name(name)
-        self._validate_threshold(threshold)
+        # Check circuit breaker
+        if not self.swisssimilarity_circuit.allow_request():
+            raise McpError(
+                ErrorCode.ServiceUnavailable,
+                "SwissSimilarity circuit breaker open",
+            )
 
-        response = self.http.get(
-            url=f"{self.swisssimilarity_url}/similar",
-            params={
-                "smiles": smiles,
-                "name": name,
-                "threshold": threshold,
-                "limit": limit,
-                "format": "json",
-            },
-            headers={"Accept": "application/json"},
-        )
+        try:
+            # Wait for rate limit
+            self.rate_limiter.wait("swisssimilarity")
 
-        self._validate_swisssimilarity_response(response)
-        return response
+            self._validate_smiles(smiles)
+            self._validate_name(name)
+            self._validate_threshold(threshold)
+
+            response = self.http.get(
+                url=f"{self.swisssimilarity_url}/similar",
+                params={
+                    "smiles": smiles,
+                    "name": name,
+                    "threshold": threshold,
+                    "limit": limit,
+                    "format": "json",
+                },
+                headers={"Accept": "application/json"},
+            )
+
+            self._validate_swisssimilarity_response(response)
+            self.swisssimilarity_circuit.record_success()
+            return response
+
+        except Exception as e:
+            self.swisssimilarity_circuit.record_failure()
+            raise McpError(
+                ErrorCode.ServiceError,
+                f"SwissSimilarity request failed: {str(e)}",
+            )
 
     def get_swisstargetprediction_data(
         self,
@@ -156,19 +259,38 @@ class SwissClient(BaseWebClient):
         Raises:
             WebClientError: If API request fails
         """
-        self._validate_smiles(smiles)
+        # Check circuit breaker
+        if not self.swisstarget_circuit.allow_request():
+            raise McpError(
+                ErrorCode.ServiceUnavailable,
+                "SwissTargetPrediction circuit breaker open",
+            )
 
-        response = self.http.get(
-            url=f"{self.swisstargetprediction_url}/predict",
-            params={
-                "smiles": smiles,
-                "format": "json",
-            },
-            headers={"Accept": "application/json"},
-        )
+        try:
+            # Wait for rate limit
+            self.rate_limiter.wait("swisstarget")
 
-        self._validate_swisstargetprediction_response(response)
-        return response
+            self._validate_smiles(smiles)
+
+            response = self.http.get(
+                url=f"{self.swisstargetprediction_url}/predict",
+                params={
+                    "smiles": smiles,
+                    "format": "json",
+                },
+                headers={"Accept": "application/json"},
+            )
+
+            self._validate_swisstargetprediction_response(response)
+            self.swisstarget_circuit.record_success()
+            return response
+
+        except Exception as e:
+            self.swisstarget_circuit.record_failure()
+            raise McpError(
+                ErrorCode.ServiceError,
+                f"SwissTargetPrediction request failed: {str(e)}",
+            )
 
     def get_all_data(
         self,
