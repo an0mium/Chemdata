@@ -9,14 +9,17 @@ This module provides schema validation for:
 import logging
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 
 import jsonschema
 from jsonschema import ValidationError
+from pydantic import BaseModel, Field
 
 
 class DataSource(Enum):
     """Supported data sources."""
+
     SWISS = "swiss"
     COMMUNITY = "community"
     SOCIAL = "social"
@@ -24,6 +27,7 @@ class DataSource(Enum):
 
 class ValidationLevel(Enum):
     """Validation strictness levels."""
+
     STRICT = "strict"  # All fields required, exact types
     NORMAL = "normal"  # Required fields only, type coercion
     LENIENT = "lenient"  # Best effort validation
@@ -32,6 +36,7 @@ class ValidationLevel(Enum):
 @dataclass
 class ValidationResult:
     """Result of schema validation."""
+
     is_valid: bool
     errors: List[str]
     warnings: List[str]
@@ -39,8 +44,91 @@ class ValidationResult:
     level: ValidationLevel
 
 
+# Pydantic Models for Data Validation
+
+
+class ResearchData(BaseModel):
+    """Research paper data model."""
+
+    title: str = Field(..., description="Paper title")
+    abstract: str = Field(..., description="Paper abstract")
+    authors: List[str] = Field(default_factory=list, description="List of authors")
+    date: Optional[datetime] = Field(None, description="Publication date")
+    doi: Optional[str] = Field(None, description="Digital Object Identifier")
+    url: str = Field(..., description="Source URL")
+    source: str = Field(..., description="Source (e.g., PubMed, Google Scholar)")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Extraction confidence score")
+    keywords: List[str] = Field(default_factory=list, description="Keywords")
+    full_text: Optional[str] = Field(None, description="Full paper text if available")
+
+
+class PatentData(BaseModel):
+    """Patent document data model."""
+
+    title: str = Field(..., description="Patent title")
+    abstract: str = Field(..., description="Patent abstract")
+    inventors: List[str] = Field(default_factory=list, description="List of inventors")
+    assignee: Optional[str] = Field(None, description="Patent assignee")
+    filing_date: Optional[datetime] = Field(None, description="Filing date")
+    publication_date: Optional[datetime] = Field(None, description="Publication date")
+    patent_number: str = Field(..., description="Patent number")
+    url: str = Field(..., description="Source URL")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Extraction confidence score")
+    claims: List[str] = Field(default_factory=list, description="Patent claims")
+    chemical_structures: List[Dict[str, str]] = Field(
+        default_factory=list, description="Chemical structures mentioned in patent"
+    )
+
+
+class CommunityData(BaseModel):
+    """Community forum data model."""
+
+    title: Optional[str] = Field(None, description="Post title")
+    content: str = Field(..., description="Post content")
+    author: Optional[str] = Field(None, description="Post author")
+    date: Optional[datetime] = Field(None, description="Post date")
+    url: str = Field(..., description="Source URL")
+    source: str = Field(..., description="Source (e.g., Reddit, Bluelight)")
+    subforum: Optional[str] = Field(None, description="Subforum or category")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Extraction confidence score")
+    sentiment: Optional[float] = Field(None, ge=-1.0, le=1.0, description="Sentiment score")
+    effects: List[str] = Field(default_factory=list, description="Reported effects")
+    dosage: Optional[str] = Field(None, description="Reported dosage")
+    roa: Optional[str] = Field(None, description="Route of administration")
+    safety_notes: List[str] = Field(default_factory=list, description="Safety-related notes")
+    mentions: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="Entity mentions with context",
+    )
+    tags: List[str] = Field(default_factory=list, description="Post tags")
+
+
+class WebDataSchema(BaseModel):
+    """Combined web data schema."""
+
+    research: List[ResearchData] = Field(default_factory=list, description="Research paper data")
+    patents: List[PatentData] = Field(default_factory=list, description="Patent data")
+    community: List[CommunityData] = Field(default_factory=list, description="Community data")
+    metadata: dict = Field(default_factory=dict, description="Metadata about the extraction")
+    confidence: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Overall confidence score",
+    )
+
+
+# Schema Registry for Flexible Validation
+
+
 class SchemaRegistry:
     """Registry of JSON schemas for different data sources."""
+
+    # Convert Pydantic models to JSON schemas
+    RESEARCH_DATA_SCHEMA = ResearchData.model_json_schema()
+    PATENT_DATA_SCHEMA = PatentData.model_json_schema()
+    COMMUNITY_DATA_SCHEMA = CommunityData.model_json_schema()
+    WEB_DATA_SCHEMA = WebDataSchema.model_json_schema()
 
     # Swiss tools schemas
     SWISS_TARGET_SCHEMA = {
@@ -96,79 +184,17 @@ class SchemaRegistry:
         },
     }
 
-    # Community data schemas
-    COMMUNITY_REPORT_SCHEMA = {
-        "type": "object",
-        "required": ["effects", "dosage", "duration"],
-        "properties": {
-            "effects": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "required": ["name", "onset", "duration"],
-                    "properties": {
-                        "name": {"type": "string"},
-                        "onset": {"type": "string"},
-                        "duration": {"type": "string"},
-                    },
-                },
-            },
-            "dosage": {
-                "type": "object",
-                "required": ["units", "threshold", "common", "strong"],
-                "properties": {
-                    "units": {"type": "string"},
-                    "threshold": {"type": "number"},
-                    "common": {"type": "number"},
-                    "strong": {"type": "number"},
-                },
-            },
-            "duration": {
-                "type": "object",
-                "required": ["onset", "peak", "total"],
-                "properties": {
-                    "onset": {"type": "string"},
-                    "peak": {"type": "string"},
-                    "total": {"type": "string"},
-                },
-            },
-        },
-    }
-
-    # Social media schemas
-    SOCIAL_POST_SCHEMA = {
-        "type": "object",
-        "required": ["text", "timestamp", "source"],
-        "properties": {
-            "text": {"type": "string"},
-            "timestamp": {"type": "string"},
-            "source": {"type": "string"},
-            "entities": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "required": ["type", "text"],
-                    "properties": {
-                        "type": {"type": "string"},
-                        "text": {"type": "string"},
-                        "score": {"type": "number"},
-                    },
-                },
-            },
-        },
-    }
-
     @classmethod
     def get_schema(cls, source: DataSource, schema_name: str) -> Dict[str, Any]:
         """Get schema by source and name.
-        
+
         Args:
             source: Data source
             schema_name: Schema name
-            
+
         Returns:
             JSON schema
-            
+
         Raises:
             ValueError: If schema not found
         """
@@ -178,10 +204,13 @@ class SchemaRegistry:
                 "adme": cls.SWISS_ADME_SCHEMA,
             },
             DataSource.COMMUNITY: {
-                "report": cls.COMMUNITY_REPORT_SCHEMA,
+                "web": cls.WEB_DATA_SCHEMA,
+                "research": cls.RESEARCH_DATA_SCHEMA,
+                "patent": cls.PATENT_DATA_SCHEMA,
+                "forum": cls.COMMUNITY_DATA_SCHEMA,
             },
             DataSource.SOCIAL: {
-                "post": cls.SOCIAL_POST_SCHEMA,
+                "post": cls.COMMUNITY_DATA_SCHEMA,  # Reuse community schema
             },
         }
 
@@ -192,7 +221,7 @@ class SchemaRegistry:
 
 
 class SchemaValidator:
-    """Schema validator for web enrichment data."""
+    """Schema validator with flexible validation levels."""
 
     def __init__(
         self,
@@ -200,7 +229,7 @@ class SchemaValidator:
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize schema validator.
-        
+
         Args:
             level: Validation strictness level
             logger: Optional logger instance
@@ -215,12 +244,12 @@ class SchemaValidator:
         schema_name: str,
     ) -> ValidationResult:
         """Validate data against schema.
-        
+
         Args:
             data: Data to validate
             source: Data source
             schema_name: Schema name
-            
+
         Returns:
             Validation result
         """
@@ -258,7 +287,7 @@ class SchemaValidator:
         warnings: List[str],
     ) -> None:
         """Validate required fields.
-        
+
         Args:
             data: Data to validate
             schema: JSON schema
@@ -270,7 +299,10 @@ class SchemaValidator:
 
         for field in required:
             if field not in data:
-                errors.append(f"Missing required field: {field}")
+                if self.level == ValidationLevel.LENIENT:
+                    warnings.append(f"Missing required field: {field}")
+                else:
+                    errors.append(f"Missing required field: {field}")
             elif field in properties:
                 field_schema = properties[field]
                 if field_schema.get("type") == "object":
@@ -289,7 +321,7 @@ class SchemaValidator:
         warnings: List[str],
     ) -> None:
         """Validate and coerce types.
-        
+
         Args:
             data: Data to validate
             schema: JSON schema
@@ -324,9 +356,10 @@ class SchemaValidator:
                     try:
                         self._coerce_type(data, field, field_type)
                     except (ValueError, TypeError) as e:
-                        errors.append(
-                            f"Type error for {field}: {str(e)}"
-                        )
+                        if self.level == ValidationLevel.LENIENT:
+                            warnings.append(f"Type error for {field}: {str(e)}")
+                        else:
+                            errors.append(f"Type error for {field}: {str(e)}")
 
     def _coerce_type(
         self,
@@ -335,12 +368,12 @@ class SchemaValidator:
         field_type: str,
     ) -> None:
         """Coerce value to expected type.
-        
+
         Args:
             data: Data dictionary
             field: Field name
             field_type: Expected type
-            
+
         Raises:
             ValueError: If coercion fails
         """
@@ -351,19 +384,19 @@ class SchemaValidator:
             "string": self._coerce_string,
             "boolean": self._coerce_boolean,
         }
-        
+
         if field_type in coercion_map:
             data[field] = coercion_map[field_type](value)
 
     def _coerce_number(self, value: Any) -> float:
         """Coerce value to number (float).
-        
+
         Args:
             value: Value to coerce
-            
+
         Returns:
             Coerced float value
-            
+
         Raises:
             ValueError: If coercion fails
         """
@@ -375,13 +408,13 @@ class SchemaValidator:
 
     def _coerce_integer(self, value: Any) -> int:
         """Coerce value to integer.
-        
+
         Args:
             value: Value to coerce
-            
+
         Returns:
             Coerced integer value
-            
+
         Raises:
             ValueError: If coercion fails
         """
@@ -397,10 +430,10 @@ class SchemaValidator:
 
     def _coerce_string(self, value: Any) -> str:
         """Coerce value to string.
-        
+
         Args:
             value: Value to coerce
-            
+
         Returns:
             Coerced string value
         """
@@ -408,13 +441,13 @@ class SchemaValidator:
 
     def _coerce_boolean(self, value: Any) -> bool:
         """Coerce value to boolean.
-        
+
         Args:
             value: Value to coerce
-            
+
         Returns:
             Coerced boolean value
-            
+
         Raises:
             ValueError: If coercion fails
         """

@@ -4,6 +4,7 @@ This module provides a manager for web enrichment clients:
 - Swiss tools (SwissTargetPrediction, SwissADME)
 - Community sources (PsychonautWiki, Erowid, TripSit)
 - Social media (Reddit, Twitter)
+- Patent data (Google Patents, Lens.org)
 
 The manager handles:
 1. Client initialization and configuration
@@ -26,6 +27,7 @@ from .base import WebClient, WebClientError
 from .clients.swiss import SwissClient
 from .clients.community import CommunityClient
 from .clients.social import SocialClient
+from .clients.patent import PatentClient
 from ..models.compound import Compound
 from ..pipeline.infrastructure.circuit_breaker import CircuitConfig
 from ..pipeline.infrastructure.monitoring import MetricsCollector
@@ -39,6 +41,8 @@ class EnrichmentConfig:
     reddit_client_id: Optional[str] = None
     reddit_client_secret: Optional[str] = None
     twitter_bearer_token: Optional[str] = None
+    google_patents_key: Optional[str] = None
+    lens_api_key: Optional[str] = None
 
     # Processing options
     skip_predictions: bool = False
@@ -68,7 +72,7 @@ class WebEnrichmentError(Exception):
         details: Optional[Dict[str, Any]] = None,
     ):
         """Initialize error.
-        
+
         Args:
             message: Error message
             client: Client name
@@ -90,7 +94,7 @@ class WebEnrichmentManager:
         metrics_collector: Optional[MetricsCollector] = None,
     ):
         """Initialize manager.
-        
+
         Args:
             config: Enrichment configuration
             logger: Optional logger instance
@@ -123,11 +127,7 @@ class WebEnrichmentManager:
         self.register_client(
             SwissClient,
             model_dir=self.config.model_dir,
-            cache_dir=(
-                self.config.cache_dir / "swiss"
-                if self.config.cache_dir
-                else None
-            ),
+            cache_dir=(self.config.cache_dir / "swiss" if self.config.cache_dir else None),
             **self.config.client_configs.get("swiss", {}),
         )
 
@@ -135,11 +135,7 @@ class WebEnrichmentManager:
         self.register_client(
             CommunityClient,
             model_dir=self.config.model_dir,
-            cache_dir=(
-                self.config.cache_dir / "community"
-                if self.config.cache_dir
-                else None
-            ),
+            cache_dir=(self.config.cache_dir / "community" if self.config.cache_dir else None),
             **self.config.client_configs.get("community", {}),
         )
 
@@ -150,12 +146,18 @@ class WebEnrichmentManager:
             reddit_client_secret=self.config.reddit_client_secret,
             twitter_bearer_token=self.config.twitter_bearer_token,
             model_dir=self.config.model_dir,
-            cache_dir=(
-                self.config.cache_dir / "social"
-                if self.config.cache_dir
-                else None
-            ),
+            cache_dir=(self.config.cache_dir / "social" if self.config.cache_dir else None),
             **self.config.client_configs.get("social", {}),
+        )
+
+        # Patent client
+        self.register_client(
+            PatentClient,
+            google_patents_key=self.config.google_patents_key,
+            lens_api_key=self.config.lens_api_key,
+            model_dir=self.config.model_dir,
+            cache_dir=(self.config.cache_dir / "patent" if self.config.cache_dir else None),
+            **self.config.client_configs.get("patent", {}),
         )
 
     def register_client(
@@ -164,7 +166,7 @@ class WebEnrichmentManager:
         **kwargs: Any,
     ) -> None:
         """Register web enrichment client.
-        
+
         Args:
             client_class: Client class to register
             **kwargs: Additional client arguments
@@ -179,13 +181,13 @@ class WebEnrichmentManager:
 
     def get_client(self, name: str) -> WebClient:
         """Get client by name.
-        
+
         Args:
             name: Client name
-            
+
         Returns:
             Web enrichment client
-            
+
         Raises:
             WebEnrichmentError: If client not found
         """
@@ -204,7 +206,7 @@ class WebEnrichmentManager:
         use_cache: Optional[bool] = None,
     ) -> None:
         """Enrich compounds with web data.
-        
+
         Args:
             compounds: List of compounds to enrich
             skip_predictions: Whether to skip predictions (overrides config)
@@ -212,25 +214,13 @@ class WebEnrichmentManager:
             use_cache: Whether to use cached results (overrides config)
         """
         # Use config defaults if not specified
-        skip_predictions = (
-            skip_predictions
-            if skip_predictions is not None
-            else self.config.skip_predictions
-        )
-        skip_web_data = (
-            skip_web_data
-            if skip_web_data is not None
-            else self.config.skip_web_data
-        )
-        use_cache = (
-            use_cache
-            if use_cache is not None
-            else self.config.use_cache
-        )
+        skip_predictions = skip_predictions if skip_predictions is not None else self.config.skip_predictions
+        skip_web_data = skip_web_data if skip_web_data is not None else self.config.skip_web_data
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # Process compounds in batches
         for i in range(0, len(compounds), self.config.batch_size):
-            batch = compounds[i:i + self.config.batch_size]
+            batch = compounds[i : i + self.config.batch_size]
             self._process_batch(
                 batch,
                 skip_predictions=skip_predictions,
@@ -246,7 +236,7 @@ class WebEnrichmentManager:
         use_cache: bool,
     ) -> None:
         """Process a batch of compounds.
-        
+
         Args:
             compounds: List of compounds to process
             skip_predictions: Whether to skip predictions
@@ -285,7 +275,7 @@ class WebEnrichmentManager:
         use_cache: bool,
     ) -> None:
         """Enrich a single compound.
-        
+
         Args:
             compound: Compound to enrich
             skip_predictions: Whether to skip predictions
@@ -297,6 +287,7 @@ class WebEnrichmentManager:
             compound.swiss_data = {}
             compound.community_data = {}
             compound.social_data = {}
+            compound.patent_data = {}
 
             # Get Swiss data
             if not skip_predictions:
@@ -325,6 +316,16 @@ class WebEnrichmentManager:
                 )
                 self.processed_compounds.add(compound.smiles)
 
+            # Get patent data
+            if not skip_web_data:
+                patent_client = self.get_client("patent")
+                compound.patent_data = patent_client.search_patents(
+                    query=compound.name,
+                    chemical_structure=compound.smiles,
+                    use_cache=use_cache,
+                )
+                self.processed_compounds.add(compound.smiles)
+
             # Add metadata
             compound.enrichment_metadata = {
                 "timestamp": datetime.now().isoformat(),
@@ -336,12 +337,12 @@ class WebEnrichmentManager:
                 compound.enrichment_metadata["sources"].append("community")
             if compound.social_data:
                 compound.enrichment_metadata["sources"].append("social")
+            if compound.patent_data:
+                compound.enrichment_metadata["sources"].append("patent")
 
         except WebClientError as e:
             self.failed_compounds.add(compound.smiles)
-            self.logger.error(
-                f"Error enriching {compound.name}: {str(e)}"
-            )
+            self.logger.error(f"Error enriching {compound.name}: {str(e)}")
             raise WebEnrichmentError(
                 message=str(e),
                 client=e.source,
@@ -350,14 +351,12 @@ class WebEnrichmentManager:
 
         except Exception as e:
             self.failed_compounds.add(compound.smiles)
-            self.logger.error(
-                f"Error enriching {compound.name}: {str(e)}"
-            )
+            self.logger.error(f"Error enriching {compound.name}: {str(e)}")
             raise
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get manager metrics.
-        
+
         Returns:
             Manager metrics
         """

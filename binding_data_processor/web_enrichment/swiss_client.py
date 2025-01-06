@@ -1,269 +1,362 @@
 """Swiss tools integration client.
 
 This module provides functionality to:
-1. Get target predictions from SwissTargetPrediction
-2. Get ADME properties from SwissADME
-3. Process and validate results
+1. Get similar compounds from SwissSimilarity
+2. Get protein data from SwissProt
+3. Get target predictions from SwissTargetPrediction
+4. Get ADME properties from SwissADME
+5. Process and validate results
 """
 
 import logging
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-from datetime import datetime
-import time
-
-import requests
-from rdkit import Chem
-from rdkit.Chem import AllChem
-import pandas as pd
-from tqdm import tqdm
+import re
+from typing import Optional, Dict, Any, Union
 
 from .base_client import BaseWebClient
-from ..models.compound import Compound
+from .base import WebClientError
+from .http_client import HTTPClient
 
 
 class SwissClient(BaseWebClient):
     """Client for Swiss bioinformatics tools."""
 
-    # API endpoints
-    STP_URL = "http://www.swisstargetprediction.ch/predict.php"
-    ADME_URL = "http://www.swissadme.ch/predict.php"
-
-    # Result polling intervals
-    POLL_INTERVAL = 5  # seconds
-    MAX_POLLS = 60  # 5 minutes total
-
     def __init__(
         self,
-        http_client: Optional["HTTPClient"] = None,
-        model_dir: Optional[Path] = None,
-        cache_dir: Optional[Path] = None,
+        http_client: Optional[HTTPClient] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize Swiss tools client.
-        
+
         Args:
             http_client: Optional HTTP client to use
-            model_dir: Optional directory for ML models
-            cache_dir: Optional directory for caching
             logger: Optional logger instance
         """
-        super().__init__(http_client, model_dir, cache_dir, logger)
+        super().__init__(name="swiss", http_client=http_client, logger=logger)
 
-    def process_compounds(
+        # API endpoints
+        self.swissprot_url = "https://rest.uniprot.org/uniprotkb"
+        self.swissadme_url = "https://www.swissadme.ch/api"
+        self.swisssimilarity_url = "https://www.swisssimilarity.ch/api"
+        self.swisstargetprediction_url = "https://www.swisstargetprediction.ch/api"
+
+    def get_swissprot_data(
         self,
-        compounds: List[Compound],
-        skip_predictions: bool = False,
-        use_cache: bool = True,
-    ) -> None:
-        """Process list of compounds.
-        
-        Args:
-            compounds: List of compounds to process
-            skip_predictions: Whether to skip predictions
-            use_cache: Whether to use cached results
-        """
-        for compound in compounds:
-            try:
-                # Get target predictions
-                if not skip_predictions:
-                    targets = self._get_target_predictions(
-                        compound.smiles,
-                        use_cache=use_cache,
-                    )
-                    if targets:
-                        compound.swiss_data["targets"] = targets
-
-                # Get ADME properties
-                adme = self._get_adme_properties(
-                    compound.smiles,
-                    use_cache=use_cache,
-                )
-                if adme:
-                    compound.swiss_data["adme"] = adme
-
-            except Exception as e:
-                self.logger.error(f"Error processing {compound.name}: {str(e)}")
-
-    def get_compound_data(
-        self,
+        accession: str,
         name: str,
-        smiles: str,
-        use_cache: bool = True,
-    ) -> Optional[Dict[str, Any]]:
-        """Get Swiss tools data for a compound.
-        
+    ) -> Dict[str, Any]:
+        """Get protein data from SwissProt.
+
         Args:
-            name: Compound name
-            smiles: SMILES string
-            use_cache: Whether to use cached results
-            
+            accession: UniProt accession number
+            name: Protein name
+
         Returns:
-            Dictionary of Swiss tools data or None if error
+            SwissProt data dictionary
+
+        Raises:
+            WebClientError: If API request fails
         """
-        data = {}
+        self._validate_accession(accession)
+        self._validate_name(name)
 
-        try:
-            # Get target predictions
-            targets = self._get_target_predictions(smiles, use_cache)
-            if targets:
-                data["targets"] = targets
+        response = self.http.get(
+            url=f"{self.swissprot_url}/{accession}",
+            params={
+                "name": name,
+                "format": "json",
+                "include_features": True,
+            },
+            headers={"Accept": "application/json"},
+        )
 
-            # Get ADME properties
-            adme = self._get_adme_properties(smiles, use_cache)
-            if adme:
-                data["adme"] = adme
+        self._validate_swissprot_response(response)
+        return response
 
-            return data if data else None
-
-        except Exception as e:
-            self.logger.error(f"Error getting Swiss data for {name}: {str(e)}")
-            return None
-
-    def _get_target_predictions(
+    def get_swissadme_data(
         self,
         smiles: str,
-        use_cache: bool = True,
-    ) -> Optional[List[Dict[str, Any]]]:
-        """Get target predictions from SwissTargetPrediction.
-        
-        Args:
-            smiles: SMILES string
-            use_cache: Whether to use cached results
-            
-        Returns:
-            List of target predictions or None if error
-        """
-        try:
-            # Submit prediction request
-            response = self.http.post(
-                self.STP_URL,
-                data={"smiles": smiles},
-                use_cache=use_cache,
-            )
-            job_id = response.json()["job_id"]
-
-            # Poll for results
-            for _ in range(self.MAX_POLLS):
-                time.sleep(self.POLL_INTERVAL)
-                
-                response = self.http.get(
-                    f"{self.STP_URL}/status/{job_id}",
-                    use_cache=use_cache,
-                )
-                status = response.json()["status"]
-                
-                if status == "completed":
-                    results = response.json()["results"]
-                    return [
-                        {
-                            "target": result["target"],
-                            "uniprot": result["uniprot"],
-                            "gene": result["gene"],
-                            "probability": float(result["probability"]),
-                            "class": result["class"],
-                            "known_actives": int(result["known_actives"]),
-                        }
-                        for result in results
-                    ]
-                elif status == "failed":
-                    self.logger.error(
-                        f"SwissTargetPrediction failed for {smiles}"
-                    )
-                    return None
-
-            self.logger.error(f"SwissTargetPrediction timeout for {smiles}")
-            return None
-
-        except Exception as e:
-            self.logger.error(
-                f"Error getting target predictions: {str(e)}"
-            )
-            return None
-
-    def _get_adme_properties(
-        self,
-        smiles: str,
-        use_cache: bool = True,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """Get ADME properties from SwissADME.
-        
+
         Args:
             smiles: SMILES string
-            use_cache: Whether to use cached results
-            
+
         Returns:
-            Dictionary of ADME properties or None if error
+            SwissADME data dictionary
+
+        Raises:
+            WebClientError: If API request fails
         """
+        self._validate_smiles(smiles)
+
+        response = self.http.get(
+            url=f"{self.swissadme_url}/predict",
+            params={
+                "smiles": smiles,
+                "format": "json",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self._validate_swissadme_response(response)
+        return response
+
+    def get_swisssimilarity_data(
+        self,
+        smiles: str,
+        name: str,
+        threshold: float = 0.7,
+        limit: int = 10,
+    ) -> Dict[str, Any]:
+        """Get similar compounds from SwissSimilarity.
+
+        Args:
+            smiles: SMILES string
+            name: Compound name
+            threshold: Similarity threshold (0-1)
+            limit: Maximum number of results
+
+        Returns:
+            SwissSimilarity data dictionary
+
+        Raises:
+            WebClientError: If API request fails
+        """
+        self._validate_smiles(smiles)
+        self._validate_name(name)
+        self._validate_threshold(threshold)
+
+        response = self.http.get(
+            url=f"{self.swisssimilarity_url}/similar",
+            params={
+                "smiles": smiles,
+                "name": name,
+                "threshold": threshold,
+                "limit": limit,
+                "format": "json",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self._validate_swisssimilarity_response(response)
+        return response
+
+    def get_swisstargetprediction_data(
+        self,
+        smiles: str,
+    ) -> Dict[str, Any]:
+        """Get target predictions from SwissTargetPrediction.
+
+        Args:
+            smiles: SMILES string
+
+        Returns:
+            SwissTargetPrediction data dictionary
+
+        Raises:
+            WebClientError: If API request fails
+        """
+        self._validate_smiles(smiles)
+
+        response = self.http.get(
+            url=f"{self.swisstargetprediction_url}/predict",
+            params={
+                "smiles": smiles,
+                "format": "json",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self._validate_swisstargetprediction_response(response)
+        return response
+
+    def get_all_data(
+        self,
+        smiles: str,
+        name: str,
+        accession: str,
+        threshold: float = 0.7,
+        limit: int = 10,
+    ) -> Dict[str, Any]:
+        """Get data from all Swiss tools.
+
+        Args:
+            smiles: SMILES string
+            name: Compound name
+            accession: UniProt accession
+            threshold: Similarity threshold
+            limit: Maximum similarity results
+
+        Returns:
+            Dictionary containing all Swiss tools data
+        """
+        results = {}
+
         try:
-            # Submit property calculation request
-            response = self.http.post(
-                self.ADME_URL,
-                data={"smiles": smiles},
-                use_cache=use_cache,
+            results["swissprot"] = self.get_swissprot_data(
+                accession=accession,
+                name=name,
             )
-            job_id = response.json()["job_id"]
+        except WebClientError as e:
+            self.logger.error(f"SwissProt error: {str(e)}")
+            results["swissprot"] = None
 
-            # Poll for results
-            for _ in range(self.MAX_POLLS):
-                time.sleep(self.POLL_INTERVAL)
-                
-                response = self.http.get(
-                    f"{self.ADME_URL}/status/{job_id}",
-                    use_cache=use_cache,
-                )
-                status = response.json()["status"]
-                
-                if status == "completed":
-                    results = response.json()["results"]
-                    return {
-                        # Physicochemical properties
-                        "molecular_weight": float(results["MW"]),
-                        "logp": float(results["LogP"]),
-                        "hbd": int(results["HBD"]),
-                        "hba": int(results["HBA"]),
-                        "tpsa": float(results["TPSA"]),
-                        "rotatable_bonds": int(results["RotBonds"]),
-                        
-                        # Drug-likeness
-                        "lipinski": results["Lipinski"],
-                        "ghose": results["Ghose"],
-                        "veber": results["Veber"],
-                        "egan": results["Egan"],
-                        "muegge": results["Muegge"],
-                        
-                        # ADME predictions
-                        "gi_absorption": results["GI_absorption"],
-                        "bbb_permeant": results["BBB_permeant"],
-                        "pgp_substrate": results["Pgp_substrate"],
-                        "cyp_inhibition": {
-                            "1A2": results["CYP1A2_inhibition"],
-                            "2C19": results["CYP2C19_inhibition"],
-                            "2C9": results["CYP2C9_inhibition"],
-                            "2D6": results["CYP2D6_inhibition"],
-                            "3A4": results["CYP3A4_inhibition"],
-                        },
-                        
-                        # Medicinal chemistry
-                        "pains": results["PAINS"],
-                        "brenk": results["Brenk"],
-                        "leadlikeness": results["Leadlikeness"],
-                        "synthetic_accessibility": float(results["SA"]),
-                        
-                        # Metadata
-                        "timestamp": datetime.now().isoformat(),
-                    }
-                elif status == "failed":
-                    self.logger.error(
-                        f"SwissADME failed for {smiles}"
-                    )
-                    return None
-
-            self.logger.error(f"SwissADME timeout for {smiles}")
-            return None
-
-        except Exception as e:
-            self.logger.error(
-                f"Error getting ADME properties: {str(e)}"
+        try:
+            results["swissadme"] = self.get_swissadme_data(
+                smiles=smiles,
             )
-            return None
+        except WebClientError as e:
+            self.logger.error(f"SwissADME error: {str(e)}")
+            results["swissadme"] = None
+
+        try:
+            results["swisssimilarity"] = self.get_swisssimilarity_data(
+                smiles=smiles,
+                name=name,
+                threshold=threshold,
+                limit=limit,
+            )
+        except WebClientError as e:
+            self.logger.error(f"SwissSimilarity error: {str(e)}")
+            results["swisssimilarity"] = None
+
+        try:
+            results["swisstargetprediction"] = self.get_swisstargetprediction_data(
+                smiles=smiles,
+            )
+        except WebClientError as e:
+            self.logger.error(f"SwissTargetPrediction error: {str(e)}")
+            results["swisstargetprediction"] = None
+
+        return results
+
+    def _validate_accession(self, accession: str) -> None:
+        """Validate UniProt accession number.
+
+        Args:
+            accession: UniProt accession to validate
+
+        Raises:
+            TypeError: If accession is not a string
+            ValueError: If accession is empty or invalid format
+        """
+        if not isinstance(accession, str):
+            raise TypeError("Accession must be a string")
+        if not accession:
+            raise ValueError("Accession cannot be empty")
+        # Split regex pattern to avoid line length issues
+        pattern = r"^[OPQ][0-9][A-Z0-9]{3}[0-9]|" r"[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2}$"
+        if not re.match(pattern, accession):
+            raise ValueError("Invalid UniProt accession format")
+
+    def _validate_smiles(self, smiles: str) -> None:
+        """Validate SMILES string.
+
+        Args:
+            smiles: SMILES string to validate
+
+        Raises:
+            TypeError: If SMILES is not a string
+            ValueError: If SMILES is empty
+        """
+        if not isinstance(smiles, str):
+            raise TypeError("SMILES must be a string")
+        if not smiles:
+            raise ValueError("SMILES cannot be empty")
+
+    def _validate_name(self, name: str) -> None:
+        """Validate name string.
+
+        Args:
+            name: Name to validate
+
+        Raises:
+            TypeError: If name is not a string
+            ValueError: If name is empty
+        """
+        if not isinstance(name, str):
+            raise TypeError("Name must be a string")
+        if not name:
+            raise ValueError("Name cannot be empty")
+
+    def _validate_threshold(self, threshold: Union[int, float]) -> None:
+        """Validate similarity threshold.
+
+        Args:
+            threshold: Threshold value to validate
+
+        Raises:
+            TypeError: If threshold is not a number
+            ValueError: If threshold is not between 0 and 1
+        """
+        if not isinstance(threshold, (int, float)):
+            raise TypeError("Threshold must be a number")
+        if not 0 <= threshold <= 1:
+            raise ValueError("Threshold must be between 0 and 1")
+
+    def _validate_swissprot_response(self, response: Dict[str, Any]) -> None:
+        """Validate SwissProt API response.
+
+        Args:
+            response: Response dictionary to validate
+
+        Raises:
+            WebClientError: If response is invalid
+        """
+        if not isinstance(response, dict):
+            raise WebClientError("Invalid response type")
+        if "data" not in response or "entry" not in response["data"]:
+            raise WebClientError("Missing required fields")
+        entry = response["data"]["entry"]
+        if not isinstance(entry.get("accession"), str):
+            raise WebClientError("Invalid field types")
+
+    def _validate_swissadme_response(self, response: Dict[str, Any]) -> None:
+        """Validate SwissADME API response.
+
+        Args:
+            response: Response dictionary to validate
+
+        Raises:
+            WebClientError: If response is invalid
+        """
+        if not isinstance(response, dict):
+            raise WebClientError("Invalid response type")
+        if "data" not in response or "compound" not in response["data"]:
+            raise WebClientError("Missing required fields")
+        compound = response["data"]["compound"]
+        if not isinstance(compound.get("smiles"), str):
+            raise WebClientError("Invalid field types")
+
+    def _validate_swisssimilarity_response(self, response: Dict[str, Any]) -> None:
+        """Validate SwissSimilarity API response.
+
+        Args:
+            response: Response dictionary to validate
+
+        Raises:
+            WebClientError: If response is invalid
+        """
+        if not isinstance(response, dict):
+            raise WebClientError("Invalid response type")
+        if "data" not in response or "query" not in response["data"]:
+            raise WebClientError("Missing required fields")
+        query = response["data"]["query"]
+        if not isinstance(query.get("smiles"), str):
+            raise WebClientError("Invalid field types")
+
+    def _validate_swisstargetprediction_response(self, response: Dict[str, Any]) -> None:
+        """Validate SwissTargetPrediction API response.
+
+        Args:
+            response: Response dictionary to validate
+
+        Raises:
+            WebClientError: If response is invalid
+        """
+        if not isinstance(response, dict):
+            raise WebClientError("Invalid response type")
+        if "data" not in response or "predictions" not in response["data"]:
+            raise WebClientError("Missing required fields")
+        if not isinstance(response["data"]["predictions"], list):
+            raise WebClientError("Invalid field types")

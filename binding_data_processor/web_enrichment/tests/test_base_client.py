@@ -96,33 +96,129 @@ def test_request_http_error(client):
 
 
 def test_request_rate_limit_error(client):
-    """Test rate limit error handling."""
-    # Mock response with rate limit headers
-    mock_response = Mock()
-    mock_response.status_code = 429
-    mock_response.headers = {"Retry-After": "60"}
-    mock_response.json.return_value = {"error": "Rate limit exceeded"}
+    """Test rate limit error handling with retries."""
+    # Mock responses for retry sequence
+    mock_responses = [
+        # First attempt: Rate limit error
+        Mock(
+            status_code=429,
+            headers={"Retry-After": "1"},
+            json=lambda: {"error": "Rate limit exceeded"},
+        ),
+        # Second attempt: Success
+        Mock(status_code=200, json=lambda: {"name": "test", "value": 50}),
+    ]
 
-    # Mock request to raise rate limit error
-    def mock_request(*args, **kwargs):
-        error = requests.exceptions.RequestException("Rate limit exceeded")
-        error.response = mock_response
-        raise error
+    # Mock request to return sequence of responses
+    with patch.object(client.http, "request", side_effect=mock_responses):
+        data = client.request(
+            method="GET",
+            endpoint="/test",
+            schema_name="test",
+            retry_on_rate_limit=True,
+        )
 
-    with patch.object(client.http, "request", side_effect=mock_request):
-        with pytest.raises(WebClientError) as exc:
-            client.request(
-                method="GET",
-                endpoint="/test",
-            )
-
-    # Verify error details
-    assert exc.value.status_code == 429
-    assert "Rate limit exceeded" in str(exc.value)
-    assert client.processed_items == 0
-    assert client.failed_items == 1
+    # Verify successful retry
+    assert data == {"name": "test", "value": 50}
+    assert client.processed_items == 1
+    assert client.failed_items == 0
     assert client.validation_errors == 0
-    assert client.http_errors == 1
+    assert client.http_errors == 0
+
+
+def test_circuit_breaker_state_transitions(client):
+    """Test circuit breaker state transitions."""
+    mock_responses = [
+        # Initial failures to open circuit
+        *[Mock(side_effect=requests.exceptions.RequestException("Error"))] * 3,
+        # Recovery period
+        Mock(side_effect=requests.exceptions.RequestException("Error")),
+        # Half-open test request succeeds
+        Mock(status_code=200, json=lambda: {"name": "test"}),
+        # Circuit fully closed, normal operation
+        Mock(status_code=200, json=lambda: {"name": "test"}),
+    ]
+
+    with patch.object(client.http, "request", side_effect=mock_responses):
+        # Trigger circuit open
+        for _ in range(3):
+            with pytest.raises(WebClientError):
+                client.request(method="GET", endpoint="/test")
+
+        assert client.circuit.state == "open"
+
+        # Wait for recovery timeout
+        client.circuit._last_error_time -= 61  # Force timeout
+
+        # Half-open test request
+        data = client.request(method="GET", endpoint="/test")
+        assert client.circuit.state == "closed"
+        assert data == {"name": "test"}
+
+        # Verify normal operation
+        data = client.request(method="GET", endpoint="/test")
+        assert data == {"name": "test"}
+
+
+def test_request_batching(client):
+    """Test request batching."""
+    mock_response = Mock(status_code=200, json=lambda: [{"id": 1}, {"id": 2}, {"id": 3}])
+
+    with patch.object(client.http, "request", return_value=mock_response):
+        results = client.batch_request(
+            method="GET",
+            endpoint="/test",
+            ids=[1, 2, 3],
+            batch_size=2,
+        )
+
+    assert len(results) == 3
+    assert all(r["id"] in [1, 2, 3] for r in results)
+    # Verify batching
+    assert client.http.request.call_count == 2
+
+
+def test_enhanced_error_recovery(client):
+    """Test enhanced error recovery with fallback strategies."""
+    mock_responses = [
+        # Primary endpoint fails
+        Mock(side_effect=requests.exceptions.ConnectionError("Primary failed")),
+        # Fallback endpoint succeeds
+        Mock(status_code=200, json=lambda: {"name": "test", "source": "fallback"}),
+    ]
+
+    with patch.object(client.http, "request", side_effect=mock_responses):
+        data = client.request(
+            method="GET",
+            endpoint="/test",
+            fallback_endpoints=["/test-fallback"],
+            retry_strategy="fallback_endpoints",
+        )
+
+    assert data["source"] == "fallback"
+    assert client.processed_items == 1
+    assert client.failed_items == 0
+
+
+def test_response_parsing_with_retries(client):
+    """Test response parsing with retry on parse error."""
+    mock_responses = [
+        # First attempt: Invalid JSON
+        Mock(status_code=200, json=Mock(side_effect=ValueError("Invalid JSON"))),
+        # Second attempt: Valid JSON
+        Mock(status_code=200, json=lambda: {"name": "test", "value": 50}),
+    ]
+
+    with patch.object(client.http, "request", side_effect=mock_responses):
+        data = client.request(
+            method="GET",
+            endpoint="/test",
+            retry_on_parse_error=True,
+        )
+
+    assert data == {"name": "test", "value": 50}
+    assert client.processed_items == 1
+    assert client.validation_errors == 0
 
 
 def test_validation_error(client):

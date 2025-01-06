@@ -43,7 +43,7 @@ class WebClientError(Exception):
         details: Optional[Dict[str, Any]] = None,
     ):
         """Initialize error.
-        
+
         Args:
             message: Error message
             source: Error source
@@ -62,7 +62,7 @@ class RateLimitError(WebClientError):
 
     def __init__(self, source: str, retry_after: Optional[int] = None):
         """Initialize error.
-        
+
         Args:
             source: Error source
             retry_after: Optional seconds to wait before retry
@@ -86,7 +86,7 @@ class ValidationError(WebClientError):
         issues: List[ValidationIssue],
     ):
         """Initialize error.
-        
+
         Args:
             message: Error message
             source: Error source
@@ -117,7 +117,7 @@ class WebClient(ABC):
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize client.
-        
+
         Args:
             name: Client name
             base_url: Base URL for all requests
@@ -162,11 +162,181 @@ class WebClient(ABC):
     @abstractmethod
     def _get_validation_config(self) -> ValidationConfig:
         """Get validation configuration.
-        
+
         Returns:
             Validation configuration
         """
         pass
+
+    def _make_request(
+        self,
+        method: str,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
+        json: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+        use_cache: bool = True,
+    ) -> requests.Response:
+        """Make HTTP request.
+
+        Args:
+            method: HTTP method
+            url: Request URL
+            params: Query parameters
+            json: JSON body
+            headers: Request headers
+            use_cache: Whether to use cache
+
+        Returns:
+            Response object
+
+        Raises:
+            WebClientError: For request errors
+        """
+        try:
+            return self.http.request(
+                method=method,
+                url=url,
+                params=params,
+                json=json,
+                headers=headers,
+                use_cache=use_cache,
+            )
+        except requests.exceptions.RequestException as e:
+            self.http_errors += 1
+            raise WebClientError(
+                message=str(e),
+                source=self.name,
+                status_code=e.response.status_code if hasattr(e, "response") else None,
+            )
+
+    def _handle_rate_limit(
+        self,
+        response: requests.Response,
+        retry_on_rate_limit: bool = True,
+    ) -> bool:
+        """Handle rate limiting.
+
+        Args:
+            response: Response object
+            retry_on_rate_limit: Whether to retry
+
+        Returns:
+            Whether to retry request
+        """
+        if response.status_code == 429 and retry_on_rate_limit:
+            retry_after = int(response.headers.get("Retry-After", "60"))
+            self.logger.warning(f"Rate limited, waiting {retry_after}s before retry")
+            import time
+
+            time.sleep(retry_after)
+            return True
+        return False
+
+    def _parse_response(
+        self,
+        response: requests.Response,
+        endpoint: str,
+        retry_on_parse_error: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """Parse response data.
+
+        Args:
+            response: Response object
+            endpoint: API endpoint
+            retry_on_parse_error: Whether to retry on parse error
+
+        Returns:
+            Parsed data or None to retry
+
+        Raises:
+            ValueError: For parse errors
+        """
+        try:
+            return response.json()
+        except ValueError as e:
+            if retry_on_parse_error:
+                self.logger.warning(f"Parse error for {endpoint}, retrying: {e}")
+                return None
+            raise
+
+    def _validate_data(
+        self,
+        data: Dict[str, Any],
+        schema_name: str,
+        endpoint: str,
+    ) -> Dict[str, Any]:
+        """Validate response data.
+
+        Args:
+            data: Response data
+            schema_name: Schema name
+            endpoint: API endpoint
+
+        Returns:
+            Validated data
+        """
+        validated_data, issues = self.validate_response(data, schema_name)
+        if issues:
+            self.logger.warning(f"Validation issues for {endpoint}: {issues}")
+        return validated_data
+
+    def _try_endpoint(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict[str, Any]] = None,
+        json: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+        use_cache: bool = True,
+        schema_name: Optional[str] = None,
+        retry_on_rate_limit: bool = True,
+        retry_on_parse_error: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """Try a single endpoint with retries.
+
+        Args:
+            method: HTTP method
+            endpoint: API endpoint
+            params: Query parameters
+            json: JSON body
+            headers: Request headers
+            use_cache: Whether to use cache
+            schema_name: Schema name for validation
+            retry_on_rate_limit: Whether to retry on rate limit
+            retry_on_parse_error: Whether to retry on parse error
+
+        Returns:
+            Response data or None if should retry with next endpoint
+
+        Raises:
+            WebClientError: For request errors
+        """
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        response = self._make_request(
+            method=method,
+            url=url,
+            params=params,
+            json=json,
+            headers=headers,
+            use_cache=use_cache,
+        )
+
+        # Handle rate limiting
+        if self._handle_rate_limit(response, retry_on_rate_limit):
+            return None
+
+        # Parse response
+        data = self._parse_response(response, endpoint, retry_on_parse_error)
+        if data is None:  # Retry on parse error
+            return None
+
+        # Validate response
+        if schema_name:
+            data = self._validate_data(data, schema_name, endpoint)
+
+        self.processed_items += 1
+        return data
 
     def request(
         self,
@@ -177,9 +347,13 @@ class WebClient(ABC):
         headers: Optional[Dict[str, str]] = None,
         use_cache: bool = True,
         schema_name: Optional[str] = None,
+        retry_on_rate_limit: bool = True,
+        retry_on_parse_error: bool = True,
+        fallback_endpoints: Optional[List[str]] = None,
+        retry_strategy: str = "exponential_backoff",
     ) -> Dict[str, Any]:
         """Make HTTP request with validation and error handling.
-        
+
         Args:
             method: HTTP method (GET, POST, etc)
             endpoint: API endpoint (will be joined with base_url)
@@ -188,48 +362,86 @@ class WebClient(ABC):
             headers: Additional headers
             use_cache: Whether to use cache for GET requests
             schema_name: Optional schema name for validation
-            
+            retry_on_rate_limit: Whether to retry on rate limit errors
+            retry_on_parse_error: Whether to retry on parse errors
+            fallback_endpoints: List of fallback endpoints to try
+            retry_strategy: Retry strategy (exponential_backoff, fallback_endpoints)
+
         Returns:
             Response data
-            
+
         Raises:
             WebClientError: For client errors
             ValidationError: For validation errors
         """
-        try:
-            # Make request
-            url = f"{self.base_url}/{endpoint.lstrip('/')}"
-            response = self.http.request(
+        endpoints = [endpoint] + (fallback_endpoints or [])
+        last_error = None
+
+        for current_endpoint in endpoints:
+            try:
+                data = self._try_endpoint(
+                    method=method,
+                    endpoint=current_endpoint,
+                    params=params,
+                    json=json,
+                    headers=headers,
+                    use_cache=use_cache,
+                    schema_name=schema_name,
+                    retry_on_rate_limit=retry_on_rate_limit,
+                    retry_on_parse_error=retry_on_parse_error,
+                )
+                if data is not None:
+                    return data
+            except WebClientError as e:
+                last_error = e
+                self.logger.warning(f"Request failed for {current_endpoint}: {e}")
+                if current_endpoint == endpoints[-1]:
+                    self.failed_items += 1
+                    raise
+
+        # Should never reach here
+        assert last_error is not None
+        raise last_error
+
+    def batch_request(
+        self,
+        method: str,
+        endpoint: str,
+        ids: List[Any],
+        batch_size: int = 50,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
+        """Make batched requests.
+
+        Args:
+            method: HTTP method
+            endpoint: API endpoint
+            ids: List of IDs to batch
+            batch_size: Batch size
+            **kwargs: Additional arguments for request()
+
+        Returns:
+            List of response data
+        """
+        results = []
+        for i in range(0, len(ids), batch_size):
+            batch = ids[i : i + batch_size]
+            if "params" in kwargs:
+                kwargs["params"]["ids"] = batch
+            else:
+                kwargs["params"] = {"ids": batch}
+
+            batch_data = self.request(
                 method=method,
-                url=url,
-                params=params,
-                json=json,
-                headers=headers,
-                use_cache=use_cache,
+                endpoint=endpoint,
+                **kwargs,
             )
+            if isinstance(batch_data, list):
+                results.extend(batch_data)
+            else:
+                results.append(batch_data)
 
-            # Parse response
-            data = response.json()
-
-            # Validate response if schema provided
-            if schema_name:
-                data, issues = self.validate_response(data, schema_name)
-                if issues:
-                    self.logger.warning(
-                        f"Validation issues for {endpoint}: {issues}"
-                    )
-
-            self.processed_items += 1
-            return data
-
-        except requests.exceptions.RequestException as e:
-            self.http_errors += 1
-            self.failed_items += 1
-            raise WebClientError(
-                message=str(e),
-                source=self.name,
-                status_code=e.response.status_code if hasattr(e, "response") else None,
-            )
+        return results
 
     def validate_response(
         self,
@@ -237,14 +449,14 @@ class WebClient(ABC):
         schema_name: str,
     ) -> Tuple[Dict[str, Any], List[ValidationIssue]]:
         """Validate response data.
-        
+
         Args:
             data: Response data
             schema_name: Schema name
-            
+
         Returns:
             Tuple of (cleaned data, validation issues)
-            
+
         Raises:
             ValidationError: If validation fails
         """
@@ -290,13 +502,13 @@ class WebClient(ABC):
         normalize_whitespace: bool = True,
     ) -> str:
         """Clean text data.
-        
+
         Args:
             text: Text to clean
             strip_html: Whether to strip HTML
             convert_markdown: Whether to convert markdown
             normalize_whitespace: Whether to normalize whitespace
-            
+
         Returns:
             Cleaned text
         """
@@ -315,16 +527,16 @@ class WebClient(ABC):
         round_digits: Optional[int] = None,
     ) -> float:
         """Clean numeric data.
-        
+
         Args:
             value: Value to clean
             min_value: Optional minimum value
             max_value: Optional maximum value
             round_digits: Optional number of decimal places
-            
+
         Returns:
             Cleaned number
-            
+
         Raises:
             ValueError: If value is invalid
         """
@@ -341,14 +553,14 @@ class WebClient(ABC):
         timezone: str = "UTC",
     ) -> datetime:
         """Clean timestamp data.
-        
+
         Args:
             value: Value to clean
             timezone: Timezone name
-            
+
         Returns:
             Cleaned datetime
-            
+
         Raises:
             ValueError: If value is invalid
         """
@@ -359,13 +571,13 @@ class WebClient(ABC):
 
     def clean_duration(self, value: Any) -> str:
         """Clean duration data.
-        
+
         Args:
             value: Value to clean
-            
+
         Returns:
             Cleaned duration string
-            
+
         Raises:
             ValueError: If value is invalid
         """
@@ -373,7 +585,7 @@ class WebClient(ABC):
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get client metrics.
-        
+
         Returns:
             Client metrics
         """

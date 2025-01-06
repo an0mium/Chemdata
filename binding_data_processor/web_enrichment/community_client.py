@@ -4,14 +4,21 @@ This module provides functionality to fetch and parse data from community source
 - PsychonautWiki
 - Erowid
 - TripSit
+
+Enhanced with:
+- Circuit breaker pattern for resilience
+- Better error handling and recovery
+- Improved metrics collection
+- Enhanced text classification
+- Data validation and processing
 """
 
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
+from datetime import datetime
 import json
 import re
-from datetime import datetime
 
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -19,10 +26,14 @@ from transformers import pipeline
 
 from .base_client import BaseWebClient, ValidationError
 from ..models.compound import Compound
+from ..pipeline.infrastructure.circuit_breaker import CircuitConfig
+
+if TYPE_CHECKING:
+    from .http_client_enhanced import HTTPClientEnhanced
 
 
 class CommunityClient(BaseWebClient):
-    """Client for community data sources."""
+    """Enhanced client for community data sources."""
 
     # API endpoints
     PSYCHONAUT_API = "https://api.psychonautwiki.org"
@@ -36,21 +47,19 @@ class CommunityClient(BaseWebClient):
         "erowid": ["title", "substance", "body_text"],
     }
 
+    # Regex patterns for validation
+    NAME_PATTERN = re.compile(r"^[a-zA-Z0-9\-\(\)\[\] ]+$")
+    URL_PATTERN = re.compile(r"^https?://[^\s/$.?#].[^\s]*$")
+
     def __init__(
         self,
-        http_client: Optional["HTTPClient"] = None,
+        http_client: Optional["HTTPClientEnhanced"] = None,
         model_dir: Optional[Path] = None,
         cache_dir: Optional[Path] = None,
         logger: Optional[logging.Logger] = None,
+        circuit_config: Optional[CircuitConfig] = None,
     ):
-        """Initialize community client.
-        
-        Args:
-            http_client: Optional HTTP client to use
-            model_dir: Optional directory for ML models
-            cache_dir: Optional directory for caching
-            logger: Optional logger instance
-        """
+        """Initialize community client."""
         super().__init__(http_client, model_dir, cache_dir, logger)
 
         # Initialize text classifier for experience reports
@@ -64,41 +73,123 @@ class CommunityClient(BaseWebClient):
         else:
             self.text_classifier = None
 
+        # Initialize tracking
+        self.processed_compounds: List[str] = []
+        self.failed_compounds: List[str] = []
+        self.source_stats = {
+            "psychonaut": {"success": 0, "failure": 0},
+            "tripsit": {"success": 0, "failure": 0},
+            "erowid": {"success": 0, "failure": 0},
+        }
+
+        # Initialize data processing
+        self.reports_df = pd.DataFrame()
+
     def process_compounds(
         self,
         compounds: List[Compound],
         skip_predictions: bool = False,
         use_cache: bool = True,
     ) -> None:
-        """Process list of compounds.
-        
-        Args:
-            compounds: List of compounds to process
-            skip_predictions: Whether to skip ML predictions
-            use_cache: Whether to use cached results
-        """
+        """Process list of compounds."""
         for compound in compounds:
             try:
-                data = self.get_compound_data(
-                    compound.name,
-                    compound.cas_number,
-                    use_cache=use_cache,
-                )
-                if data:
-                    compound.community_data = data
-                    
-                    # Add references
-                    if "references" in data:
-                        for ref in data["references"]:
-                            if "doi" in ref:
-                                compound.reference_dois.add(ref["doi"])
-                            if "pubmed_id" in ref:
-                                compound.reference_pmids.add(ref["pubmed_id"])
-                            if "url" in ref:
-                                compound.reference_urls[ref["title"]] = ref["url"]
-
+                self._process_single_compound(compound, skip_predictions, use_cache)
+            except ValidationError as e:
+                self._handle_compound_error(compound, e, "Validation error")
             except Exception as e:
-                self.logger.error(f"Error processing {compound.name}: {str(e)}")
+                self._handle_compound_error(compound, e, "Error processing")
+
+    def _process_single_compound(
+        self,
+        compound: Compound,
+        skip_predictions: bool,
+        use_cache: bool,
+    ) -> None:
+        """Process a single compound."""
+        # Validate compound name
+        if not self._validate_name(compound.name):
+            raise ValidationError(f"Invalid compound name: {compound.name}")
+
+        # Get compound data
+        data = self.get_compound_data(
+            compound.name,
+            compound.cas_number,
+            use_cache=use_cache,
+        )
+
+        if not data:
+            self.failed_compounds.append(compound.name)
+            return
+
+        # Update compound with data
+        self._update_compound_data(compound, data)
+        self.processed_compounds.append(compound.name)
+
+    def _update_compound_data(self, compound: Compound, data: Dict[str, Any]) -> None:
+        """Update compound with fetched data."""
+        compound.community_data = data
+
+        # Add references
+        if "references" in data:
+            self._add_compound_references(compound, data["references"])
+
+        # Process Erowid reports if available
+        if "erowid" in data and data["erowid"].get("reports"):
+            self._process_reports(compound.name, data["erowid"]["reports"])
+
+    def _add_compound_references(
+        self,
+        compound: Compound,
+        references: List[Dict[str, Any]],
+    ) -> None:
+        """Add references to compound."""
+        for ref in references:
+            if "doi" in ref:
+                compound.reference_dois.add(ref["doi"])
+            if "pubmed_id" in ref:
+                compound.reference_pmids.add(ref["pubmed_id"])
+            if "url" in ref and self._validate_url(ref["url"]):
+                compound.reference_urls[ref["title"]] = ref["url"]
+
+    def _handle_compound_error(
+        self,
+        compound: Compound,
+        error: Exception,
+        prefix: str,
+    ) -> None:
+        """Handle errors during compound processing."""
+        self.logger.error(f"{prefix} {compound.name}: {str(error)}")
+        self.failed_compounds.append(compound.name)
+
+    def _validate_name(self, name: str) -> bool:
+        """Validate compound name format."""
+        return bool(self.NAME_PATTERN.match(name))
+
+    def _validate_url(self, url: str) -> bool:
+        """Validate URL format."""
+        return bool(self.URL_PATTERN.match(url))
+
+    def _process_reports(self, compound_name: str, reports: List[Dict[str, Any]]) -> None:
+        """Process and analyze experience reports."""
+        # Convert reports to DataFrame
+        df = pd.DataFrame(reports)
+        df["compound"] = compound_name
+
+        # Parse dates
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+        # Add report classification if available
+        if "classification" in df.columns:
+            df["sentiment"] = df["classification"].apply(lambda x: x.get("label"))
+            df["confidence"] = df["classification"].apply(lambda x: x.get("score"))
+
+        # Calculate text statistics
+        df["word_count"] = df["body_text"].str.split().str.len()
+        df["avg_word_length"] = df["body_text"].str.split().apply(lambda x: sum(len(w) for w in x) / len(x) if x else 0)
+
+        # Append to main DataFrame
+        self.reports_df = pd.concat([self.reports_df, df], ignore_index=True)
 
     def get_compound_data(
         self,
@@ -106,16 +197,7 @@ class CommunityClient(BaseWebClient):
         cas_number: Optional[str] = None,
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
-        """Get data for a single compound.
-        
-        Args:
-            name: Compound name
-            cas_number: Optional CAS number
-            use_cache: Whether to use cached results
-            
-        Returns:
-            Dictionary of compound data or None if not found
-        """
+        """Get data for a single compound."""
         data = {}
 
         # Get PsychonautWiki data
@@ -123,24 +205,36 @@ class CommunityClient(BaseWebClient):
             psychonaut_data = self._get_psychonaut_data(name, use_cache)
             if psychonaut_data:
                 data["psychonaut"] = psychonaut_data
+                self.source_stats["psychonaut"]["success"] += 1
+            else:
+                self.source_stats["psychonaut"]["failure"] += 1
         except Exception as e:
             self.logger.error(f"Error getting PsychonautWiki data: {str(e)}")
+            self.source_stats["psychonaut"]["failure"] += 1
 
         # Get TripSit data
         try:
             tripsit_data = self._get_tripsit_data(name, use_cache)
             if tripsit_data:
                 data["tripsit"] = tripsit_data
+                self.source_stats["tripsit"]["success"] += 1
+            else:
+                self.source_stats["tripsit"]["failure"] += 1
         except Exception as e:
             self.logger.error(f"Error getting TripSit data: {str(e)}")
+            self.source_stats["tripsit"]["failure"] += 1
 
         # Get Erowid data
         try:
             erowid_data = self._get_erowid_data(name, use_cache)
             if erowid_data:
                 data["erowid"] = erowid_data
+                self.source_stats["erowid"]["success"] += 1
+            else:
+                self.source_stats["erowid"]["failure"] += 1
         except Exception as e:
             self.logger.error(f"Error getting Erowid data: {str(e)}")
+            self.source_stats["erowid"]["failure"] += 1
 
         return data if data else None
 
@@ -149,15 +243,7 @@ class CommunityClient(BaseWebClient):
         name: str,
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
-        """Get data from PsychonautWiki.
-        
-        Args:
-            name: Compound name
-            use_cache: Whether to use cached results
-            
-        Returns:
-            Dictionary of PsychonautWiki data or None if not found
-        """
+        """Get data from PsychonautWiki."""
         query = """
         query Substance($query: String) {
             substances(query: $query) {
@@ -250,6 +336,7 @@ class CommunityClient(BaseWebClient):
                 self.PSYCHONAUT_API,
                 json_data={"query": query, "variables": {"query": name}},
                 use_cache=use_cache,
+                fallback=self._get_cached_psychonaut_data,
             )
             data = response.json()
 
@@ -270,20 +357,13 @@ class CommunityClient(BaseWebClient):
         name: str,
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
-        """Get data from TripSit.
-        
-        Args:
-            name: Compound name
-            use_cache: Whether to use cached results
-            
-        Returns:
-            Dictionary of TripSit data or None if not found
-        """
+        """Get data from TripSit."""
         try:
             response = self.http.get(
                 self.TRIPSIT_API,
                 params={"name": name},
                 use_cache=use_cache,
+                fallback=self._get_cached_tripsit_data,
             )
             data = response.json()
 
@@ -302,15 +382,7 @@ class CommunityClient(BaseWebClient):
         name: str,
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
-        """Get data from Erowid.
-        
-        Args:
-            name: Compound name
-            use_cache: Whether to use cached results
-            
-        Returns:
-            Dictionary of Erowid data or None if not found
-        """
+        """Get data from Erowid."""
         try:
             # Search for experience reports
             search_url = f"{self.EROWID_BASE}/search.php"
@@ -318,6 +390,7 @@ class CommunityClient(BaseWebClient):
                 search_url,
                 params={"q": name},
                 use_cache=use_cache,
+                fallback=self._get_cached_erowid_data,
             )
 
             # Parse search results
@@ -339,9 +412,7 @@ class CommunityClient(BaseWebClient):
 
                     # Classify report if model available
                     if self.text_classifier:
-                        classification = self.text_classifier(
-                            report["body_text"][:512]
-                        )[0]
+                        classification = self.text_classifier(report["body_text"][:512])[0]
                         report["classification"] = {
                             "label": classification["label"],
                             "score": classification["score"],
@@ -364,3 +435,93 @@ class CommunityClient(BaseWebClient):
             self.logger.error(f"Error querying Erowid: {str(e)}")
 
         return None
+
+    def _get_cached_psychonaut_data(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get cached PsychonautWiki data."""
+        if not self.cache_dir:
+            return None
+
+        try:
+            cache_file = self.cache_dir / f"psychonaut_{name}.json"
+            if not cache_file.exists():
+                return None
+
+            with cache_file.open() as f:
+                return json.load(f)
+
+        except Exception as e:
+            self.logger.error(f"Error reading cached PsychonautWiki data: {str(e)}")
+            return None
+
+    def _get_cached_tripsit_data(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get cached TripSit data."""
+        if not self.cache_dir:
+            return None
+
+        try:
+            cache_file = self.cache_dir / f"tripsit_{name}.json"
+            if not cache_file.exists():
+                return None
+
+            with cache_file.open() as f:
+                return json.load(f)
+
+        except Exception as e:
+            self.logger.error(f"Error reading cached TripSit data: {str(e)}")
+            return None
+
+    def _get_cached_erowid_data(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get cached Erowid data."""
+        if not self.cache_dir:
+            return None
+
+        try:
+            cache_file = self.cache_dir / f"erowid_{name}.json"
+            if not cache_file.exists():
+                return None
+
+            with cache_file.open() as f:
+                return json.load(f)
+
+        except Exception as e:
+            self.logger.error(f"Error reading cached Erowid data: {str(e)}")
+            return None
+
+    def get_metrics(self) -> Dict[str, Any]:
+        """Get client metrics."""
+        total = len(self.processed_compounds) + len(self.failed_compounds)
+        success_rate = len(self.processed_compounds) / total if total > 0 else 0
+
+        return {
+            "processed_compounds": len(self.processed_compounds),
+            "failed_compounds": len(self.failed_compounds),
+            "success_rate": success_rate,
+            "source_stats": self.source_stats,
+            "reports_stats": self._get_reports_stats(),
+        }
+
+    def _get_reports_stats(self) -> Dict[str, Any]:
+        """Get statistics about processed reports."""
+        if self.reports_df.empty:
+            return {}
+
+        stats = {
+            "total_reports": len(self.reports_df),
+            "compounds_with_reports": self.reports_df["compound"].nunique(),
+            "avg_reports_per_compound": (len(self.reports_df) / self.reports_df["compound"].nunique()),
+            "avg_word_count": self.reports_df["word_count"].mean(),
+            "avg_word_length": self.reports_df["avg_word_length"].mean(),
+        }
+
+        # Add date range if available
+        if "date" in self.reports_df.columns:
+            stats["date_range"] = {
+                "start": self.reports_df["date"].min().isoformat(),
+                "end": self.reports_df["date"].max().isoformat(),
+            }
+
+        # Add sentiment stats if available
+        if "sentiment" in self.reports_df.columns:
+            stats["sentiment_stats"] = self.reports_df["sentiment"].value_counts().to_dict()
+
+        return stats

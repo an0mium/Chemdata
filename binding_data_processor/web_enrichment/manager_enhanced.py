@@ -1,10 +1,11 @@
-"""Enhanced web enrichment manager.
+"""Enhanced web enrichment manager with Crawl4AI integration.
 
 This module provides an enhanced manager class that coordinates web enrichment clients
-with improved error handling and resilience through circuit breakers:
+with improved error handling, resilience through circuit breakers, and Crawl4AI integration:
 - Swiss tools (SwissTargetPrediction, SwissADME)
 - Community sources (PsychonautWiki, Erowid, TripSit)
 - Social media (Reddit, Twitter)
+- Research papers and patents (via Crawl4AI)
 
 The manager handles:
 1. Client initialization and configuration
@@ -15,9 +16,10 @@ The manager handles:
 """
 
 import logging
+import asyncio
 from pathlib import Path
-from typing import Optional, Dict, Any, List
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional, Dict, Any, List, Tuple
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -27,14 +29,14 @@ from .http_client_enhanced import HTTPClientEnhanced
 from .swiss_client import SwissClient
 from .community_client import CommunityClient
 from .social_client import SocialClient
-from ..models.compound import Compound
+from .crawl4ai_client import Crawl4AIClient, ResearchData, PatentData, CommunityData
 from ..pipeline.infrastructure.circuit_breaker import CircuitConfig
 
 
 @dataclass
 class EnrichmentConfig:
     """Configuration for web enrichment."""
-    
+
     # API credentials
     reddit_client_id: Optional[str] = None
     reddit_client_secret: Optional[str] = None
@@ -55,8 +57,20 @@ class EnrichmentConfig:
     circuit_config: Optional[CircuitConfig] = None
 
 
+@dataclass
+class EnrichmentResult:
+    """Web enrichment result."""
+
+    research_papers: List[ResearchData]
+    patents: List[PatentData]
+    community_posts: List[CommunityData]
+    swiss_data: Dict[str, Any]
+    social_data: Dict[str, Any]
+    metadata: Dict[str, Any]
+
+
 class WebEnrichmentManagerEnhanced:
-    """Enhanced manager for web enrichment clients."""
+    """Enhanced web enrichment manager."""
 
     def __init__(
         self,
@@ -64,7 +78,7 @@ class WebEnrichmentManagerEnhanced:
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize web enrichment manager.
-        
+
         Args:
             config: Enrichment configuration
             logger: Optional logger instance
@@ -105,155 +119,240 @@ class WebEnrichmentManagerEnhanced:
             logger=self.logger,
         )
 
+        self.crawl4ai_client = Crawl4AIClient()
+
         # Initialize thread pool
         self.executor = ThreadPoolExecutor(
             max_workers=config.n_workers,
             thread_name_prefix="enrichment",
         )
 
-    def enrich_compounds(
+    def _get_config_defaults(
         self,
-        compounds: List[Compound],
+        skip_predictions: Optional[bool],
+        skip_web_data: Optional[bool],
+        use_cache: Optional[bool],
+    ) -> Tuple[bool, bool, bool]:
+        """Get config defaults for optional parameters."""
+        if skip_predictions is None:
+            skip_pred = self.config.skip_predictions
+        else:
+            skip_pred = skip_predictions
+
+        if skip_web_data is None:
+            skip_web = self.config.skip_web_data
+        else:
+            skip_web = skip_web_data
+
+        if use_cache is None:
+            use_cache_val = self.config.use_cache
+        else:
+            use_cache_val = use_cache
+
+        return skip_pred, skip_web, use_cache_val
+
+    def _build_tasks(
+        self,
+        query: str,
+        name: str,
+        skip_web_data: bool,
+        skip_predictions: bool,
+    ) -> List[asyncio.Task]:
+        """Build list of enrichment tasks."""
+        tasks = []
+        if not skip_web_data:
+            tasks.extend(
+                [
+                    self.crawl4ai_client.scrape_research(query),
+                    self.crawl4ai_client.scrape_patents(query),
+                    self.crawl4ai_client.scrape_community(query),
+                    self.social_client.get_compound_mentions(name),
+                ]
+            )
+        if not skip_predictions:
+            tasks.append(self.swiss_client.get_compound_data(name))
+        return tasks
+
+    def _parse_results(
+        self,
+        results: List[Any],
+        skip_web_data: bool,
+        skip_predictions: bool,
+    ) -> Tuple[List[Any], List[Any], List[Any], Dict[str, Any], Dict[str, Any]]:
+        """Parse enrichment results."""
+        research_papers = []
+        patents = []
+        community_posts = []
+        swiss_data = {}
+        social_data = {}
+
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                self.logger.error(f"Error in task {i}: {str(result)}")
+                continue
+
+            if not skip_web_data:
+                if i == 0:
+                    research_papers = result
+                elif i == 1:
+                    patents = result
+                elif i == 2:
+                    community_posts = result
+                elif i == 3:
+                    social_data = result
+            elif not skip_predictions and i == 0:
+                swiss_data = result
+
+        return research_papers, patents, community_posts, swiss_data, social_data
+
+    def _build_metadata(
+        self,
+        query: str,
+        use_cache: bool,
+        research_papers: List[Any],
+        patents: List[Any],
+        community_posts: List[Any],
+        swiss_data: Dict[str, Any],
+        social_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Build metadata for enrichment result."""
+        metadata = {
+            "sources": [],
+            "query": query,
+            "timestamp": datetime.now().isoformat(),
+            "cache_used": use_cache,
+        }
+        if research_papers:
+            metadata["sources"].append("research_papers")
+        if patents:
+            metadata["sources"].append("patents")
+        if community_posts:
+            metadata["sources"].append("community_posts")
+        if swiss_data:
+            metadata["sources"].append("swiss_data")
+        if social_data:
+            metadata["sources"].append("social_data")
+        return metadata
+
+    async def enrich_compound(
+        self,
+        name: str,
+        smiles: Optional[str] = None,
         skip_predictions: Optional[bool] = None,
         skip_web_data: Optional[bool] = None,
         use_cache: Optional[bool] = None,
-    ) -> None:
-        """Enrich compounds with web data.
-        
+    ) -> EnrichmentResult:
+        """Enrich compound with web data.
+
         Args:
-            compounds: List of compounds to enrich
+            name: Compound name
+            smiles: Optional SMILES structure
             skip_predictions: Whether to skip predictions (overrides config)
             skip_web_data: Whether to skip web data (overrides config)
             use_cache: Whether to use cached results (overrides config)
-        """
-        # Use config defaults if not specified
-        skip_predictions = (
-            skip_predictions
-            if skip_predictions is not None
-            else self.config.skip_predictions
-        )
-        skip_web_data = (
-            skip_web_data
-            if skip_web_data is not None
-            else self.config.skip_web_data
-        )
-        use_cache = (
-            use_cache
-            if use_cache is not None
-            else self.config.use_cache
-        )
 
-        # Process compounds in batches
-        for i in range(0, len(compounds), self.config.batch_size):
-            batch = compounds[i:i + self.config.batch_size]
-            self._process_batch(
-                batch,
-                skip_predictions=skip_predictions,
-                skip_web_data=skip_web_data,
-                use_cache=use_cache,
+        Returns:
+            Enrichment result with data from all sources
+        """
+        try:
+            # Get config defaults
+            config_args = (skip_predictions, skip_web_data, use_cache)
+            defaults = self._get_config_defaults(*config_args)
+            skip_pred, skip_web, use_cache_val = defaults
+
+            # Build search query
+            query = name if not smiles else f"{name} {smiles}"
+
+            # Run enrichment tasks
+            tasks = self._build_tasks(query, name, skip_web, skip_pred)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Parse results
+            result_data = self._parse_results(results, skip_web, skip_pred)
+            (
+                research_papers,
+                patents,
+                community_posts,
+                swiss_data,
+                social_data,
+            ) = result_data
+
+            # Build metadata
+            metadata = self._build_metadata(
+                query,
+                use_cache_val,
+                research_papers,
+                patents,
+                community_posts,
+                swiss_data,
+                social_data,
             )
 
-    def _process_batch(
+            return EnrichmentResult(
+                research_papers=research_papers,
+                patents=patents,
+                community_posts=community_posts,
+                swiss_data=swiss_data,
+                social_data=social_data,
+                metadata=metadata,
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error enriching {name}: {str(e)}")
+            raise
+
+    async def enrich_compounds(
         self,
-        compounds: List[Compound],
-        skip_predictions: bool,
-        skip_web_data: bool,
-        use_cache: bool,
-    ) -> None:
-        """Process a batch of compounds.
-        
+        compounds: List[Dict[str, str]],
+        skip_predictions: Optional[bool] = None,
+        skip_web_data: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
+    ) -> List[EnrichmentResult]:
+        """Enrich multiple compounds with web data.
+
         Args:
-            compounds: List of compounds to process
-            skip_predictions: Whether to skip predictions
-            skip_web_data: Whether to skip web data
-            use_cache: Whether to use cached results
+            compounds: List of compounds with name and optional SMILES
+            skip_predictions: Whether to skip predictions (overrides config)
+            skip_web_data: Whether to skip web data (overrides config)
+            use_cache: Whether to use cached results (overrides config)
+
+        Returns:
+            List of enrichment results
         """
-        # Submit enrichment tasks
-        futures = []
-        for compound in compounds:
-            futures.append(
-                self.executor.submit(
-                    self._enrich_compound,
-                    compound,
+        # Process compounds in batches
+        results = []
+        for i in range(0, len(compounds), self.config.batch_size):
+            batch = compounds[i : i + self.config.batch_size]
+
+            # Create tasks for batch
+            tasks = []
+            for compound in batch:
+                name = compound["name"]
+                smiles = compound.get("smiles")
+                task = self.enrich_compound(
+                    name,
+                    smiles=smiles,
                     skip_predictions=skip_predictions,
                     skip_web_data=skip_web_data,
                     use_cache=use_cache,
                 )
-            )
+                tasks.append(task)
 
-        # Process results with progress bar
-        for future in tqdm(
-            as_completed(futures),
-            total=len(futures),
-            desc="Enriching compounds",
-        ):
-            try:
-                future.result()
-            except Exception as e:
-                self.logger.error(f"Error enriching compound: {str(e)}")
+            # Process batch with progress bar
+            batch_results = []
+            for result in tqdm(
+                asyncio.as_completed(tasks),
+                total=len(tasks),
+                desc=f"Processing batch {i//self.config.batch_size + 1}",
+            ):
+                try:
+                    batch_results.append(await result)
+                except Exception as e:
+                    self.logger.error(f"Error in batch: {str(e)}")
 
-    def _enrich_compound(
-        self,
-        compound: Compound,
-        skip_predictions: bool,
-        skip_web_data: bool,
-        use_cache: bool,
-    ) -> None:
-        """Enrich a single compound.
-        
-        Args:
-            compound: Compound to enrich
-            skip_predictions: Whether to skip predictions
-            skip_web_data: Whether to skip web data
-            use_cache: Whether to use cached results
-        """
-        try:
-            # Initialize enrichment data
-            compound.swiss_data = {}
-            compound.community_data = {}
-            compound.social_data = {}
+            results.extend(batch_results)
 
-            # Get Swiss data
-            if not skip_predictions:
-                self.swiss_client.process_compounds(
-                    [compound],
-                    skip_predictions=skip_predictions,
-                    use_cache=use_cache,
-                )
-
-            # Get community data
-            if not skip_web_data:
-                self.community_client.process_compounds(
-                    [compound],
-                    skip_predictions=skip_predictions,
-                    use_cache=use_cache,
-                )
-
-            # Get social data
-            if not skip_web_data:
-                self.social_client.process_compounds(
-                    [compound],
-                    skip_predictions=skip_predictions,
-                    use_cache=use_cache,
-                )
-
-            # Add metadata
-            compound.enrichment_metadata = {
-                "timestamp": datetime.now().isoformat(),
-                "sources": [],
-            }
-            if compound.swiss_data:
-                compound.enrichment_metadata["sources"].append("swiss")
-            if compound.community_data:
-                compound.enrichment_metadata["sources"].append("community")
-            if compound.social_data:
-                compound.enrichment_metadata["sources"].append("social")
-
-        except Exception as e:
-            self.logger.error(
-                f"Error enriching {compound.name}: {str(e)}"
-            )
-            raise
+        return results
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get enrichment metrics including circuit breaker states."""
