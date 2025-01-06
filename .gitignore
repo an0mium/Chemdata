@@ -164,3 +164,8 @@ node_modules/
 
 # Project directories to keep
 !.gitkeep
+
+# Generated directories
+backups/
+deprecated/
+reports/
