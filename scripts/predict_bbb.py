@@ -14,9 +14,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from binding_data_processor.models.core import CompoundData
-from binding_data_processor.processors.psychopharm.predictors.bbb import (
-    BBBPredictorWebEnriched
-)
+from binding_data_processor.processors.psychopharm.predictors.bbb.base import BBBPredictorWebEnriched
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -29,10 +27,10 @@ def setup_logging(log_level: str = "INFO") -> None:
 
 def load_compounds(input_file: Path) -> List[CompoundData]:
     """Load compounds from TSV file.
-    
+
     Args:
         input_file: Path to TSV file containing compounds
-        
+
     Returns:
         List of CompoundData objects
     """
@@ -40,7 +38,7 @@ def load_compounds(input_file: Path) -> List[CompoundData]:
     with open(input_file) as f:
         # Skip header
         next(f)
-        
+
         # Parse compounds
         for line in f:
             name, smiles, cas = line.strip().split("\t")
@@ -50,7 +48,7 @@ def load_compounds(input_file: Path) -> List[CompoundData]:
                 cas_number=cas,
             )
             compounds.append(compound)
-            
+
     return compounds
 
 
@@ -60,7 +58,7 @@ def predict_bbb_permeability(
     cache_dir: Optional[Path] = None,
 ) -> None:
     """Make BBB permeability predictions for compounds.
-    
+
     Args:
         compounds: List of compounds to predict
         model_dir: Optional directory containing trained models
@@ -71,30 +69,28 @@ def predict_bbb_permeability(
         model_dir=str(model_dir) if model_dir else None,
         cache_dir=str(cache_dir) if cache_dir else None,
     )
-    
+
     # Make predictions
     for compound in compounds:
         logging.info(f"Predicting BBB permeability for {compound.name}")
-        
+
         result = predictor.predict(compound)
-        
+
         # Log results
         logging.info(f"BBB Class: {result.value}")
         logging.info(f"Confidence: {result.confidence:.2f}")
-        
+
         # Log supporting data
         logging.debug("Supporting Data:")
         for key, value in result.supporting_data.items():
             logging.debug(f"  {key}: {value}")
-            
+
     return predictor
 
 
 def main():
     """Main function."""
-    parser = argparse.ArgumentParser(
-        description="Predict BBB permeability for compounds"
-    )
+    parser = argparse.ArgumentParser(description="Predict BBB permeability for compounds")
     parser.add_argument(
         "input_file",
         type=Path,
