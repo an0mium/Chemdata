@@ -11,10 +11,10 @@ This roadmap integrates the enhancement plans for:
 ## Phase 1: Core Infrastructure (1 month)
 
 ### Week 1-2: Data Processing
-1. Model Consolidation
-   - Merge model definitions
-   - Consolidate analysis code
-   - Integrate psychopharm functionality
+1. Model Consolidation ✓
+   - Merge model definitions ✓
+   - Consolidate analysis code ✓
+   - Integrate psychopharm functionality ✓
 
 2. Data Sources
    - Implement ChEMBL client
@@ -32,17 +32,56 @@ This roadmap integrates the enhancement plans for:
    - Add rate limiting
    - Add error recovery
 
-2. Data Sources
+2. Crawl4AI Integration
+   - Set up Crawl4AI client
+   - Configure LLM-friendly outputs
+   - Add custom hooks
+   - Add screenshot capture
+   - Add JavaScript execution
+
+3. Data Sources
    - Add community sources
    - Add social monitoring
-   - Add patent search
+   - Patent search complete ✓
+     * Structure search ✓
+     * Family lookup ✓
+     * Analytics ✓
+     * Visualization ✓
 
-3. Processing
+4. Processing
    - Add validation
    - Enhance merging
    - Add analysis
 
-## Phase 2: ML Pipeline (1 month)
+## Phase 2: Community Integration (Priority)
+
+### Week 1-2: Reddit Integration
+1. OAuth Setup
+   - Implement OAuth flow
+   - Add token management
+   - Add error handling
+   - Add rate limiting
+
+2. Content Monitoring
+   - Add subreddit tracking
+   - Implement post analysis
+   - Add comment extraction
+   - Add trend detection
+
+### Week 3-4: Bluelight Integration
+1. Web Scraping
+   - Implement crawler
+   - Add content extraction
+   - Add error handling
+   - Add rate limiting
+
+2. Content Analysis
+   - Add text analysis
+   - Add sentiment analysis
+   - Add topic modeling
+   - Add safety monitoring
+
+## Phase 3: ML Pipeline (1 month)
 
 ### Week 1-2: Core ML
 1. Model Architecture
@@ -71,7 +110,7 @@ This roadmap integrates the enhancement plans for:
    - Enhance interactions
    - Add long-term effects
 
-## Phase 3: Web Interface (1 month)
+## Phase 4: Web Interface (1 month)
 
 ### Week 1-2: Core UI
 1. Component Architecture
@@ -94,30 +133,6 @@ This roadmap integrates the enhancement plans for:
    - Add activity plots
    - Add property plots
    - Add networks
-
-## Phase 4: Integration (1 month)
-
-### Week 1-2: Pipeline Integration
-1. Data Flow
-   - Add streaming
-   - Enhance batching
-   - Add validation
-
-2. Processing
-   - Add cross-validation
-   - Enhance monitoring
-   - Add reporting
-
-### Week 3-4: Export System
-1. Export Features
-   - Add formats
-   - Add templates
-   - Add reports
-
-2. Integration
-   - Add validation
-   - Add filtering
-   - Add formatting
 
 ## Infrastructure Requirements
 
@@ -161,14 +176,14 @@ This roadmap integrates the enhancement plans for:
 
 ## Next Steps
 
-### 1. Immediate Actions
-- Start model consolidation
-- Implement ChEMBL client
-- Add checkpointing
+### 1. Immediate Actions (Priority)
+- Set up Reddit OAuth integration
+- Implement Bluelight scraping
+- Add content analysis
 - Set up monitoring
 
 ### 2. Short-term Goals
-- Complete data sources
+- Complete community integration
 - Enhance ML pipeline
 - Improve web interface
 - Add visualization

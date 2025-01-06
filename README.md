@@ -1,29 +1,53 @@
 # ChemData
 
-A comprehensive pipeline for processing and analyzing chemical compound data, with a focus on psychopharmacological compounds. The system combines data from BindingDB with web-enriched information, patent data, and machine learning predictions.
+A comprehensive pipeline for processing and analyzing chemical compound data, with a focus on psychopharmacological compounds. The system combines data from multiple scientific sources with web-enriched information, patent data, and machine learning predictions.
 
 ## Features
 
-### Data Processing
-- **BindingDB Integration**
-  - Automated data processing
-  - Structure validation and standardization
-  - Property calculation
-  - Binding data analysis
+### Data Sources (✓ Completed)
+- **Scientific Sources ✓**
+  - BindingDB integration complete ✓
+  - ChEMBL API integration complete ✓
+  - PubChem integration complete ✓
+  - PubMed integration complete ✓
+  - Swiss* services complete ✓
 
-- **Additional Data Sources**
-  - ChEMBL API integration
-  - PubChem data harvesting
-  - Swiss* services (SwissTargetPrediction, SwissADME)
-  - Patent database search and analysis
+- **Patent Integration ✓**
+  - Espacenet integration complete ✓
+    * Structure search working ✓
+    * Family lookup working ✓
+    * Legal status tracking ✓
+  - USPTO integration complete ✓
+    * Document parsing working ✓
+    * Structure extraction working ✓
+    * Classification handling ✓
+  - Google Patents complete ✓
+    * Citation tracking working ✓
+    * Family lookup working ✓
+    * Analytics working ✓
+  - Patent visualization tools complete ✓
+  - Example data and scripts added ✓
+  - Documentation complete ✓
 
-- **Community Data**
-  - PsychonautWiki API integration
-  - Erowid experience reports
-  - TripSit factsheets
-  - Reddit discussions (r/researchchemicals, r/nootropics)
-  - Twitter mentions and trends
-  - Bluesky integration
+### Community Integration (Priority)
+- **Reddit Integration (30%)**
+  - Basic API integration complete
+  - OAuth flow needed
+  - Content monitoring needed
+  - Analysis needed
+  - Trend detection needed
+
+- **Bluelight Integration (Planned)**
+  - Web scraping setup needed
+  - Content extraction needed
+  - Safety monitoring needed
+  - Trend analysis needed
+
+- **Safety Analysis (Priority)**
+  - Content analysis needed
+  - Risk assessment needed
+  - Alert system needed
+  - Reporting tools needed
 
 ### Machine Learning
 - **Binding Predictions**
@@ -51,7 +75,7 @@ A comprehensive pipeline for processing and analyzing chemical compound data, wi
   - Side effect profiles
   - Abuse potential
 
-### Data Enrichment
+### Data Analysis
 - **Structure Analysis**
   - 2D/3D conformer generation
   - Pharmacophore detection
@@ -65,9 +89,9 @@ A comprehensive pipeline for processing and analyzing chemical compound data, wi
   - Blood-brain barrier penetration
 
 - **Literature Mining**
-  - PubMed integration
-  - Patent analysis
-  - Citation tracking
+  - PubMed integration complete ✓
+  - Patent analysis complete ✓
+  - Citation tracking (70%)
   - Regulatory status
 
 ### Web Interface
@@ -83,6 +107,7 @@ A comprehensive pipeline for processing and analyzing chemical compound data, wi
   - Safety information
   - Community data
   - Patent references
+  - Patent analytics visualization
 
 - **Export System**
   - Flexible column selection
@@ -205,6 +230,18 @@ python -m binding_data_processor.cli process-compounds \
     --enable-social
 ```
 
+Search patents:
+```bash
+python -m binding_data_processor.cli search-patents \
+    --query "5-HT2A antagonist" \
+    --structure "CC1=CC=C(C=C1)NC(=O)CN2CCN(CC2)CC3=CC=C(C=C3)F" \
+    --output patents.json \
+    --sources "espacenet,uspto,google" \
+    --include-family \
+    --track-status \
+    --extract-compounds
+```
+
 ### Web Application
 
 Run the web interface:
@@ -249,6 +286,27 @@ print(f"Confidence: {result.confidence:.2f}")
 print("\nSupporting Data:")
 for key, value in result.supporting_data.items():
     print(f"  {key}: {value}")
+
+# Search patents
+from binding_data_processor.web_enrichment.clients.patents import PatentClient
+
+client = PatentClient()
+results = client.search(
+    query="5-HT2A antagonist",
+    structure="CC1=CC=C(C=C1)NC(=O)CN2CCN(CC2)CC3=CC=C(C=C3)F",
+    sources=["espacenet", "uspto", "google"],
+    include_family=True,
+    track_status=True,
+    extract_compounds=True
+)
+
+for patent in results:
+    print(f"\nPatent: {patent.number}")
+    print(f"Title: {patent.title}")
+    print(f"Status: {patent.legal_status}")
+    print("\nCompounds:")
+    for compound in patent.compounds:
+        print(f"  - {compound.name}: {compound.smiles}")
 ```
 
 ### Data Processing Scripts
@@ -268,7 +326,7 @@ for key, value in result.supporting_data.items():
     --workers 4 \
     --batch-size 100 \
     --rate-limit 2 \
-    --sources "chembl,pubchem,swiss,community,social"
+    --sources "chembl,pubchem,swiss,community,social,patents"
 
 # Analyze compounds
 ./scripts/analyze_compounds.sh \
@@ -291,28 +349,37 @@ for key, value in result.supporting_data.items():
 ```
 binding_data_processor/
 ├── data_sources/          # Data source integrations
-│   ├── bindingdb.py      # BindingDB processing
-│   ├── chembl.py         # ChEMBL API client
-│   └── pubchem.py        # PubChem integration
-├── models/               # Data models and ML
-│   ├── compound/        # Compound data models
-│   └── psychopharm/     # Psychopharm models
-├── pipeline/            # Processing pipeline
-│   ├── base.py         # Pipeline coordination
-│   ├── ml.py          # ML predictions
-│   └── web.py         # Web enrichment
-├── processors/         # Data processors
-│   ├── structure/     # Structure processing
-│   ├── patent/       # Patent analysis
-│   └── psychopharm/  # Psychopharm analysis
-├── web_enrichment/    # Web data enrichment
-│   ├── manager.py    # Enrichment coordination
-│   ├── swiss/       # Swiss tools integration
-│   └── community/   # Community data sources
-└── web/             # Web interface
-    ├── api/        # REST API endpoints
+│   ├── scientific/       # Scientific sources ✓
+│   │   ├── bindingdb.py # BindingDB processing ✓
+│   │   ├── chembl.py    # ChEMBL API client ✓
+│   │   ├── pubchem.py   # PubChem integration ✓
+│   │   └── pubmed.py    # PubMed integration ✓
+│   ├── patents/         # Patent sources ✓
+│   │   ├── espacenet.py # Espacenet integration ✓
+│   │   ├── uspto.py     # USPTO integration ✓
+│   │   └── google.py    # Google Patents integration ✓
+│   └── community/       # Community sources (Priority)
+│       ├── reddit.py    # Reddit integration (30%)
+│       └── bluelight.py # Bluelight integration (Planned)
+├── models/              # Data models and ML
+│   ├── compound/       # Compound data models
+│   └── psychopharm/    # Psychopharm models
+├── pipeline/           # Processing pipeline
+│   ├── base.py        # Pipeline coordination
+│   ├── ml.py         # ML predictions
+│   └── web.py        # Web enrichment
+├── processors/        # Data processors
+│   ├── structure/    # Structure processing
+│   ├── patent/      # Patent analysis ✓
+│   └── psychopharm/ # Psychopharm analysis
+├── web_enrichment/   # Web data enrichment
+│   ├── manager.py   # Enrichment coordination
+│   ├── swiss/      # Swiss tools integration ✓
+│   └── community/  # Community data sources
+└── web/            # Web interface
+    ├── api/       # REST API endpoints
     ├── components/ # UI components
-    └── pages/      # Web pages
+    └── pages/     # Web pages
 ```
 
 ## Configuration
@@ -332,6 +399,11 @@ REDDIT_CLIENT_ID=your_client_id
 REDDIT_CLIENT_SECRET=your_client_secret
 TWITTER_API_KEY=your_api_key
 TWITTER_API_SECRET=your_api_secret
+
+# Patent API credentials
+ESPACENET_API_KEY=your_espacenet_key
+USPTO_API_KEY=your_uspto_key
+GOOGLE_PATENTS_API_KEY=your_google_key
 
 # Database
 POSTGRES_USER=chemdata
@@ -374,7 +446,10 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 - Open source community for various libraries used
 - PsychonautWiki and Erowid for community data
 - Swiss Institute of Bioinformatics for web services
-- Patent offices for making data publicly accessible
+- Patent offices for making data publicly accessible:
+  - European Patent Office (EPO) for Espacenet
+  - USPTO for patent data access
+  - Google for Google Patents
 
 ## Citation
 

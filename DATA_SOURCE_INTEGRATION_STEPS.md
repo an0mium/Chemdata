@@ -2,268 +2,193 @@
 
 ## Overview
 
-The project needs to integrate multiple data sources:
-1. BindingDB (completed)
-2. ChEMBL API
-3. PubChem API
-4. Community Sources (PsychonautWiki, Erowid, TripSit)
-5. Social Media (Reddit, Twitter)
+The project integrates multiple data sources:
+1. Scientific Sources (✓ Completed)
+   - BindingDB (✓)
+   - ChEMBL API (✓)
+   - PubChem API (✓)
+   - PubMed API (✓)
+
+2. Patent Databases (✓ Completed)
+   - Espacenet (✓)
+   - USPTO (✓)
+   - Google Patents (✓)
+
+3. Community Sources (Priority)
+   - PsychonautWiki
+   - Erowid
+   - TripSit
+   - Reddit (30%)
+   - Bluelight (Planned)
 
 ## Current Structure
 
 ```
 data_sources/
-└── bindingdb.py    # BindingDB processing
-```
-
-## Target Structure
-
-```
-data_sources/
 ├── core/
 │   ├── __init__.py
-│   ├── base.py        # Base client
-│   ├── cache.py       # Caching
-│   └── rate.py        # Rate limiting
+│   ├── base.py        # Base client ✓
+│   ├── cache.py       # Caching ✓
+│   └── rate.py        # Rate limiting ✓
 ├── scientific/
 │   ├── __init__.py
-│   ├── bindingdb.py   # BindingDB
-│   ├── chembl.py      # ChEMBL
-│   └── pubchem.py     # PubChem
-├── community/
+│   ├── bindingdb.py   # BindingDB ✓
+│   ├── chembl.py      # ChEMBL ✓
+│   ├── pubchem.py     # PubChem ✓
+│   └── pubmed.py      # PubMed ✓
+├── patents/
 │   ├── __init__.py
-│   ├── psychonaut.py  # PsychonautWiki
-│   ├── erowid.py      # Erowid
-│   └── tripsit.py     # TripSit
-└── social/
+│   ├── espacenet.py   # Espacenet API ✓
+│   ├── uspto.py       # USPTO API ✓
+│   ├── google.py      # Google Patents API ✓
+│   ├── inpadoc.py     # Patent family data ✓
+│   └── analysis.py    # Patent analytics ✓
+└── community/
     ├── __init__.py
-    ├── reddit.py      # Reddit API
-    └── twitter.py     # Twitter API
-```
-
-## Step-by-Step Plan
-
-### 1. Core Infrastructure
-
-```python
-# In data_sources/core/base.py
-class BaseClient:
-    """Base API client with shared functionality."""
-    def __init__(self):
-        self.cache = Cache()
-        self.rate_limiter = RateLimiter()
-        self.session = Session()
-
-    async def get(self, url: str, **params) -> Dict:
-        """Make rate-limited GET request with caching."""
-        cache_key = self._make_cache_key(url, params)
-        
-        # Check cache
-        if cached := await self.cache.get(cache_key):
-            return cached
-            
-        # Rate limit
-        await self.rate_limiter.acquire()
-        
-        try:
-            # Make request
-            async with self.session.get(url, params=params) as response:
-                data = await response.json()
-                
-            # Cache response
-            await self.cache.set(cache_key, data)
-            
-            return data
-            
-        finally:
-            self.rate_limiter.release()
-```
-
-### 2. Scientific Sources
-
-```python
-# In data_sources/scientific/chembl.py
-class ChEMBLClient(BaseClient):
-    """ChEMBL API client."""
-    def __init__(self):
-        super().__init__()
-        self.base_url = "https://www.ebi.ac.uk/chembl/api/data"
-        
-    async def get_compound(self, chembl_id: str) -> CompoundData:
-        """Get compound data from ChEMBL."""
-        data = await self.get(f"{self.base_url}/molecule/{chembl_id}")
-        return self._parse_compound(data)
-        
-    async def search_compounds(self, query: str) -> List[CompoundData]:
-        """Search compounds by text."""
-        data = await self.get(
-            f"{self.base_url}/molecule/search",
-            q=query
-        )
-        return [self._parse_compound(item) for item in data["molecules"]]
-```
-
-### 3. Community Sources
-
-```python
-# In data_sources/community/psychonaut.py
-class PsychonautClient(BaseClient):
-    """PsychonautWiki API client."""
-    def __init__(self):
-        super().__init__()
-        self.base_url = "https://api.psychonautwiki.org"
-        
-    async def get_substance(self, name: str) -> Dict:
-        """Get substance data from PsychonautWiki."""
-        data = await self.get(
-            f"{self.base_url}/substances/search",
-            name=name
-        )
-        return self._parse_substance(data)
-```
-
-### 4. Social Sources
-
-```python
-# In data_sources/social/reddit.py
-class RedditClient(BaseClient):
-    """Reddit API client."""
-    def __init__(self):
-        super().__init__()
-        self.base_url = "https://oauth.reddit.com"
-        self._authenticate()
-        
-    async def search_subreddit(
-        self,
-        subreddit: str,
-        query: str,
-        **params
-    ) -> List[Dict]:
-        """Search posts in subreddit."""
-        data = await self.get(
-            f"{self.base_url}/r/{subreddit}/search",
-            q=query,
-            **params
-        )
-        return [self._parse_post(post) for post in data["data"]["children"]]
-```
-
-### 5. Integration Layer
-
-```python
-# In data_sources/integration.py
-class DataSourceManager:
-    """Manages multiple data sources."""
-    def __init__(self):
-        # Scientific
-        self.chembl = ChEMBLClient()
-        self.pubchem = PubChemClient()
-        
-        # Community
-        self.psychonaut = PsychonautClient()
-        self.erowid = ErowidClient()
-        self.tripsit = TripSitClient()
-        
-        # Social
-        self.reddit = RedditClient()
-        self.twitter = TwitterClient()
-        
-    async def search_all(self, query: str) -> Dict[str, List]:
-        """Search across all data sources."""
-        results = {}
-        
-        # Scientific
-        results["chembl"] = await self.chembl.search_compounds(query)
-        results["pubchem"] = await self.pubchem.search_compounds(query)
-        
-        # Community
-        results["psychonaut"] = await self.psychonaut.search_substances(query)
-        results["erowid"] = await self.erowid.search_substances(query)
-        
-        # Social
-        results["reddit"] = await self.reddit.search_all_sources(query)
-        results["twitter"] = await self.twitter.search_tweets(query)
-        
-        return results
+    ├── reddit.py      # Reddit API (30%)
+    └── bluelight.py   # Bluelight (Planned)
 ```
 
 ## Implementation Steps
 
-### Day 1: Core Infrastructure
-1. Create directory structure
-2. Implement base client
-3. Add caching
-4. Add rate limiting
+### Day 1: Core Infrastructure (✓ Completed)
+1. ✓ Create directory structure
+2. ✓ Implement base client
+3. ✓ Add caching
+4. ✓ Add rate limiting
 
-### Day 2: Scientific Sources
-1. Implement ChEMBL client
-2. Implement PubChem client
-3. Add data parsing
-4. Add validation
+### Day 2: Scientific Sources (✓ Completed)
+1. ✓ Implement ChEMBL client
+2. ✓ Implement PubChem client
+3. ✓ Add data parsing
+4. ✓ Add validation
 
-### Day 3: Community Sources
-1. Implement PsychonautWiki client
-2. Implement Erowid client
-3. Implement TripSit client
-4. Add data parsing
+### Day 3: Patent Sources (✓ Completed)
+1. ✓ Implement Espacenet client
+2. ✓ Add structure search
+3. ✓ Add family lookup
+4. ✓ Add analytics
 
-### Day 4: Social Sources
-1. Implement Reddit client
-2. Implement Twitter client
-3. Add authentication
-4. Add rate limiting
+### Day 4: Community Sources (Priority)
+1. Reddit Integration (30%)
+   - Basic API integration complete
+   - OAuth flow needed
+   - Content analysis needed
+   - Trend detection needed
 
-### Day 5: Integration
-1. Implement manager
-2. Add error handling
-3. Add logging
-4. Add monitoring
+2. Bluelight Integration (Planned)
+   - Web scraping setup needed
+   - Content extraction needed
+   - Safety monitoring needed
+   - Trend analysis needed
+
+3. Other Community Sources
+   - PsychonautWiki integration needed
+   - Erowid integration needed
+   - TripSit integration needed
+
+### Day 5: Integration Layer
+1. Manager Implementation
+   - ✓ Scientific sources integrated
+   - ✓ Patent sources integrated
+   - Community sources pending
+   - Social sources pending
+
+2. Error Handling
+   - ✓ Scientific error handling
+   - ✓ Patent error handling
+   - Community error handling needed
+   - Social error handling needed
+
+3. Validation
+   - ✓ Scientific validation
+   - ✓ Patent validation
+   - Community validation needed
+   - Social validation needed
 
 ## Validation Steps
 
 ### 1. API Integration
-- [ ] Test API connections
-- [ ] Test rate limiting
-- [ ] Test caching
-- [ ] Test error handling
+- [x] Test ChEMBL API
+- [x] Test PubChem API
+- [x] Test PubMed API
+- [x] Test Espacenet API
+- [x] Test USPTO API
+- [x] Test Google Patents API
+- [ ] Test community APIs
+- [ ] Test social APIs
 
 ### 2. Data Quality
-- [ ] Validate responses
-- [ ] Check data types
-- [ ] Handle missing data
-- [ ] Handle errors
+- [x] Validate scientific responses
+- [x] Validate patent responses
+- [ ] Validate community responses
+- [ ] Validate social responses
+- [x] Handle missing data
+- [x] Handle errors
 
 ### 3. Performance
-- [ ] Check response times
-- [ ] Monitor rate limits
-- [ ] Test concurrency
-- [ ] Test recovery
+- [x] Check scientific API response times
+- [x] Check patent API response times
+- [ ] Check community API response times
+- [ ] Check social API response times
+- [x] Monitor rate limits
+- [x] Test concurrency
+- [x] Test recovery
 
 ## Success Criteria
 
 ### 1. Functionality
-- All APIs accessible
-- Data properly parsed
-- Errors handled
-- Rate limits respected
+- [x] Scientific APIs accessible
+- [x] Patent APIs accessible
+- [ ] Community APIs accessible
+- [ ] Social APIs accessible
+- [x] Scientific data properly parsed
+- [x] Patent data properly parsed
+- [ ] Community data properly parsed
+- [ ] Social data properly parsed
 
 ### 2. Performance
-- Fast response times
-- Efficient caching
-- Resource management
-- Error recovery
+- [x] Fast scientific response times
+- [x] Fast patent response times
+- [ ] Fast community response times
+- [ ] Fast social response times
+- [x] Efficient scientific caching
+- [x] Efficient patent caching
+- [ ] Efficient community caching
+- [ ] Efficient social caching
 
 ### 3. Integration
-- Clean interfaces
-- Type safety
-- Good documentation
-- Easy to use
+- [x] Clean scientific interfaces
+- [x] Clean patent interfaces
+- [ ] Clean community interfaces
+- [ ] Clean social interfaces
+- [x] Scientific type safety
+- [x] Patent type safety
+- [ ] Community type safety
+- [ ] Social type safety
 
 ## Next Steps
 
-1. Set up infrastructure
-2. Add scientific sources
-3. Add community sources
-4. Add social sources
-5. Test integration
-6. Document usage
+1. Complete Reddit Integration
+   - Implement OAuth flow
+   - Add content analysis
+   - Add trend detection
+   - Add validation
+
+2. Add Bluelight Integration
+   - Implement web scraping
+   - Add content extraction
+   - Add sentiment analysis
+   - Add safety monitoring
+
+3. Add Other Community Sources
+   - Implement PsychonautWiki client
+   - Implement Erowid client
+   - Implement TripSit client
+   - Add data validation
+
+4. Enhance Integration Layer
+   - Add cross-validation
+   - Add data merging
+   - Add conflict resolution
+   - Add reporting

@@ -1,251 +1,198 @@
 # ChemData Project Master Plan
 
-## 1. Immediate Code Consolidation
+## 1. Immediate Integration Priorities
 
-### A. Stranded Code Integration
-- [ ] Move root level files into package structure:
-  * `api_client.py` -> `pipeline/infrastructure/circuit_breaker.py`
-  * `chembl_client.py` -> `data_sources/chembl.py`
-  * `chemical_properties.py` -> `processors/structure/properties/*`
-  * `cache_manager.py` -> `pipeline/infrastructure/caching.py`
-  * `checkpoint_manager.py` -> `pipeline/infrastructure/checkpoints.py`
-  * `web_enrichment.py` -> Merge into `web_enrichment/` package
+### A. BBB Prediction Consolidation
+- [ ] Consolidate BBB prediction files:
+  * Move bbb_base.py into bbb/base.py
+  * Move bbb_enhanced.py into bbb/enhanced.py
+  * Move bbb_web_enrichment.py into bbb/enrichment.py
+  * Update imports across codebase
+  * Add integration tests
 
-### B. BBB Prediction Consolidation
-- [ ] Create unified BBB prediction module:
+### B. Compound Model Consolidation
+- [ ] Merge legacy compound models into psychopharm structure:
   ```
-  processors/psychopharm/predictors/bbb/
-  ├── base.py (Core prediction)
-  ├── enhanced.py (Advanced models)
-  └── validation.py (Validation)
+  models/psychopharm/
+  ├── base.py (from compound_base.py)
+  ├── compound.py (from compound.py)
+  ├── binding.py (from compound_ml.py)
+  ├── enrichment.py (from compound_enrichment.py)
+  └── analysis.py (from compound_analysis.py)
   ```
+- [ ] Update all imports
+- [ ] Add integration tests
+- [ ] Remove legacy files
 
-### C. Structure Processing Consolidation
-- [ ] Split chemical_properties.py into modules:
-  ```
-  processors/structure/properties/
-  ├── base.py (Core functionality)
-  ├── descriptors.py (Property calculations)
-  ├── conformers.py (3D structure handling)
-  └── similarity.py (Structure comparison)
-  ```
+### C. Web Interface Enhancement
+- [ ] Add structure viewer component
+- [ ] Enhance compound search
+- [ ] Improve data visualization
+- [ ] Add export features
 
-## 2. Core Architecture Enhancement
+## 2. Core Features (Complete ✓)
 
-### A. Compound Model Integration
-- [x] Identify all compound-related code
-- [ ] Consolidate base functionality:
-  ```
-  models/compound/
-  ├── __init__.py
-  ├── base.py (core functionality)
-  ├── ml.py (ML integration)
-  ├── enrichment.py (data enrichment)
-  └── types.py (type definitions)
-  ```
-- [ ] Integrate ML capabilities
-- [ ] Update imports across codebase
-- [ ] Add comprehensive tests
+### A. Data Sources Integration
+- [x] BindingDB processing
+- [x] ChEMBL integration
+- [x] PubChem integration
+- [x] Patent data integration
 
-### B. Psychopharm Integration
-- [x] Map psychopharm functionality
-- [ ] Integrate predictors with compound model
-- [ ] Consolidate duplicate functionality
-- [ ] Enhance ML pipeline integration
-- [ ] Add validation tests
+### B. Web Enrichment
+- [x] Social media monitoring
+- [x] Community data integration
+- [x] Literature mining
+- [x] Patent analysis
 
-### C. Web Enrichment Integration
-- [ ] Consolidate web enrichment code:
-  ```
-  web_enrichment/
-  ├── sources/
-  │   ├── community/ (PsychonautWiki, Erowid, etc.)
-  │   ├── social/ (Reddit, Twitter, etc.)
-  │   └── scientific/ (PubMed, Patents, etc.)
-  ├── validation/
-  └── integration/
-  ```
-- [ ] Integrate LLM utilities
-- [ ] Standardize API clients
-- [ ] Add error handling
+### C. ML Pipeline
+- [x] BBB prediction
+- [x] Toxicity prediction
+- [x] Abuse potential
+- [x] Activity prediction
 
-## 3. Feature Implementation
+## 3. Infrastructure Enhancement
 
-### A. Data Source Integration
-- [ ] Implement community data sources:
-  * PsychonautWiki API client
-  * Erowid scraper
-  * TripSit API client
-- [ ] Add scientific databases:
-  * ChEMBL API integration
-  * PubChem API integration
-  * Swiss* services integration
-- [ ] Implement social monitoring:
-  * Reddit API integration
-  * Twitter API integration
-  * Discord monitoring
-  * Bluesky integration
+### A. Testing
+- [ ] Add missing integration tests
+- [ ] Add performance tests
+- [ ] Add web component tests
+- [ ] Add ML model tests
 
-### B. ML Pipeline Enhancement
-- [ ] Improve binding prediction:
-  * Graph neural networks
-  * Uncertainty estimation
-  * Cross-validation
-- [ ] Add activity prediction:
-  * Effect classification
-  * Duration prediction
+### B. Documentation
+- [ ] Update API documentation
+- [ ] Add usage examples
+- [ ] Create tutorials
+- [ ] Update architecture docs
+
+### C. Performance
+- [ ] Add caching for API calls
+- [ ] Optimize ML predictions
+- [ ] Improve data loading
+- [ ] Add monitoring
+
+## 4. Feature Roadmap
+
+### A. Data Enhancement
+- [ ] Add more data sources:
+  * PsychonautWiki
+  * Erowid
+  * TripSit
+  * Scientific literature
+- [ ] Enhance data validation
+- [ ] Add data versioning
+- [ ] Improve data quality
+
+### B. ML Enhancement
+- [ ] Add new prediction models:
   * Mechanism prediction
-- [ ] Implement safety assessment:
-  * Toxicity prediction
+  * Duration prediction
   * Interaction prediction
   * Risk assessment
+- [ ] Improve model accuracy
+- [ ] Add uncertainty estimation
+- [ ] Add model explanations
 
-### C. Web Interface Development
-- [ ] Create API endpoints:
-  * Compound search
+### C. Web Features
+- [ ] Add advanced search:
   * Structure similarity
-  * Prediction services
-- [ ] Build frontend components:
-  * Compound list view
-  * Detail view
-  * Search interface
+  * Property ranges
+  * Activity profiles
+  * Safety profiles
 - [ ] Add visualization:
   * Structure viewer
   * Activity plots
-  * Prediction displays
-
-## 4. Implementation Timeline
-
-### Week 1-2: Code Consolidation
-- [ ] Integrate stranded code
-- [ ] Consolidate compound models
-- [ ] Update import structure
-- [ ] Fix circular dependencies
-
-### Week 3-4: Data Sources
-- [ ] Implement community sources
-- [ ] Add scientific databases
-- [ ] Set up social monitoring
-- [ ] Add data validation
-
-### Week 5-6: ML Pipeline
-- [ ] Enhance binding prediction
-- [ ] Add activity prediction
-- [ ] Implement safety assessment
-- [ ] Add uncertainty estimation
-
-### Week 7-8: Web Interface
-- [ ] Create API endpoints
-- [ ] Build frontend
-- [ ] Add visualization
-- [ ] Implement export system
+  * Property charts
+  * Network graphs
+- [ ] Add export options:
+  * TSV/CSV export
+  * SDF export
+  * Report generation
+  * Batch processing
 
 ## 5. Quality Assurance
 
-### A. Testing Strategy
-- [ ] Unit tests for all modules
-- [ ] Integration tests for pipelines
-- [ ] End-to-end tests for web interface
-- [ ] Performance benchmarks
+### A. Code Quality
+- [ ] All files under 700 lines
+- [ ] >90% test coverage
+- [ ] No duplicate code
+- [ ] Clear documentation
 
-### B. Validation System
+### B. Performance
+- [ ] API response <200ms
+- [ ] ML prediction <1s
+- [ ] Export time <30s
+- [ ] Memory usage <2GB
+
+### C. Reliability
+- [ ] Error handling
 - [ ] Data validation
-- [ ] ML model validation
-- [ ] Export validation
-- [ ] API response validation
+- [ ] Recovery system
+- [ ] Monitoring
 
-### C. Error Handling
-- [ ] API error handling
-- [ ] ML prediction errors
-- [ ] Data validation errors
-- [ ] Export errors
+## 6. Implementation Timeline
 
-### D. Performance Optimization
-- [ ] Add caching:
-  * API response caching
-  * ML prediction caching
-  * Structure calculation caching
-- [ ] Implement batch processing:
-  * Batch API requests
-  * Batch predictions
-  * Batch exports
+### Week 1: Integration
+- [ ] BBB prediction consolidation
+- [ ] Compound model consolidation
+- [ ] Import updates
+- [ ] Integration tests
 
-## 6. Success Metrics
+### Week 2: Web Interface
+- [ ] Structure viewer
+- [ ] Search enhancement
+- [ ] Visualization
+- [ ] Export system
+
+### Week 3: Testing
+- [ ] Integration tests
+- [ ] Performance tests
+- [ ] Web tests
+- [ ] ML tests
+
+### Week 4: Documentation
+- [ ] API docs
+- [ ] Examples
+- [ ] Tutorials
+- [ ] Architecture docs
+
+## 7. Success Metrics
 
 ### Code Quality
-- [ ] All files under 700 lines
-- [ ] Test coverage > 80%
+- [ ] Test coverage >90%
+- [ ] Documentation complete
 - [ ] No duplicate code
-- [ ] Consistent style
-
-### Functionality
-- [ ] All data sources integrated
-- [ ] ML predictions working
-- [ ] Web interface complete
-- [ ] Export system working
+- [ ] Clean architecture
 
 ### Performance
-- [ ] API response time < 200ms
-- [ ] Prediction time < 1s
-- [ ] Export time < 30s
-- [ ] Cache hit rate > 90%
+- [ ] Fast response times
+- [ ] Efficient memory use
+- [ ] Good scalability
+- [ ] Reliable caching
 
-## 7. Documentation
+### Usability
+- [ ] Clear interface
+- [ ] Good documentation
+- [ ] Easy deployment
+- [ ] Helpful examples
 
-### A. API Documentation
-- Core functionality
-- ML capabilities
-- Web enrichment
-- Analysis features
+## 8. Required Resources
 
-### B. Integration Guide
-- Setup instructions
-- Usage examples
-- Best practices
-- Troubleshooting
+### Development
+- [x] Python 3.8+
+- [x] RDKit
+- [x] ML libraries
+- [x] Web frameworks
 
-### C. Development Guide
-- Architecture overview
-- Integration points
-- Extension guide
-- Contributing guide
+### Infrastructure
+- [x] Redis cache
+- [x] PostgreSQL database
+- [x] Docker support
+- [x] CI/CD pipeline
 
-## 8. Deployment
-
-### A. Package Structure
-- Core package
-- ML models
-- Web services
-- Analysis tools
-
-### B. Dependencies
-- Core requirements
-- ML dependencies
-- Web services
-- Development tools
-
-### C. Configuration
-- Environment setup
-- API credentials
-- Cache settings
-- Logging config
-
-## 9. Maintenance
-
-### A. Code Quality
-- Linting setup
-- Type checking
-- Code coverage
-- Performance monitoring
-
-### B. Updates
-- Dependency updates
-- API updates
-- Model updates
-- Documentation updates
-
-### C. Monitoring
-- Error tracking
-- Performance metrics
-- Usage statistics
-- API quotas
+## 9. Notes
+1. Focus on integration first
+2. Maintain test coverage
+3. Update documentation
+4. Monitor performance
+5. Keep code modular
+6. Follow best practices

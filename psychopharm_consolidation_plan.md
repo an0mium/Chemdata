@@ -1,151 +1,112 @@
 # Psychopharm Model Consolidation Plan
 
-## Overview
+## Current Status
 
-Current State:
-- Core psychopharm models in models/psychopharm/
-- Legacy models in models/compound/
-- Duplicate functionality needs merging
-- ML features need integration
+### Completed Components ✓
+1. Base Infrastructure ✓
+   - HTTP Client with caching ✓
+   - Rate limiting ✓
+   - Error handling ✓
+   - Response validation ✓
 
-## Step 1: Base Model Consolidation
+2. Scientific Sources ✓
+   - BindingDB integration complete ✓
+   - ChEMBL integration complete ✓
+   - PubChem integration complete ✓
+   - PubMed integration complete ✓
+   - Swiss* services complete ✓
 
-### Target: models/psychopharm/base.py
-1. Merge from:
-   - models/compound_base.py
-   - models/mixins.py
-   - models/compound/base/core.py
+3. Patent Integration ✓
+   - Structure search complete ✓
+   - Family lookup complete ✓
+   - Legal status tracking complete ✓
+   - Analytics complete ✓
 
+## Priority Components
+
+### 1. Base Model Enhancement
 ```python
-# models/psychopharm/base.py
-from typing import Dict, Any, Optional
-from dataclasses import dataclass, field
-
 @dataclass
 class PsychopharmBase:
-    """Base class for psychopharmacological compounds."""
+    """Enhanced base class for psychopharmacological compounds."""
     
     identifiers: Dict[str, str] = field(default_factory=dict)
     properties: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    community_data: Dict[str, Any] = field(default_factory=dict)
+    safety_data: Dict[str, Any] = field(default_factory=dict)
     
-    # Core validation
     def validate(self) -> bool:
-        """Validate compound data."""
+        """Enhanced validation with safety checks."""
         return all([
             self._validate_identifiers(),
             self._validate_properties(),
-            self._validate_metadata()
+            self._validate_metadata(),
+            self._validate_community_data(),
+            self._validate_safety_data()
         ])
     
-    # Enhanced serialization
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary with all data."""
+        """Enhanced serialization with all data."""
         return {
             "identifiers": self.identifiers,
             "properties": self.properties,
             "metadata": self.metadata,
             "predictions": self.get_all_predictions(),
-            "web_data": self.get_all_web_data()
+            "web_data": self.get_all_web_data(),
+            "community_data": self.community_data,
+            "safety_data": self.safety_data
         }
 ```
 
-## Step 2: ML Integration
-
-### Target: models/psychopharm/binding.py
-1. Merge from:
-   - models/compound_ml.py
-   - models/compound/ml/predictors.py
-
+### 2. Community Integration
 ```python
-# models/psychopharm/binding.py
-from typing import Dict, Tuple, Optional
-import numpy as np
-
-class BindingPredictor:
-    """Enhanced binding prediction with uncertainty."""
+class CommunityEnrichment:
+    """Enhanced community data integration."""
     
-    def predict_binding(self, 
-                       receptor: str,
-                       include_uncertainty: bool = True
-                      ) -> Tuple[float, float]:
-        """Predict binding affinity with uncertainty."""
-        prediction = self._base_prediction(receptor)
-        uncertainty = self._estimate_uncertainty(receptor)
-        return prediction, uncertainty
-    
-    def predict_ensemble(self,
-                        receptor: str,
-                        n_models: int = 5
-                       ) -> Dict[str, Any]:
-        """Get ensemble predictions."""
-        predictions = []
-        for _ in range(n_models):
-            pred = self._single_model_prediction(receptor)
-            predictions.append(pred)
-        
-        return {
-            "mean": np.mean(predictions),
-            "std": np.std(predictions),
-            "individual": predictions
-        }
-```
-
-## Step 3: Web Enrichment
-
-### Target: models/psychopharm/enrichment.py
-1. Merge from:
-   - models/compound_enrichment.py
-   - models/compound/enrichment/web.py
-
-```python
-# models/psychopharm/enrichment.py
-from typing import Dict, Any, Optional
-import aiohttp
-
-class WebEnrichment:
-    """Enhanced web data enrichment."""
-    
-    async def enrich_compound(self,
-                            sources: Optional[List[str]] = None
-                           ) -> Dict[str, Any]:
-        """Enrich compound with web data."""
-        sources = sources or ["community", "social", "literature"]
+    async def enrich_from_community(self,
+                                  sources: Optional[List[str]] = None
+                                 ) -> Dict[str, Any]:
+        """Enrich with community data."""
+        sources = sources or [
+            "reddit",
+            "bluelight",
+            "psychonautwiki",
+            "erowid"
+        ]
         
         async with aiohttp.ClientSession() as session:
             tasks = []
             for source in sources:
-                task = self._fetch_source_data(session, source)
+                task = self._fetch_community_data(session, source)
                 tasks.append(task)
             
             results = await asyncio.gather(*tasks)
+            analyzed = self._analyze_community_data(results)
+            safety = self._assess_safety(analyzed)
             
-        return self._merge_results(results)
+            return {
+                'data': analyzed,
+                'safety': safety,
+                'trends': self._detect_trends(analyzed),
+                'alerts': self._generate_alerts(safety)
+            }
 ```
 
-## Step 4: Analysis Integration
-
-### Target: models/psychopharm/analysis.py
-1. Merge from:
-   - models/compound_analysis.py
-   - models/compound/analysis/*.py
-
+### 3. Safety Analysis
 ```python
-# models/psychopharm/analysis.py
-from typing import Dict, Any, Optional
-
-class CompoundAnalyzer:
-    """Enhanced compound analysis."""
+class SafetyAnalyzer:
+    """Enhanced safety analysis with LLM support."""
     
-    def analyze_compound(self,
-                        analysis_types: Optional[List[str]] = None
-                       ) -> Dict[str, Any]:
-        """Comprehensive compound analysis."""
+    def analyze_safety(self,
+                      analysis_types: Optional[List[str]] = None
+                     ) -> Dict[str, Any]:
+        """Comprehensive safety analysis."""
         analysis_types = analysis_types or [
-            "binding",
-            "activity",
-            "safety",
-            "properties"
+            "toxicity",
+            "interactions",
+            "abuse_potential",
+            "contraindications"
         ]
         
         results = {}
@@ -153,91 +114,183 @@ class CompoundAnalyzer:
             method = getattr(self, f"_analyze_{analysis_type}")
             results[analysis_type] = method()
             
-        return results
+        alerts = self._generate_alerts(results)
+        recommendations = self._make_recommendations(results)
+        
+        return {
+            'analysis': results,
+            'alerts': alerts,
+            'recommendations': recommendations,
+            'risk_level': self._assess_risk_level(results)
+        }
 ```
 
-## Step 5: Testing
-
-### Test Structure
-```
-tests/models/psychopharm/
-├── test_base.py
-├── test_binding.py
-├── test_enrichment.py
-└── test_analysis.py
-```
-
-### Example Test Cases
+### 4. Content Analysis
 ```python
-# tests/models/psychopharm/test_binding.py
-def test_binding_prediction_with_uncertainty():
-    """Test binding prediction with uncertainty."""
-    compound = PsychopharmCompound()
-    prediction, uncertainty = compound.predict_binding("5HT2A")
+class ContentAnalyzer:
+    """Enhanced content analysis with LLM support."""
     
-    assert 0 <= prediction <= 1
-    assert 0 <= uncertainty <= 1
-
-def test_ensemble_prediction():
-    """Test ensemble prediction."""
-    compound = PsychopharmCompound()
-    result = compound.predict_ensemble("5HT2A", n_models=5)
-    
-    assert "mean" in result
-    assert "std" in result
-    assert len(result["individual"]) == 5
+    def analyze_content(self,
+                       content_types: Optional[List[str]] = None
+                      ) -> Dict[str, Any]:
+        """Analyze content with LLM."""
+        content_types = content_types or [
+            "experience_reports",
+            "safety_reports",
+            "research_papers",
+            "discussions"
+        ]
+        
+        results = {}
+        for content_type in content_types:
+            method = getattr(self, f"_analyze_{content_type}")
+            results[content_type] = method()
+            
+        entities = self._extract_entities(results)
+        patterns = self._detect_patterns(results)
+        insights = self._generate_insights(patterns)
+        
+        return {
+            'analysis': results,
+            'entities': entities,
+            'patterns': patterns,
+            'insights': insights
+        }
 ```
 
-## Migration Steps
+## Implementation Steps
 
-1. Create New Structure
-```bash
-mkdir -p models/psychopharm/{base,binding,enrichment,analysis}
-touch models/psychopharm/{base,binding,enrichment,analysis}/__init__.py
-```
+### Phase 1: Community Integration (Priority)
+1. Reddit Integration
+   - [ ] Complete OAuth flow
+   - [ ] Add content monitoring
+   - [ ] Add safety analysis
+   - [ ] Add trend detection
 
-2. Move Files
-```bash
-mv models/compound_base.py models/psychopharm/base.py
-mv models/compound_ml.py models/psychopharm/binding.py
-mv models/compound_enrichment.py models/psychopharm/enrichment.py
-mv models/compound_analysis.py models/psychopharm/analysis.py
-```
+2. Safety Analysis
+   - [ ] Add content analysis
+   - [ ] Add risk assessment
+   - [ ] Add alert system
+   - [ ] Add reporting
 
-3. Update Imports
-```bash
-find . -type f -name "*.py" -exec sed -i '' \
-    's/from models.compound/from models.psychopharm/g' {} +
-```
+3. Content Analysis
+   - [ ] Add LLM integration
+   - [ ] Add trend detection
+   - [ ] Add visualization
+   - [ ] Add reporting
 
-4. Run Tests
-```bash
-pytest tests/models/psychopharm/
+### Phase 2: Model Enhancement
+1. Base Model
+   - [ ] Add community fields
+   - [ ] Add safety fields
+   - [ ] Update validation
+   - [ ] Update serialization
+
+2. Analysis Tools
+   - [ ] Add safety analysis
+   - [ ] Add trend detection
+   - [ ] Add visualization
+   - [ ] Add reporting
+
+### Phase 3: Integration
+1. Data Integration
+   - [ ] Add cross-validation
+   - [ ] Add data merging
+   - [ ] Add conflict resolution
+   - [ ] Add reporting
+
+2. System Integration
+   - [ ] Add monitoring
+   - [ ] Add logging
+   - [ ] Add metrics
+   - [ ] Add dashboards
+
+## Testing Structure
+
+### Unit Tests
+```python
+# tests/models/psychopharm/test_base.py
+def test_enhanced_validation():
+    """Test enhanced validation with safety."""
+    compound = PsychopharmBase()
+    compound.safety_data = {"risk_level": "low"}
+    assert compound.validate()
+
+# tests/models/psychopharm/test_community.py
+def test_community_enrichment():
+    """Test community data enrichment."""
+    enricher = CommunityEnrichment()
+    result = await enricher.enrich_from_community()
+    assert "safety" in result
+    assert "trends" in result
+
+# tests/models/psychopharm/test_safety.py
+def test_safety_analysis():
+    """Test safety analysis."""
+    analyzer = SafetyAnalyzer()
+    result = analyzer.analyze_safety()
+    assert "risk_level" in result
+    assert "recommendations" in result
 ```
 
 ## Success Criteria
 
-1. Code Quality
-- [ ] No duplicate code
-- [ ] Clear inheritance
-- [ ] Type hints
-- [ ] Docstrings
+### Code Quality
+- [x] No duplicate code in scientific integration ✓
+- [x] Clear inheritance in scientific clients ✓
+- [x] Complete type hints in scientific code ✓
+- [x] Full docstrings in scientific code ✓
+- [ ] No duplicate code in community integration
+- [ ] Clear inheritance in community clients
+- [ ] Complete type hints in community code
+- [ ] Full docstrings in community code
 
-2. Functionality
-- [ ] All features preserved
-- [ ] ML integration
-- [ ] Web enrichment
-- [ ] Analysis tools
+### Functionality
+- [x] Scientific integration complete ✓
+- [x] Patent integration complete ✓
+- [ ] Community integration working
+- [ ] Safety analysis working
+- [ ] Content analysis working
+- [ ] Trend detection working
 
-3. Testing
-- [ ] Unit tests pass
-- [ ] Integration tests pass
-- [ ] 90%+ coverage
-- [ ] Edge cases covered
+### Testing
+- [x] Scientific tests passing ✓
+- [x] Patent tests passing ✓
+- [ ] Community tests passing
+- [ ] Safety tests passing
+- [ ] Content tests passing
+- [ ] Integration tests passing
+
+### Documentation
+- [x] Scientific docs complete ✓
+- [x] Patent docs complete ✓
+- [ ] Community docs complete
+- [ ] Safety docs complete
+- [ ] Content docs complete
+- [ ] Integration docs complete
 
 ## Next Steps
 
-1. Execute migration plan
-2. Update documentation
-3. Run full test suite
-4. Clean up old files
+1. Complete Reddit Integration
+   - Implement OAuth flow
+   - Add content monitoring
+   - Add safety analysis
+   - Add trend detection
+
+2. Add Safety Analysis
+   - Implement content analysis
+   - Add risk assessment
+   - Add alert system
+   - Add reporting
+
+3. Enhance Content Analysis
+   - Add LLM integration
+   - Add trend detection
+   - Add visualization
+   - Add reporting
+
+4. Update Documentation
+   - Add community docs
+   - Add safety docs
+   - Add content docs
+   - Add integration docs

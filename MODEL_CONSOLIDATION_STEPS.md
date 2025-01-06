@@ -2,236 +2,482 @@
 
 ## Overview
 
-The codebase currently has duplicate model implementations:
-1. models/compound/ - Core compound models
-2. models/psychopharm/ - Psychopharm-specific models
+The codebase currently has several model implementations that need to be consolidated:
+1. Legacy models in deprecated/ directory
+2. Enhanced models in compound/ directory
+3. Psychopharm-specific models in psychopharm/ directory
 
-These need to be consolidated into a single, cohesive model structure.
+## Current Status
 
-## Current Structure
+### Core Infrastructure
+1. Directory Structure ✓
+   ```
+   binding_data_processor/models/compound/
+   ├── base/
+   │   ├── core.py        # Core model
+   │   ├── mixins.py      # Shared mixins
+   │   ├── validation.py  # Validation logic
+   │   └── types.py       # Type definitions
+   ├── analysis/
+   │   ├── binding/       # Binding analysis
+   │   ├── activity/      # Activity analysis
+   │   ├── safety/        # Safety analysis
+   │   └── properties/    # Property analysis
+   ├── ml/
+   │   ├── features.py    # Feature extraction
+   │   ├── training.py    # Model training
+   │   ├── predictors.py  # Model predictors
+   │   └── ensemble.py    # Ensemble models
+   ├── enrichment/
+   │   ├── web.py        # Web enrichment
+   │   ├── community.py  # Community data
+   │   └── social.py     # Social data
+   └── export/
+       ├── formats.py    # Export formats
+       └── validation.py # Export validation
+   ```
 
-### Compound Models
-```
-models/compound/
-├── base.py          # Base compound model
-├── ml.py           # ML functionality
-├── enrichment.py   # Web enrichment
-├── analysis.py     # Analysis tools
-└── export.py       # Export features
-```
+2. Legacy Code Migration ✓
+   - Created deprecated/ directory structure
+   - Moved legacy files to appropriate subdirectories
+   - Preserved backup files in backups/
+   - Maintained documentation of migrated code
 
-### Psychopharm Models
-```
-models/psychopharm/
-├── base.py         # Base psychopharm model
-├── binding.py      # Binding predictions
-├── activity.py     # Activity analysis
-├── safety.py       # Safety assessment
-└── enrichment.py   # Web enrichment
-```
+3. Test Framework Enhancement ✓
+   - Enhanced nootropic prediction test suite
+   - Added comprehensive test compounds:
+     ```python
+     # Known nootropics with strong evidence
+     piracetam = CompoundData(
+         name="Piracetam",
+         smiles="O=C1N(CC(=O)N(CC1)CC)CC",
+         cas_number="7491-74-9",
+     )
+     aniracetam = CompoundData(
+         name="Aniracetam", 
+         smiles="O=C1N(C(=O)CC(N1)c1ccccc1)CC",
+         cas_number="72432-10-1",
+     )
+     modafinil = CompoundData(
+         name="Modafinil",
+         smiles="CC(=O)C(CS(=O)(=O)C)NC(=O)C",
+         cas_number="68693-11-8",
+     )
+     ```
+   - Added test coverage for:
+     - Basic prediction functionality
+     - Mechanism prediction
+     - Cognitive effects
+     - Side effects
+     - Safety analysis
+     - Literature analysis
+     - Model persistence
+     - Error handling
 
-## Target Structure
+## Model Architecture
 
-```
-models/compound/
-├── base/
-│   ├── __init__.py
-│   ├── core.py        # Core model
-│   ├── mixins.py      # Shared mixins
-│   └── types.py       # Type definitions
-├── analysis/
-│   ├── __init__.py
-│   ├── binding.py     # Binding analysis
-│   ├── activity.py    # Activity analysis
-│   ├── safety.py      # Safety analysis
-│   └── properties.py  # Property analysis
-├── ml/
-│   ├── __init__.py
-│   ├── predictors.py  # ML models
-│   ├── features.py    # Feature extraction
-│   └── training.py    # Model training
-├── enrichment/
-│   ├── __init__.py
-│   ├── web.py        # Web enrichment
-│   ├── community.py  # Community data
-│   └── social.py     # Social data
-└── export/
-    ├── __init__.py
-    ├── formats.py    # Export formats
-    └── validation.py # Export validation
-```
+### Core Models
+1. CompoundData
+   ```python
+   class CompoundData:
+       """Core compound data model."""
+       name: str
+       smiles: str
+       cas_number: str
+       properties: Dict[str, Any]
+       predictions: Dict[str, Any]
+       web_data: Dict[str, Any]
+       analysis: Dict[str, Any]
+       
+       def validate(self) -> ValidationResult:
+           """Validate compound data."""
+           pass
+   ```
 
-## Step-by-Step Plan
+2. TargetData
+   ```python
+   class TargetData:
+       """Target binding data model."""
+       name: str
+       type: str
+       organism: str
+       affinity: float
+       conditions: Dict[str, Any]
+       
+       def merge(self, other: "TargetData") -> "TargetData":
+           """Merge target data."""
+           pass
+   ```
 
-### 1. Create New Structure
-```bash
-# Create directories
-mkdir -p models/compound/{base,analysis,ml,enrichment,export}
+3. PredictionData
+   ```python
+   class PredictionData:
+       """ML prediction data model."""
+       model: str
+       value: float
+       confidence: float
+       metadata: Dict[str, Any]
+       
+       def to_dict(self) -> Dict[str, Any]:
+           """Convert to dictionary."""
+           pass
+   ```
 
-# Create __init__.py files
-touch models/compound/{base,analysis,ml,enrichment,export}/__init__.py
-```
-
-### 2. Move Base Models
+### Type System
 ```python
-# In models/compound/base/core.py
-from typing import Dict, List, Optional
+class CompoundType(Enum):
+    SMALL_MOLECULE = "small_molecule"
+    NATURAL_PRODUCT = "natural_product"
+    PHARMACEUTICAL = "pharmaceutical"
 
-class CompoundBase:
-    """Base compound model with core functionality."""
-    def __init__(self):
-        self.data = {}
-        self.predictions = {}
-        self.analysis = {}
+class PsychoactiveClass(Enum):
+    PSYCHEDELIC = "psychedelic"
+    DISSOCIATIVE = "dissociative"
+    STIMULANT = "stimulant"
+    DEPRESSANT = "depressant"
+    NOOTROPIC = "nootropic"
+
+class NootropicMechanism(Enum):
+    MEMORY_ENHANCEMENT = "memory_enhancement"
+    FOCUS_IMPROVEMENT = "focus_improvement"
+    NEUROPROTECTION = "neuroprotection"
+    NEUROPLASTICITY = "neuroplasticity"
+    CHOLINERGIC = "cholinergic"
+    GLUTAMATERGIC = "glutamatergic"
+    DOPAMINERGIC = "dopaminergic"
+    SEROTONERGIC = "serotonergic"
+    NOOTROPIC_SYNERGY = "nootropic_synergy"
+    COGNITIVE_MODULATION = "cognitive_modulation"
+    BRAIN_METABOLISM = "brain_metabolism"
 ```
 
-### 3. Add Mixins
+### Class Hierarchy
 ```python
-# In models/compound/base/mixins.py
-class MLMixin:
-    """ML functionality mixin."""
-    def predict(self):
-        pass
+# Base class with core functionality
+class CompoundBase(ValidationMixin, SerializationMixin):
+    """Base compound class."""
+    name: str
+    smiles: str
+    cas_number: str
+    properties: Dict[str, Any]
 
-class WebMixin:
-    """Web enrichment mixin."""
-    def enrich(self):
-        pass
+# ML-enabled compound
+class MLCompound(CompoundBase):
+    """ML-enabled compound functionality."""
+    predictions: Dict[str, PredictionResult]
+    features: Dict[str, Any]
+    history: List[Dict[str, Any]]
+
+# Web-enriched compound
+class EnrichedCompound(MLCompound):
+    """Web-enriched compound functionality."""
+    web_data: WebData
+    literature_data: LiteratureData
+    social_data: Dict[str, Any]
+    patent_data: List[Dict[str, Any]]
+
+# Analyzed compound
+class AnalyzedCompound(EnrichedCompound):
+    """Analyzed compound functionality."""
+    analysis: Dict[str, Any]
+    metrics: Dict[str, float]
+    visualizations: Dict[str, Any]
 ```
 
-### 4. Merge Analysis
-```python
-# In models/compound/analysis/binding.py
-class BindingAnalysis:
-    """Binding affinity analysis."""
-    def analyze_binding(self):
-        pass
+### Analysis Models
+1. BBBPrediction ✓
+   ```python
+   class BBBPrediction:
+       """BBB permeability prediction."""
+       permeability: float
+       confidence: float
+       transporters: Dict[str, float]
+       mechanisms: Dict[str, float]
+       
+       def get_primary_mechanisms(self) -> List[str]:
+           """Get primary transport mechanisms."""
+           pass
+   ```
 
-# In models/compound/analysis/activity.py
-class ActivityAnalysis:
-    """Activity analysis."""
-    def analyze_activity(self):
-        pass
-```
+2. ToxicityPrediction ✓
+   ```python
+   class ToxicityPrediction:
+       """Toxicity prediction."""
+       toxicity_score: float
+       confidence: float
+       mechanisms: Dict[str, float]
+       organ_effects: Dict[str, float]
+       
+       def get_risk_level(self) -> str:
+           """Get overall risk level."""
+           pass
+   ```
 
-### 5. Consolidate ML
-```python
-# In models/compound/ml/predictors.py
-class BindingPredictor:
-    """Binding affinity prediction."""
-    def predict(self):
-        pass
+3. AbusePrediction ✓
+   ```python
+   class AbusePrediction:
+       """Abuse potential prediction."""
+       abuse_score: float
+       confidence: float
+       reward_pathways: Dict[str, float]
+       tolerance_profile: Dict[str, float]
+       
+       def get_risk_category(self) -> str:
+           """Get abuse risk category."""
+           pass
+   ```
 
-class ActivityPredictor:
-    """Activity prediction."""
-    def predict(self):
-        pass
-```
+### Web Models
+1. WebData ✓
+   ```python
+   class WebData:
+       """Web-enriched compound data."""
+       community_reports: List[Dict[str, Any]]
+       literature_data: List[Dict[str, Any]]
+       social_data: Dict[str, Any]
+       patent_data: List[Dict[str, Any]]
+       
+       def merge(self, other: "WebData") -> "WebData":
+           """Merge web data."""
+           pass
+   ```
 
-### 6. Merge Enrichment
-```python
-# In models/compound/enrichment/web.py
-class WebEnrichment:
-    """Web data enrichment."""
-    def enrich(self):
-        pass
+2. LiteratureData ✓
+   ```python
+   class LiteratureData:
+       """Literature analysis data."""
+       papers: List[Dict[str, Any]]
+       findings: List[Dict[str, Any]]
+       mechanisms: Dict[str, List[str]]
+       safety_data: Dict[str, Any]
+       
+       def summarize(self) -> Dict[str, Any]:
+           """Summarize literature data."""
+           pass
+   ```
 
-# In models/compound/enrichment/community.py
-class CommunityEnrichment:
-    """Community data enrichment."""
-    def enrich(self):
-        pass
-```
+3. PatentData ✓
+   ```python
+   class PatentData:
+       """Patent analysis data."""
+       patents: List[Dict[str, Any]]
+       compounds: List[Dict[str, Any]]
+       activities: Dict[str, Any]
+       synthesis: Dict[str, Any]
+       
+       def extract_compounds(self) -> List[CompoundData]:
+           """Extract compounds from patents."""
+           pass
+   ```
 
-### 7. Update Imports
-```python
-# Update all imports to use new structure
-from models.compound.base.core import CompoundBase
-from models.compound.analysis.binding import BindingAnalysis
-from models.compound.ml.predictors import BindingPredictor
-```
+### ML Models
+1. EnsemblePredictor
+   ```python
+   class EnsemblePredictor:
+       """Ensemble ML predictor."""
+       predictors: List[BasePredictor]
+       weights: Dict[str, float]
+       
+       def predict(self, compound: CompoundData) -> PredictionResult:
+           """Get ensemble prediction."""
+           pass
+           
+       def update_weights(self, metrics: Dict[str, float]):
+           """Update predictor weights."""
+           pass
+   ```
 
-### 8. Add Tests
-```python
-# In tests/models/compound/test_core.py
-def test_compound_base():
-    compound = CompoundBase()
-    assert compound.data == {}
+2. UncertaintyEstimator
+   ```python
+   class UncertaintyEstimator:
+       """Prediction uncertainty estimator."""
+       def estimate(self, predictions: List[PredictionResult]) -> float:
+           """Estimate prediction uncertainty."""
+           pass
+           
+       def get_confidence_interval(self, 
+           predictions: List[PredictionResult]
+       ) -> Tuple[float, float]:
+           """Get confidence interval."""
+           pass
+   ```
 
-# In tests/models/compound/test_analysis.py
-def test_binding_analysis():
-    analysis = BindingAnalysis()
-    result = analysis.analyze_binding()
-    assert result is not None
-```
+3. FeatureImportance
+   ```python
+   class FeatureImportance:
+       """Feature importance analyzer."""
+       def analyze(self, model: BasePredictor) -> Dict[str, float]:
+           """Analyze feature importance."""
+           pass
+           
+       def explain_prediction(self,
+           model: BasePredictor,
+           compound: CompoundData
+       ) -> Dict[str, float]:
+           """Explain specific prediction."""
+           pass
+   ```
 
-## Validation Steps
+### Integration Models
+1. CompoundCollection
+   ```python
+   class CompoundCollection:
+       """Collection of compounds."""
+       compounds: List[EnrichedCompound]
+       metadata: Dict[str, Any]
+       
+       def filter(self, criteria: Dict[str, Any]) -> "CompoundCollection":
+           """Filter compounds."""
+           pass
+           
+       def sort(self, key: str, reverse: bool = False) -> "CompoundCollection":
+           """Sort compounds."""
+           pass
+           
+       def export(self, format: str) -> bytes:
+           """Export collection."""
+           pass
+   ```
 
-### 1. Code Quality
-- [ ] Run linters
-- [ ] Run type checks
-- [ ] Run tests
-- [ ] Check coverage
+2. AnalysisResult
+   ```python
+   class AnalysisResult:
+       """Compound analysis result."""
+       compound: EnrichedCompound
+       predictions: Dict[str, PredictionResult]
+       metrics: Dict[str, float]
+       visualizations: Dict[str, Any]
+       
+       def to_html(self) -> str:
+           """Convert to HTML."""
+           pass
+           
+       def to_json(self) -> Dict[str, Any]:
+           """Convert to JSON."""
+           pass
+   ```
 
-### 2. Functionality
-- [ ] Test core features
-- [ ] Test ML models
-- [ ] Test analysis
-- [ ] Test enrichment
-
-### 3. Integration
-- [ ] Test pipeline
-- [ ] Test web app
-- [ ] Test exports
-- [ ] Test imports
-
-## Success Criteria
-
-### 1. Code Structure
-- Single source of truth for models
-- Clear separation of concerns
-- No duplicate code
-- Type safety
-
-### 2. Functionality
-- All existing features preserved
-- All tests passing
-- No regressions
-- Full coverage
-
-### 3. Documentation
-- Updated docstrings
-- Updated README
-- Updated examples
-- Updated guides
+3. ValidationResult
+   ```python
+   class ValidationResult:
+       """Validation result."""
+       is_valid: bool
+       errors: List[str]
+       warnings: List[str]
+       suggestions: List[str]
+       
+       def to_dict(self) -> Dict[str, Any]:
+           """Convert to dictionary."""
+           pass
+   ```
 
 ## Next Steps
 
-1. Create new directory structure
-2. Move and merge models
-3. Update imports
-4. Add tests
-5. Validate functionality
-6. Update documentation
+### Day 1: Core Integration
+1. BBB Integration
+   - Integrate BBB predictor with nootropic analysis
+   - Add BBB-specific test cases
+   - Validate predictions against known data
+   - Add integration tests
 
-## Timeline
+2. Model Enhancement
+   - Add ensemble models for:
+     - Nootropic prediction
+     - BBB prediction
+     - Toxicity prediction
+     - Abuse potential prediction
+   - Implement cross-validation
+   - Add feature importance analysis
+   - Add uncertainty estimation
 
-### Day 1
-- Create structure
-- Move base models
-- Add mixins
+3. Data Validation
+   - Add schema validation for:
+     - Input compounds
+     - Prediction results
+     - Analysis results
+     - Web data
+   - Implement data quality checks
+   - Add consistency validation
+   - Improve error handling
 
-### Day 2
-- Merge analysis
-- Consolidate ML
-- Merge enrichment
+### Day 2: Web Enhancement
+1. LLM Integration
+   - Add SciBERT for entity extraction
+   - Add PubMedBert for relevance scoring
+   - Add text classification
+   - Add relationship extraction
 
-### Day 3
-- Update imports
-- Add tests
-- Validate
+2. Web Scraping
+   - Add rate limiting
+   - Add proxy support
+   - Add error recovery
+   - Add data validation
 
-### Day 4
-- Update docs
-- Final testing
-- Deploy
+3. Monitoring
+   - Implement performance monitoring
+   - Add prediction tracking
+   - Enhance error logging
+   - Add usage analytics
+
+### Day 3: Infrastructure
+1. Code Structure
+   - Move remaining legacy code to deprecated/
+   - Update import statements
+   - Fix circular dependencies
+   - Add missing __init__ files
+
+2. Documentation
+   - Update docstrings
+   - Add type hints
+   - Add examples
+   - Update README files
+
+3. Testing
+   - Add missing test cases
+   - Improve test coverage
+   - Add integration tests
+   - Add performance tests
+
+## Success Metrics
+
+### Code Quality
+- [ ] All tests passing
+- [ ] >90% test coverage
+- [ ] No circular imports
+- [ ] Clean architecture
+- [ ] All files under 700 lines
+- [ ] No duplicate code
+- [ ] Clear inheritance
+- [ ] Type hints complete
+
+### Documentation
+- [ ] Complete docstrings
+- [ ] Up-to-date READMEs
+- [ ] Clear examples
+- [ ] Good API docs
+- [ ] Architecture docs
+- [ ] Usage guides
+
+### Performance
+- [ ] Fast prediction times (<500ms)
+- [ ] Efficient memory usage (<2GB)
+- [ ] Good scalability
+- [ ] Reliable caching
+- [ ] Error recovery
+- [ ] Monitoring
+
+### Usability
+- [ ] Clear interfaces
+- [ ] Good error messages
+- [ ] Helpful documentation
+- [ ] Easy deployment
+- [ ] Intuitive API
+- [ ] Good UX
+
+## Notes
+1. Keep models focused and small
+2. Use clear inheritance patterns
+3. Add comprehensive validation
+4. Handle errors gracefully
+5. Monitor performance carefully
+6. Document everything thoroughly
