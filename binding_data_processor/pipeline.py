@@ -39,7 +39,7 @@ from binding_data_processor.processors.structure.similarity import (
 from binding_data_processor.processors.structure.ml.predictors.psychoactive import (
     PsychoactivePredictor,
 )
-from binding_data_processor.processors.structure.ml.predictors.nootropic import (
+from binding_data_processor.processors.psychopharm.predictors.nootropic.base import (
     NootropicPredictor,
 )
 from binding_data_processor.processors.structure.ml.predictors.activity import (
@@ -120,9 +120,7 @@ class PipelineManager:
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
         self.logger.addHandler(handler)
 
         # Initialize ML models
@@ -132,12 +130,8 @@ class PipelineManager:
         self.activity_predictor = ActivityPredictor(model_dir=f"{model_dir}/activity")
         self.toxicity_predictor = ToxicityPredictor(model_dir=f"{model_dir}/toxicity")
         self.abuse_predictor = AbusePotentialPredictor(model_dir=f"{model_dir}/abuse")
-        self.psychoactive_predictor = PsychoactivePredictor(
-            model_dir=f"{model_dir}/psychoactive"
-        )
-        self.nootropic_predictor = NootropicPredictor(
-            model_dir=f"{model_dir}/nootropic"
-        )
+        self.psychoactive_predictor = PsychoactivePredictor(model_dir=f"{model_dir}/psychoactive")
+        self.nootropic_predictor = NootropicPredictor(model_dir=f"{model_dir}/nootropic")
 
         # Classification models
         self.text_classifier = pipeline(
@@ -176,9 +170,7 @@ class PipelineManager:
         )
 
         # Similarity model
-        self.similarity_model = SentenceTransformer(
-            "sentence-transformers/all-MiniLM-L6-v2"
-        ).to(device)
+        self.similarity_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2").to(device)
 
         # Initialize processors
         self.logger.info("Initializing processors...")
@@ -277,12 +269,8 @@ class PipelineManager:
         )
 
         # Initialize thread pools
-        self.prediction_executor = ThreadPoolExecutor(
-            max_workers=n_workers, thread_name_prefix="prediction"
-        )
-        self.web_executor = ThreadPoolExecutor(
-            max_workers=n_workers * 2, thread_name_prefix="web"
-        )  # More threads for web IO
+        self.prediction_executor = ThreadPoolExecutor(max_workers=n_workers, thread_name_prefix="prediction")
+        self.web_executor = ThreadPoolExecutor(max_workers=n_workers * 2, thread_name_prefix="web")  # More threads for web IO
 
         # Initialize storage
         self.compounds: Dict[str, CompoundData] = {}
@@ -444,21 +432,15 @@ class PipelineManager:
                     if self._validate_compound(compound):
                         valid_compounds.append(compound)
                 compounds.extend(valid_compounds)
-                self.logger.info(
-                    f"Found {len(valid_compounds)} valid compounds from Swiss data"
-                )
+                self.logger.info(f"Found {len(valid_compounds)} valid compounds from Swiss data")
 
                 break  # Success, exit retry loop
 
             except Exception as e:
-                self.logger.error(
-                    f"Error searching Swiss data (attempt {retries + 1}/{self.max_retries}): {e}"
-                )
+                self.logger.error(f"Error searching Swiss data (attempt {retries + 1}/{self.max_retries}): {e}")
                 retries += 1
                 if retries == self.max_retries:
-                    self.logger.error(
-                        f"Failed to search Swiss data after {self.max_retries} attempts"
-                    )
+                    self.logger.error(f"Failed to search Swiss data after {self.max_retries} attempts")
                     self.stats["errors"].append(f"Swiss data search error: {str(e)}")
 
         return self._deduplicate_compounds(compounds)
@@ -503,24 +485,16 @@ class PipelineManager:
                     if self._validate_compound(compound):
                         valid_compounds.append(compound)
                 compounds.extend(valid_compounds)
-                self.logger.info(
-                    f"Found {len(valid_compounds)} valid compounds from community data"
-                )
+                self.logger.info(f"Found {len(valid_compounds)} valid compounds from community data")
 
                 break  # Success, exit retry loop
 
             except Exception as e:
-                self.logger.error(
-                    f"Error searching community data (attempt {retries + 1}/{self.max_retries}): {e}"
-                )
+                self.logger.error(f"Error searching community data (attempt {retries + 1}/{self.max_retries}): {e}")
                 retries += 1
                 if retries == self.max_retries:
-                    self.logger.error(
-                        f"Failed to search community data after {self.max_retries} attempts"
-                    )
-                    self.stats["errors"].append(
-                        f"Community data search error: {str(e)}"
-                    )
+                    self.logger.error(f"Failed to search community data after {self.max_retries} attempts")
+                    self.stats["errors"].append(f"Community data search error: {str(e)}")
 
         return self._deduplicate_compounds(compounds)
 
@@ -563,29 +537,19 @@ class PipelineManager:
                             if compound and self._validate_compound(compound):
                                 valid_compounds.append(compound)
                     except Exception as e:
-                        self.logger.error(
-                            f"Error validating compound {mention['identifier']}: {e}"
-                        )
-                        self.stats["errors"].append(
-                            f"Compound validation error: {str(e)}"
-                        )
+                        self.logger.error(f"Error validating compound {mention['identifier']}: {e}")
+                        self.stats["errors"].append(f"Compound validation error: {str(e)}")
 
                 compounds.extend(valid_compounds)
-                self.logger.info(
-                    f"Found {len(valid_compounds)} valid compounds from social media"
-                )
+                self.logger.info(f"Found {len(valid_compounds)} valid compounds from social media")
 
                 break  # Success, exit retry loop
 
             except Exception as e:
-                self.logger.error(
-                    f"Error searching social media (attempt {retries + 1}/{self.max_retries}): {e}"
-                )
+                self.logger.error(f"Error searching social media (attempt {retries + 1}/{self.max_retries}): {e}")
                 retries += 1
                 if retries == self.max_retries:
-                    self.logger.error(
-                        f"Failed to search social media after {self.max_retries} attempts"
-                    )
+                    self.logger.error(f"Failed to search social media after {self.max_retries} attempts")
                     self.stats["errors"].append(f"Social media search error: {str(e)}")
 
         return self._deduplicate_compounds(compounds)
@@ -618,13 +582,9 @@ class PipelineManager:
                     max_compounds=1000,
                     use_cache=use_cache,
                 )
-                valid_chembl = [
-                    c for c in chembl_compounds if self._validate_compound(c)
-                ]
+                valid_chembl = [c for c in chembl_compounds if self._validate_compound(c)]
                 compounds.extend(valid_chembl)
-                self.logger.info(
-                    f"Found {len(valid_chembl)} valid compounds from ChEMBL"
-                )
+                self.logger.info(f"Found {len(valid_chembl)} valid compounds from ChEMBL")
 
                 # Search PubChem
                 self.logger.info("Searching PubChem...")
@@ -640,25 +600,17 @@ class PipelineManager:
                     max_compounds=1000,
                     use_cache=use_cache,
                 )
-                valid_pubchem = [
-                    c for c in pubchem_compounds if self._validate_compound(c)
-                ]
+                valid_pubchem = [c for c in pubchem_compounds if self._validate_compound(c)]
                 compounds.extend(valid_pubchem)
-                self.logger.info(
-                    f"Found {len(valid_pubchem)} valid compounds from PubChem"
-                )
+                self.logger.info(f"Found {len(valid_pubchem)} valid compounds from PubChem")
 
                 break  # Success, exit retry loop
 
             except Exception as e:
-                self.logger.error(
-                    f"Error searching databases (attempt {retries + 1}/{self.max_retries}): {e}"
-                )
+                self.logger.error(f"Error searching databases (attempt {retries + 1}/{self.max_retries}): {e}")
                 retries += 1
                 if retries == self.max_retries:
-                    self.logger.error(
-                        f"Failed to search databases after {self.max_retries} attempts"
-                    )
+                    self.logger.error(f"Failed to search databases after {self.max_retries} attempts")
                     self.stats["errors"].append(f"Database search error: {str(e)}")
 
         return self._deduplicate_compounds(compounds)
@@ -712,21 +664,15 @@ class PipelineManager:
                         self.stats["errors"].append(f"Web result error: {str(e)}")
 
                 compounds.extend(valid_compounds)
-                self.logger.info(
-                    f"Found {len(valid_compounds)} valid compounds from web"
-                )
+                self.logger.info(f"Found {len(valid_compounds)} valid compounds from web")
 
                 break  # Success, exit retry loop
 
             except Exception as e:
-                self.logger.error(
-                    f"Error searching web (attempt {retries + 1}/{self.max_retries}): {e}"
-                )
+                self.logger.error(f"Error searching web (attempt {retries + 1}/{self.max_retries}): {e}")
                 retries += 1
                 if retries == self.max_retries:
-                    self.logger.error(
-                        f"Failed to search web after {self.max_retries} attempts"
-                    )
+                    self.logger.error(f"Failed to search web after {self.max_retries} attempts")
                     self.stats["errors"].append(f"Web search error: {str(e)}")
 
         return self._deduplicate_compounds(compounds)
@@ -763,10 +709,7 @@ class PipelineManager:
                 try:
                     # Check compound relevance
                     classification = self.text_classifier(compound.name)[0]
-                    if (
-                        classification["label"] != "relevant"
-                        or classification["score"] < 0.8
-                    ):
+                    if classification["label"] != "relevant" or classification["score"] < 0.8:
                         return False
 
                     # Check activity type
@@ -806,10 +749,7 @@ class PipelineManager:
             try:
                 # Check relevance
                 classification = self.text_classifier(mention["context"])[0]
-                if (
-                    classification["label"] != "relevant"
-                    or classification["score"] < 0.8
-                ):
+                if classification["label"] != "relevant" or classification["score"] < 0.8:
                     return False
 
                 # Check activity type
@@ -837,9 +777,7 @@ class PipelineManager:
             self.logger.error(f"Error validating mention: {e}")
             return False
 
-    def _deduplicate_compounds(
-        self, compounds: List[CompoundData]
-    ) -> List[CompoundData]:
+    def _deduplicate_compounds(self, compounds: List[CompoundData]) -> List[CompoundData]:
         """Deduplicate compounds based on structure similarity.
 
         Args:

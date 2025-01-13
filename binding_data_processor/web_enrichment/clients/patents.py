@@ -16,9 +16,9 @@ from datetime import datetime
 import logging
 import re
 
-from crawl4ai import AsyncWebCrawler, Config
+from crawl4ai import AsyncWebCrawler, BrowserConfig
 
-from ..base_client import BaseWebClient
+from .base import WebClient
 from ..validation.schema import BaseSchema
 
 
@@ -90,7 +90,7 @@ class PatentData(BaseSchema):
     metadata: Dict[str, Any]
 
 
-class EnhancedPatentClient(BaseWebClient):
+class EnhancedPatentClient(WebClient):
     """Enhanced patent client combining Google Patents, USPTO and Espacenet."""
 
     GOOGLE_PATENTS_URL = "https://patents.google.com"
@@ -122,8 +122,8 @@ class EnhancedPatentClient(BaseWebClient):
         self.logger = logging.getLogger(__name__)
 
         # Configure Crawl4AI with anti-bot detection avoidance
-        self.config = Config(
-            javascript=Config.JavaScript(
+        self.config = BrowserConfig(
+            javascript=BrowserConfig.JavaScript(
                 enabled=True,
                 wait_for_network=True,
                 wait_for_selectors=[
@@ -136,9 +136,9 @@ class EnhancedPatentClient(BaseWebClient):
                 ],
                 stealth_mode=True,
             ),
-            screenshot=Config.Screenshot(enabled=True, full_page=True),
-            extraction=Config.Extraction(
-                llm=Config.LLM(
+            screenshot=BrowserConfig.Screenshot(enabled=True, full_page=True),
+            extraction=BrowserConfig.Extraction(
+                llm=BrowserConfig.LLM(
                     provider=llm_provider,
                     api_token=api_token,
                     prompts={
@@ -161,12 +161,12 @@ class EnhancedPatentClient(BaseWebClient):
                     "classifications": ".patent-classification",
                 },
             ),
-            proxy=Config.Proxy(
+            proxy=BrowserConfig.Proxy(
                 enabled=True,
                 rotation=True,
                 retry_count=3,
             ),
-            rate_limit=Config.RateLimit(
+            rate_limit=BrowserConfig.RateLimit(
                 requests_per_minute=10,
                 delay_after_failure=60,
             ),

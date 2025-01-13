@@ -55,7 +55,7 @@ from .base import BaseStructureProcessor
 from .advanced import AdvancedStructureProcessor
 from .descriptors import DescriptorCalculator
 from .pharmacophore import PharmacophoreDetector
-from .similarity import SimilarityCalculator
+from .similarity import SimilarityProcessor
 from .depiction import StructureDepiction
 from .ml import (
     ActivityPredictor,
@@ -78,7 +78,7 @@ __all__ = [
 __all__ += [
     "DescriptorCalculator",
     "PharmacophoreDetector",
-    "SimilarityCalculator",
+    "SimilarityProcessor",
     "StructureDepiction",
 ]
 
@@ -123,14 +123,12 @@ DEFAULT_CONFIG = {
 }
 
 
-def get_processor(
-    processor_type: str = "base", config: Optional[Dict] = None, **kwargs
-) -> Union[
+def get_processor(processor_type: str = "base", config: Optional[Dict] = None, **kwargs) -> Union[
     BaseStructureProcessor,
     AdvancedStructureProcessor,
     DescriptorCalculator,
     PharmacophoreDetector,
-    SimilarityCalculator,
+    SimilarityProcessor,
     StructureDepiction,
     ActivityPredictor,
     ToxicityPredictor,
@@ -179,7 +177,7 @@ def get_processor(
         # Specialized processors
         "descriptors": DescriptorCalculator,
         "pharmacophore": PharmacophoreDetector,
-        "similarity": SimilarityCalculator,
+        "similarity": SimilarityProcessor,
         "depiction": StructureDepiction,
         # ML models
         "activity": ActivityPredictor,
@@ -190,10 +188,7 @@ def get_processor(
     }
 
     if processor_type not in processors:
-        raise ValueError(
-            f"Unknown processor type: {processor_type}. "
-            f"Available types: {list(processors.keys())}"
-        )
+        raise ValueError(f"Unknown processor type: {processor_type}. " f"Available types: {list(processors.keys())}")
 
     try:
         return processors[processor_type](**kwargs)
@@ -209,7 +204,7 @@ def get_all_processors(config: Optional[Dict] = None, **kwargs) -> Dict[
         AdvancedStructureProcessor,
         DescriptorCalculator,
         PharmacophoreDetector,
-        SimilarityCalculator,
+        SimilarityProcessor,
         StructureDepiction,
         ActivityPredictor,
         ToxicityPredictor,

@@ -20,20 +20,13 @@ from ...models.psychopharm import (
     NootropicMechanism,
     BBBPermeability,
 )
-from ...models.core import CompoundData
+from ...models.compound.base.core import CompoundData
 from ..structure.base import BaseStructureProcessor
 from ...utils.cache import CacheManager
 from ...utils.progress import ProgressTracker
 
 
-@dataclass
-class PredictionResult:
-    """Container for prediction results with confidence scores."""
-
-    value: any
-    confidence: float
-    supporting_data: Dict = None
-    source: str = "predicted"
+from .predictors.types import PredictionResult
 
 
 @dataclass
@@ -66,10 +59,8 @@ class PsychopharmProcessor:
         self.predictors = self._initialize_predictors()
 
         # Track mechanism frequencies
-        self.nootropic_mechanism_counts: Dict[NootropicMechanism, int] = {
-            mech: 0 for mech in NootropicMechanism
-        }
-        
+        self.nootropic_mechanism_counts: Dict[NootropicMechanism, int] = {mech: 0 for mech in NootropicMechanism}
+
         # Track related compounds
         self.similar_compound_groups: Set[Set[str]] = set()
 
@@ -91,23 +82,16 @@ class PsychopharmProcessor:
             "abuse_potential": AbusePotentialPredictor(),
         }
 
-    def process_batch(
-        self,
-        compounds: List[CompoundData],
-        **kwargs
-    ) -> BatchResult:
+    def process_batch(self, compounds: List[CompoundData], **kwargs) -> BatchResult:
         """Process a batch of compounds in parallel."""
         start_time = time.time()
         successful = []
         failed = []
-        
+
         # Process compounds in parallel
         with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
-            future_to_compound = {
-                executor.submit(self.process_compound, compound, **kwargs): compound
-                for compound in compounds
-            }
-            
+            future_to_compound = {executor.submit(self.process_compound, compound, **kwargs): compound for compound in compounds}
+
             for future in as_completed(future_to_compound):
                 compound = future_to_compound[future]
                 try:
@@ -119,29 +103,20 @@ class PsychopharmProcessor:
 
         # Generate statistics
         stats = self._generate_batch_statistics(successful)
-        
-        return BatchResult(
-            successful=successful,
-            failed=failed,
-            stats=stats,
-            processing_time=time.time() - start_time
-        )
+
+        return BatchResult(successful=successful, failed=failed, stats=stats, processing_time=time.time() - start_time)
 
     def _update_statistics(self, compound: CompoundData) -> None:
         """Update mechanism frequencies and compound relationships."""
         # Update nootropic mechanism counts
         for mechanism in compound.nootropic_mechanisms:
             self.nootropic_mechanism_counts[mechanism] += 1
-            
+
         # Update similar compound groups
         if self.structure_processor:
-            similar_compounds = self.structure_processor.find_similar_compounds(
-                compound.smiles
-            )
+            similar_compounds = self.structure_processor.find_similar_compounds(compound.smiles)
             if similar_compounds:
-                self.similar_compound_groups.add(
-                    frozenset([compound.name] + similar_compounds)
-                )
+                self.similar_compound_groups.add(frozenset([compound.name] + similar_compounds))
 
     def _generate_batch_statistics(self, compounds: List[CompoundData]) -> Dict:
         """Generate statistics from processed compounds."""
@@ -153,27 +128,23 @@ class PsychopharmProcessor:
             "receptor_coverage": 0,
             "similar_groups": len(self.similar_compound_groups),
         }
-        
+
         for compound in compounds:
             # Count psychoactive classes
             if compound.psychoactive_class != PsychoactiveClass.UNKNOWN:
-                stats["psychoactive_counts"][compound.psychoactive_class] = (
-                    stats["psychoactive_counts"].get(compound.psychoactive_class, 0) + 1
-                )
-            
+                stats["psychoactive_counts"][compound.psychoactive_class] = stats["psychoactive_counts"].get(compound.psychoactive_class, 0) + 1
+
             # Count BBB permeability classes
             if compound.bbb_permeability != BBBPermeability.UNKNOWN:
-                stats["bbb_permeability"][compound.bbb_permeability] = (
-                    stats["bbb_permeability"].get(compound.bbb_permeability, 0) + 1
-                )
-            
+                stats["bbb_permeability"][compound.bbb_permeability] = stats["bbb_permeability"].get(compound.bbb_permeability, 0) + 1
+
             # Calculate receptor coverage
             if compound.receptor_profiles:
                 stats["receptor_coverage"] += 1
-        
+
         if compounds:
             stats["receptor_coverage"] /= len(compounds)
-            
+
         return stats
 
     def process_compound(
@@ -263,9 +234,7 @@ class PsychopharmProcessor:
             result = self.predictors["bbb"].predict(compound)
             compound.bbb_permeability = result.value
             compound.bbb_score = result.confidence
-            compound.p_glycoprotein_substrate = result.supporting_data.get(
-                "p_gp_substrate", False
-            )
+            compound.p_glycoprotein_substrate = result.supporting_data.get("p_gp_substrate", False)
         except Exception as e:
             self.logger.error(f"BBB prediction error: {str(e)}")
 
@@ -295,12 +264,8 @@ class PsychopharmProcessor:
             if result.confidence > 0.5:  # Confidence threshold
                 compound.nootropic_mechanisms.update(result.value)
                 if result.supporting_data:
-                    compound.cognitive_effects.update(
-                        result.supporting_data.get("effects", {})
-                    )
-                    compound.side_effects.update(
-                        result.supporting_data.get("side_effects", {})
-                    )
+                    compound.cognitive_effects.update(result.supporting_data.get("effects", {}))
+                    compound.side_effects.update(result.supporting_data.get("side_effects", {}))
         except Exception as e:
             self.logger.error(f"Nootropic prediction error: {str(e)}")
 
@@ -309,57 +274,27 @@ class PsychopharmProcessor:
         try:
             result = self.predictors["abuse_potential"].predict(compound)
             if result.supporting_data:
-                compound.tolerance_profile.update(
-                    result.supporting_data.get("tolerance", {})
-                )
-                compound.withdrawal_profile.update(
-                    result.supporting_data.get("withdrawal", {})
-                )
-                compound.cross_tolerance.update(
-                    result.supporting_data.get("cross_tolerance", set())
-                )
+                compound.tolerance_profile.update(result.supporting_data.get("tolerance", {}))
+                compound.withdrawal_profile.update(result.supporting_data.get("withdrawal", {}))
+                compound.cross_tolerance.update(result.supporting_data.get("cross_tolerance", set()))
         except Exception as e:
             self.logger.error(f"Abuse potential prediction error: {str(e)}")
 
-    def _merge_cached_data(
-        self, compound: CompoundData, cached_data: Dict
-    ) -> None:
+    def _merge_cached_data(self, compound: CompoundData, cached_data: Dict) -> None:
         """Merge cached psychopharm data into compound."""
         try:
-            compound.bbb_permeability = cached_data.get(
-                "bbb_permeability", BBBPermeability.UNKNOWN
-            )
+            compound.bbb_permeability = cached_data.get("bbb_permeability", BBBPermeability.UNKNOWN)
             compound.bbb_score = cached_data.get("bbb_score", 0.0)
-            compound.p_glycoprotein_substrate = cached_data.get(
-                "p_glycoprotein_substrate", False
-            )
-            compound.receptor_profiles.update(
-                cached_data.get("receptor_profiles", {})
-            )
-            compound.psychoactive_class = cached_data.get(
-                "psychoactive_class", PsychoactiveClass.UNKNOWN
-            )
-            compound.effect_profile.update(
-                cached_data.get("effect_profile", {})
-            )
-            compound.nootropic_mechanisms.update(
-                cached_data.get("nootropic_mechanisms", set())
-            )
-            compound.cognitive_effects.update(
-                cached_data.get("cognitive_effects", {})
-            )
-            compound.side_effects.update(
-                cached_data.get("side_effects", {})
-            )
-            compound.tolerance_profile.update(
-                cached_data.get("tolerance_profile", {})
-            )
-            compound.withdrawal_profile.update(
-                cached_data.get("withdrawal_profile", {})
-            )
-            compound.cross_tolerance.update(
-                cached_data.get("cross_tolerance", set())
-            )
+            compound.p_glycoprotein_substrate = cached_data.get("p_glycoprotein_substrate", False)
+            compound.receptor_profiles.update(cached_data.get("receptor_profiles", {}))
+            compound.psychoactive_class = cached_data.get("psychoactive_class", PsychoactiveClass.UNKNOWN)
+            compound.effect_profile.update(cached_data.get("effect_profile", {}))
+            compound.nootropic_mechanisms.update(cached_data.get("nootropic_mechanisms", set()))
+            compound.cognitive_effects.update(cached_data.get("cognitive_effects", {}))
+            compound.side_effects.update(cached_data.get("side_effects", {}))
+            compound.tolerance_profile.update(cached_data.get("tolerance_profile", {}))
+            compound.withdrawal_profile.update(cached_data.get("withdrawal_profile", {}))
+            compound.cross_tolerance.update(cached_data.get("cross_tolerance", set()))
         except Exception as e:
             self.logger.error(f"Error merging cached data: {str(e)}")
 

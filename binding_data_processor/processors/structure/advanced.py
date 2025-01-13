@@ -13,7 +13,8 @@ from rdkit.Chem import (
     rdShapeHelpers,
 )
 from rdkit.Chem.Scaffolds import MurckoScaffold
-from rdkit.Chem.Pharm3D import Pharmacophore, Pharmacophore3D
+from rdkit.Chem import ChemicalFeatures
+from rdkit.Chem.Pharm3D import Pharmacophore
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 
@@ -149,15 +150,11 @@ class AdvancedStructureProcessor(BaseStructureProcessor):
 
                 try:
                     if fp_type == "morgan":
-                        fp = AllChem.GetMorganFingerprintAsBitVect(
-                            mol, radius, nBits=n_bits
-                        )
+                        fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=n_bits)
                     elif fp_type == "maccs":
                         fp = MACCSkeys.GenMACCSKeys(mol)
                     elif fp_type == "topological":
-                        fp = rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect(
-                            mol, nBits=n_bits
-                        )
+                        fp = rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect(mol, nBits=n_bits)
                     else:
                         continue
 
@@ -224,23 +221,17 @@ class AdvancedStructureProcessor(BaseStructureProcessor):
             radius = self._search_index["radius"]
 
             if fp_type == "morgan":
-                fp = AllChem.GetMorganFingerprintAsBitVect(
-                    query_mol, radius, nBits=n_bits
-                )
+                fp = AllChem.GetMorganFingerprintAsBitVect(query_mol, radius, nBits=n_bits)
             elif fp_type == "maccs":
                 fp = MACCSkeys.GenMACCSKeys(query_mol)
             elif fp_type == "topological":
-                fp = rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect(
-                    query_mol, nBits=n_bits
-                )
+                fp = rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect(query_mol, nBits=n_bits)
             else:
                 return []
 
             # Search index
             query_fp = self._scaler.transform([list(fp.GetOnBits())])
-            distances, indices = self._search_index["model"].kneighbors(
-                query_fp, n_neighbors=n_neighbors
-            )
+            distances, indices = self._search_index["model"].kneighbors(query_fp, n_neighbors=n_neighbors)
 
             # Convert distances to similarities
             similarities = 1 / (1 + distances.flatten())

@@ -9,8 +9,10 @@ handling various analysis results including:
 - Binding data analysis
 """
 
-from dataclasses import field
+from dataclasses import dataclass, field
 from typing import Dict, List
+
+from ..enrichment.web import EnrichedCompound
 
 
 class AnalysisMixin:
@@ -48,10 +50,7 @@ class AnalysisMixin:
         for target in self.targets:
             # Track strongest binding
             if target.affinity_value:
-                if (
-                    not summary["strongest_binding"]
-                    or target.affinity_value < summary["strongest_binding"]["value"]
-                ):
+                if not summary["strongest_binding"] or target.affinity_value < summary["strongest_binding"]["value"]:
                     summary["strongest_binding"] = {
                         "target": target.common_name,
                         "value": target.affinity_value,
@@ -70,15 +69,11 @@ class AnalysisMixin:
             # Track binding distribution
             affinity_range = self._get_affinity_range(target.affinity_value)
             if affinity_range:
-                summary["binding_distribution"][affinity_range] = (
-                    summary["binding_distribution"].get(affinity_range, 0) + 1
-                )
+                summary["binding_distribution"][affinity_range] = summary["binding_distribution"].get(affinity_range, 0) + 1
 
             # Track activity types
             if target.activity_type != "N/A":
-                summary["activity_types"][target.activity_type] = (
-                    summary["activity_types"].get(target.activity_type, 0) + 1
-                )
+                summary["activity_types"][target.activity_type] = summary["activity_types"].get(target.activity_type, 0) + 1
 
         # Convert sets to sorted lists
         summary["target_families"] = sorted(summary["target_families"])
@@ -112,34 +107,22 @@ class AnalysisMixin:
 
     def _merge_pharmacophores(self, other: "AnalysisMixin") -> None:
         """Merge pharmacophore data."""
-        self.pharmacophores.extend(
-            pharm for pharm in other.pharmacophores
-            if pharm not in self.pharmacophores
-        )
+        self.pharmacophores.extend(pharm for pharm in other.pharmacophores if pharm not in self.pharmacophores)
 
     def _merge_structural_alerts(self, other: "AnalysisMixin") -> None:
         """Merge structural alerts."""
-        self.structural_alerts.extend(
-            alert for alert in other.structural_alerts
-            if alert not in self.structural_alerts
-        )
+        self.structural_alerts.extend(alert for alert in other.structural_alerts if alert not in self.structural_alerts)
 
     def _merge_receptor_interactions(self, other: "AnalysisMixin") -> None:
         """Merge receptor interaction data."""
         for receptor, interactions in other.receptor_interactions.items():
             if receptor not in self.receptor_interactions:
                 self.receptor_interactions[receptor] = []
-            self.receptor_interactions[receptor].extend(
-                inter for inter in interactions
-                if inter not in self.receptor_interactions[receptor]
-            )
+            self.receptor_interactions[receptor].extend(inter for inter in interactions if inter not in self.receptor_interactions[receptor])
 
     def _merge_mechanism_predictions(self, other: "AnalysisMixin") -> None:
         """Merge mechanism predictions."""
-        self.mechanism_predictions.extend(
-            pred for pred in other.mechanism_predictions
-            if pred not in self.mechanism_predictions
-        )
+        self.mechanism_predictions.extend(pred for pred in other.mechanism_predictions if pred not in self.mechanism_predictions)
 
     def _merge_sar_analysis(self, other: "AnalysisMixin") -> None:
         """Merge SAR analysis data."""
@@ -157,10 +140,31 @@ class AnalysisMixin:
                 if isinstance(data, dict):
                     self.sar_analysis[section].update(data)
                 elif isinstance(data, list):
-                    self.sar_analysis[section].extend(
-                        item for item in data
-                        if item not in self.sar_analysis[section]
-                    )
+                    self.sar_analysis[section].extend(item for item in data if item not in self.sar_analysis[section])
                 else:
                     # For scalar values, keep the most recent
                     self.sar_analysis[section] = data
+
+
+@dataclass
+class AnalyzedCompound(EnrichedCompound, AnalysisMixin):
+    """Compound with analysis capabilities.
+
+    Combines EnrichedCompound's web enrichment capabilities with
+    AnalysisMixin's analysis result methods.
+    """
+
+    def __init__(self, smiles: str):
+        """Initialize compound with analysis capabilities.
+
+        Args:
+            smiles: SMILES string representation
+        """
+        EnrichedCompound.__init__(self, smiles)
+        # AnalysisMixin fields are initialized by dataclass
+
+    def to_dict(self, include_predictions: bool = True) -> Dict:
+        """Convert compound data to dictionary format."""
+        data = super().to_dict(include_predictions=include_predictions)
+        data.update(self.get_analysis_dict())
+        return data

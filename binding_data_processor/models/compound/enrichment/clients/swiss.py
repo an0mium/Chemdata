@@ -24,14 +24,14 @@ from datetime import datetime
 
 import pandas as pd
 
-from ....pipeline.infrastructure.circuit_breaker import CircuitConfig
-from .base import BaseClient
+from ....pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
+from ....web_enrichment.clients.base import WebClient
 from .http import HTTPClient
 from ..validation.schema import ValidationError
 from ...base.core import Compound
 
 
-class SwissClient(BaseClient):
+class SwissClient(WebClient):
     """Client for Swiss bioinformatics tools."""
 
     def __init__(
@@ -40,7 +40,7 @@ class SwissClient(BaseClient):
         http_client: Optional[HTTPClient] = None,
         model_dir: Optional[Path] = None,
         cache_dir: Optional[Path] = None,
-        circuit_config: Optional[CircuitConfig] = None,
+        circuit_config: Optional[CircuitBreakerConfig] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize Swiss tools client.
@@ -55,9 +55,12 @@ class SwissClient(BaseClient):
         """
         super().__init__(
             name=name,
-            http_client=http_client,
-            model_dir=model_dir,
-            cache_dir=cache_dir,
+            base_url="",  # Base URLs are set per-service
+            data_source="swiss",
+            requests_per_second=1.0,
+            max_retries=3,
+            timeout=30,
+            cache_ttl=3600,
             circuit_config=circuit_config,
             logger=logger,
         )
@@ -126,8 +129,9 @@ class SwissClient(BaseClient):
         self._validate_accession(accession)
         self._validate_name(name)
 
-        response = self.http.get(
-            url=f"{self.swissprot_url}/{accession}",
+        response = self.request(
+            method="GET",
+            endpoint=f"{self.swissprot_url}/{accession}",
             params={
                 "name": name,
                 "format": "json",
@@ -135,10 +139,9 @@ class SwissClient(BaseClient):
             },
             headers={"Accept": "application/json"},
             use_cache=use_cache,
-            fallback=lambda: self._get_cached_data("swissprot", accession),
+            schema_name="swissprot",
         )
 
-        self._validate_swissprot_response(response)
         return response
 
     def get_swissadme_data(
@@ -160,18 +163,18 @@ class SwissClient(BaseClient):
         """
         self._validate_smiles(smiles)
 
-        response = self.http.get(
-            url=f"{self.swissadme_url}/predict",
+        response = self.request(
+            method="GET",
+            endpoint=f"{self.swissadme_url}/predict",
             params={
                 "smiles": smiles,
                 "format": "json",
             },
             headers={"Accept": "application/json"},
             use_cache=use_cache,
-            fallback=lambda: self._get_cached_data("adme", smiles),
+            schema_name="swissadme",
         )
 
-        self._validate_swissadme_response(response)
         return response
 
     def get_swisssimilarity_data(
@@ -201,8 +204,9 @@ class SwissClient(BaseClient):
         self._validate_name(name)
         self._validate_threshold(threshold)
 
-        response = self.http.get(
-            url=f"{self.swisssimilarity_url}/similar",
+        response = self.request(
+            method="GET",
+            endpoint=f"{self.swisssimilarity_url}/similar",
             params={
                 "smiles": smiles,
                 "name": name,
@@ -212,10 +216,9 @@ class SwissClient(BaseClient):
             },
             headers={"Accept": "application/json"},
             use_cache=use_cache,
-            fallback=lambda: self._get_cached_data("similarity", smiles),
+            schema_name="swisssimilarity",
         )
 
-        self._validate_swisssimilarity_response(response)
         return response
 
     def get_swisstargetprediction_data(
@@ -237,18 +240,18 @@ class SwissClient(BaseClient):
         """
         self._validate_smiles(smiles)
 
-        response = self.http.get(
-            url=f"{self.swisstargetprediction_url}/predict",
+        response = self.request(
+            method="GET",
+            endpoint=f"{self.swisstargetprediction_url}/predict",
             params={
                 "smiles": smiles,
                 "format": "json",
             },
             headers={"Accept": "application/json"},
             use_cache=use_cache,
-            fallback=lambda: self._get_cached_data("targets", smiles),
+            schema_name="swisstargetprediction",
         )
 
-        self._validate_swisstargetprediction_response(response)
         return response
 
     def get_all_data(
@@ -381,6 +384,43 @@ class SwissClient(BaseClient):
         if not 0 <= threshold <= 1:
             raise ValueError("Threshold must be between 0 and 1")
 
+    def _get_validation_config(self) -> Dict[str, Any]:
+        """Get validation configuration.
+
+        Returns:
+            Validation configuration dictionary
+        """
+        return {
+            "swissprot": {
+                "required_fields": ["accession", "name", "sequence"],
+                "field_types": {
+                    "accession": str,
+                    "name": str,
+                    "sequence": str,
+                },
+            },
+            "swissadme": {
+                "required_fields": ["smiles", "properties"],
+                "field_types": {
+                    "smiles": str,
+                    "properties": dict,
+                },
+            },
+            "swisssimilarity": {
+                "required_fields": ["query", "results"],
+                "field_types": {
+                    "query": dict,
+                    "results": list,
+                },
+            },
+            "swisstargetprediction": {
+                "required_fields": ["predictions"],
+                "field_types": {
+                    "predictions": list,
+                },
+            },
+        }
+
     def _validate_swissprot_response(self, response: Dict[str, Any]) -> None:
         """Validate SwissProt API response.
 
@@ -490,9 +530,7 @@ class SwissClient(BaseClient):
                 "processed_compounds": len(self.processed_compounds),
                 "failed_compounds": len(self.failed_compounds),
                 "success_rate": (
-                    len(self.processed_compounds) / (len(self.processed_compounds) + len(self.failed_compounds))
-                    if self.processed_compounds or self.failed_compounds
-                    else 0
+                    len(self.processed_compounds) / (len(self.processed_compounds) + len(self.failed_compounds)) if self.processed_compounds or self.failed_compounds else 0
                 ),
             }
         )

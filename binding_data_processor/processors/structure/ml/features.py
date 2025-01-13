@@ -12,7 +12,7 @@ from rdkit.Chem import (
     AllChem,
     Descriptors,
     MACCSkeys,
-    rdDecomposition,
+    rdRGroupDecomposition,
     rdMolDescriptors,
     rdReducedGraphs,
 )
@@ -194,9 +194,7 @@ class EnhancedFeatureExtractor(MLProcessor):
                     if feat_type not in self.scalers:
                         self.scalers[feat_type] = StandardScaler()
                         self.scalers[feat_type].fit(feat_array)
-                    normalized[feat_type] = self.scalers[feat_type].transform(
-                        feat_array
-                    )
+                    normalized[feat_type] = self.scalers[feat_type].transform(feat_array)
                 else:
                     normalized[feat_type] = feat_array
             return normalized

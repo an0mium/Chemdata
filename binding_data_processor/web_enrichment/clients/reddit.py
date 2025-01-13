@@ -1,19 +1,20 @@
-"""Reddit integration for Crawl4AI.
+"""Reddit integration for web enrichment.
 
-This module provides a specialized Crawl4AI client for Reddit that:
+This module provides a specialized client for Reddit that:
 1. Uses Crawl4AI for web scraping Reddit pages
 2. Handles anti-bot detection
 3. Extracts community data about compounds
+4. Validates and processes the data
 """
 
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime
 
-from crawl4ai import AsyncWebCrawler, Config
+from crawl4ai import AsyncWebCrawler, BrowserConfig
 from bs4 import BeautifulSoup
 
-from ..base_client import BaseWebClient
+from .base import WebClient
 from ..validation.schema import BaseSchema
 
 
@@ -35,7 +36,7 @@ class RedditPostData(BaseSchema):
     metadata: Dict[str, Any]
 
 
-class RedditCrawl4AIClient(BaseWebClient):
+class RedditClient(WebClient):
     """Enhanced Reddit client using Crawl4AI."""
 
     BASE_URL = "https://old.reddit.com"  # Use old.reddit.com for better scraping
@@ -58,28 +59,27 @@ class RedditCrawl4AIClient(BaseWebClient):
         Args:
             llm_provider: LLM provider for text extraction
             api_token: Optional API token for LLM provider
-            **kwargs: Additional arguments passed to BaseWebClient
+            **kwargs: Additional arguments passed to BaseClient
         """
         super().__init__(**kwargs)
         self.llm_provider = llm_provider
         self.api_token = api_token
 
         # Configure Crawl4AI with anti-bot detection avoidance
-        self.config = Config(
-            javascript=Config.JavaScript(
+        self.config = BrowserConfig(
+            javascript=BrowserConfig.JavaScript(
                 enabled=True,
                 wait_for_network=True,
                 wait_for_selectors=[
-                    ".thing",
-                    ".title",
-                    ".entry",
+                    ".thing",  # Post container
+                    ".entry",  # Post content
+                    ".tagline",  # Author info
                 ],
-                # Use stealth mode to avoid detection
-                stealth_mode=True,
+                stealth_mode=True,  # Enable stealth mode
             ),
-            screenshot=Config.Screenshot(enabled=True, full_page=True),
-            extraction=Config.Extraction(
-                llm=Config.LLM(
+            screenshot=BrowserConfig.Screenshot(enabled=True, full_page=True),
+            extraction=BrowserConfig.Extraction(
+                llm=BrowserConfig.LLM(
                     provider=llm_provider,
                     api_token=api_token,
                     prompts={
@@ -91,20 +91,20 @@ class RedditCrawl4AIClient(BaseWebClient):
                 ),
                 css={
                     "title": ".title a.title",
-                    "content": ".entry .usertext-body",
-                    "author": ".entry .author",
-                    "subreddit": ".entry .subreddit",
+                    "content": ".usertext-body .md",
+                    "author": ".tagline .author",
+                    "subreddit": ".tagline .subreddit",
                     "score": ".score.unvoted",
                     "num_comments": ".comments",
                 },
             ),
-            proxy=Config.Proxy(
+            proxy=BrowserConfig.Proxy(
                 enabled=True,
-                rotation=True,  # Rotate proxies to avoid blocks
+                rotation=True,
                 retry_count=3,
             ),
-            rate_limit=Config.RateLimit(
-                requests_per_minute=10,  # Conservative rate limiting
+            rate_limit=BrowserConfig.RateLimit(
+                requests_per_minute=10,
                 delay_after_failure=60,
             ),
         )

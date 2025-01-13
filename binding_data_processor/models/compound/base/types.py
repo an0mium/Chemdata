@@ -1,17 +1,18 @@
 """Type definitions for compound data models.
 
 This module defines:
-1. Core enums for compound classification
-2. Data structures for timing and scoring
+1. Core enums for compound classification and binding
+2. Data structures for timing, scoring and binding data
 3. Type aliases for common data types
+4. Validation and data source types
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Set, Union, Any
 
 
-class CompoundType(Enum):
+class CompoundType(str, Enum):
     """Types of chemical compounds."""
 
     NEUROTRANSMITTER = "neurotransmitter"
@@ -21,11 +22,42 @@ class CompoundType(Enum):
     PHARMACEUTICAL = "pharmaceutical"
     NATURAL_PRODUCT = "natural_product"
     SMALL_MOLECULE = "small_molecule"
+    PEPTIDE = "peptide"
+    PROTEIN = "protein"
+    SYNTHETIC = "synthetic"
+    NOOTROPIC = "nootropic"
+    METABOLITE = "metabolite"
     OTHER = "other"
     UNKNOWN = "unknown"
 
 
-class LegalStatus(Enum):
+class BindingType(str, Enum):
+    """Type of binding interaction."""
+
+    AGONIST = "agonist"
+    ANTAGONIST = "antagonist"
+    PARTIAL_AGONIST = "partial_agonist"
+    INVERSE_AGONIST = "inverse_agonist"
+    ALLOSTERIC = "allosteric"
+    COMPETITIVE = "competitive"
+    NONCOMPETITIVE = "noncompetitive"
+    IRREVERSIBLE = "irreversible"
+    UNKNOWN = "unknown"
+
+
+class ActivityType(str, Enum):
+    """Type of biological activity."""
+
+    INHIBITOR = "inhibitor"
+    ACTIVATOR = "activator"
+    MODULATOR = "modulator"
+    BLOCKER = "blocker"
+    SUBSTRATE = "substrate"
+    INDUCER = "inducer"
+    UNKNOWN = "unknown"
+
+
+class LegalStatus(str, Enum):
     """Legal status classifications."""
 
     LEGAL = "legal"
@@ -42,7 +74,7 @@ class LegalStatus(Enum):
     UNKNOWN = "unknown"
 
 
-class PsychoactiveClass(Enum):
+class PsychoactiveClass(str, Enum):
     """Classification of psychoactive effects."""
 
     PSYCHEDELIC = "psychedelic"
@@ -59,7 +91,7 @@ class PsychoactiveClass(Enum):
     UNKNOWN = "unknown"
 
 
-class NootropicMechanism(Enum):
+class NootropicMechanism(str, Enum):
     """Mechanisms of nootropic activity."""
 
     CHOLINERGIC = "cholinergic"
@@ -82,7 +114,7 @@ class NootropicMechanism(Enum):
     UNKNOWN = "unknown"
 
 
-class BBBPermeability(Enum):
+class BBBPermeability(str, Enum):
     """Blood-brain barrier permeability classification."""
 
     HIGH = "high"
@@ -92,7 +124,7 @@ class BBBPermeability(Enum):
     UNKNOWN = "unknown"
 
 
-class RiskLevel(Enum):
+class RiskLevel(str, Enum):
     """Risk assessment level."""
 
     SEVERE = "severe"
@@ -101,6 +133,29 @@ class RiskLevel(Enum):
     LOW = "low"
     MINIMAL = "minimal"
     UNKNOWN = "unknown"
+
+
+class DataSource(str, Enum):
+    """Source of compound data."""
+
+    BINDINGDB = "bindingdb"
+    PUBCHEM = "pubchem"
+    CHEMBL = "chembl"
+    CUSTOM = "custom"
+    LITERATURE = "literature"
+    PATENT = "patent"
+    PREDICTED = "predicted"
+    UNKNOWN = "unknown"
+
+
+class ValidationStatus(str, Enum):
+    """Data validation status."""
+
+    VALIDATED = "validated"
+    PARTIALLY_VALIDATED = "partially_validated"
+    UNVALIDATED = "unvalidated"
+    FAILED = "failed"
+    PENDING = "pending"
 
 
 @dataclass
@@ -159,6 +214,68 @@ class ReceptorBinding:
 
 
 @dataclass
+class BindingData:
+    """Container for binding interaction data."""
+
+    target: str
+    binding_type: BindingType
+    affinity: Optional[float] = None
+    units: Optional[str] = None
+    confidence: Optional[float] = None
+    method: Optional[str] = None
+    conditions: Optional[Dict] = field(default_factory=dict)
+    references: List[str] = field(default_factory=list)
+    source: DataSource = DataSource.UNKNOWN
+    validation_status: ValidationStatus = ValidationStatus.UNVALIDATED
+
+
+@dataclass
+class ActivityData:
+    """Container for biological activity data."""
+
+    activity_type: ActivityType
+    target: str
+    value: Optional[float] = None
+    units: Optional[str] = None
+    confidence: Optional[float] = None
+    method: Optional[str] = None
+    conditions: Optional[Dict] = field(default_factory=dict)
+    references: List[str] = field(default_factory=list)
+    source: DataSource = DataSource.UNKNOWN
+    validation_status: ValidationStatus = ValidationStatus.UNVALIDATED
+
+
+@dataclass
+class PropertyData:
+    """Container for physicochemical property data."""
+
+    name: str
+    value: Union[float, str, bool]
+    units: Optional[str] = None
+    confidence: Optional[float] = None
+    method: Optional[str] = None
+    conditions: Optional[Dict] = field(default_factory=dict)
+    references: List[str] = field(default_factory=list)
+    source: DataSource = DataSource.UNKNOWN
+    validation_status: ValidationStatus = ValidationStatus.UNVALIDATED
+
+
+@dataclass
+class SafetyData:
+    """Container for safety/toxicity data."""
+
+    endpoint: str
+    value: Union[float, str, bool]
+    severity: Optional[str] = None
+    confidence: Optional[float] = None
+    method: Optional[str] = None
+    conditions: Optional[Dict] = field(default_factory=dict)
+    references: List[str] = field(default_factory=list)
+    source: DataSource = DataSource.UNKNOWN
+    validation_status: ValidationStatus = ValidationStatus.UNVALIDATED
+
+
+@dataclass
 class PredictionResult:
     """ML prediction result."""
 
@@ -169,6 +286,23 @@ class PredictionResult:
     model_version: Optional[str] = None  # Version of model
     features_used: Optional[List[str]] = None  # Features used in prediction
     metadata: Optional[Dict[str, Any]] = None  # Additional metadata
+
+
+@dataclass
+class TargetData:
+    """Container for target-specific data."""
+
+    name: str  # Target name (e.g. receptor, enzyme)
+    type: str  # Target type (e.g. GPCR, ion channel)
+    organism: str = "human"  # Source organism
+    uniprot_id: Optional[str] = None  # UniProt identifier
+    gene_name: Optional[str] = None  # Gene name
+    binding_data: Optional[BindingData] = None  # Binding interaction data
+    activity_data: Optional[ActivityData] = None  # Activity measurements
+    references: List[str] = field(default_factory=list)  # Literature references
+    metadata: Dict[str, Any] = field(default_factory=dict)  # Additional metadata
+    source: DataSource = DataSource.UNKNOWN
+    validation_status: ValidationStatus = ValidationStatus.UNVALIDATED
 
 
 # Type aliases

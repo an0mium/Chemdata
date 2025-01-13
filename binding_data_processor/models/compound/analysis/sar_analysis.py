@@ -1,6 +1,6 @@
 """Structure-Activity Relationship (SAR) analysis functionality for compound data.
 
-This module provides the SARAnalysisMixin class that adds SAR analysis capabilities:
+This module provides the SARAnalyzer class that adds SAR analysis capabilities:
 - Pharmacophore analysis
 - Similarity searching
 - Activity cliff detection
@@ -8,21 +8,30 @@ This module provides the SARAnalysisMixin class that adds SAR analysis capabilit
 - Substructure analysis
 """
 
+import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, TYPE_CHECKING
 
 from rdkit import Chem
-from rdkit.Chem import AllChem, DataStructs
+from rdkit.Chem import AllChem, DataStructs, rdRGroupDecomposition
 from rdkit.Chem.Pharm2D import Generate
 
-from ...compound import CompoundData
+if TYPE_CHECKING:
+    from ..base.core import CompoundData
+
+logger = logging.getLogger(__name__)
+
+
+def default_sar_analysis() -> Dict:
+    """Default empty SAR analysis dictionary."""
+    return {}
 
 
 @dataclass
-class SARAnalysisMixin:
-    """Mixin class adding SAR analysis capabilities."""
+class SARAnalyzer:
+    """Class providing SAR analysis capabilities."""
 
-    _sar_analysis: Dict = field(default_factory=dict)
+    _sar_analysis: Dict = field(default_factory=default_sar_analysis)
 
     def analyze_sar(self) -> Dict:
         """Analyze structure-activity relationships."""
@@ -62,12 +71,14 @@ class SARAnalysisMixin:
         # Generate pharmacophore hypotheses
         for feature_type, positions in features.items():
             if positions:
-                pharmacophores.append({
-                    "type": feature_type,
-                    "count": len(positions),
-                    "positions": positions,
-                    "confidence": self._calculate_feature_confidence(feature_type),
-                })
+                pharmacophores.append(
+                    {
+                        "type": feature_type,
+                        "count": len(positions),
+                        "positions": positions,
+                        "confidence": self._calculate_feature_confidence(feature_type),
+                    }
+                )
 
         return pharmacophores
 
@@ -153,7 +164,7 @@ class SARAnalysisMixin:
             "average_similarity": sum(s["score"] for s in similarities) / len(similarities),
         }
 
-    def _calculate_similarity(self, other: 'CompoundData') -> float:
+    def _calculate_similarity(self, other: "CompoundData") -> float:
         """Calculate structural similarity between compounds."""
         mol1 = Chem.MolFromSmiles(self.smiles)
         mol2 = Chem.MolFromSmiles(other.smiles)
@@ -164,7 +175,7 @@ class SARAnalysisMixin:
         fp2 = AllChem.GetMorganFingerprintAsBitVect(mol2, 2)
         return DataStructs.TanimotoSimilarity(fp1, fp2)
 
-    def _find_shared_features(self, other: 'CompoundData') -> List[str]:
+    def _find_shared_features(self, other: "CompoundData") -> List[str]:
         """Find pharmacophore features shared with another compound."""
         shared = []
         mol1 = Chem.MolFromSmiles(self.smiles)
@@ -195,7 +206,7 @@ class SARAnalysisMixin:
 
         return shared
 
-    def _calculate_activity_ratio(self, other: 'CompoundData') -> Optional[float]:
+    def _calculate_activity_ratio(self, other: "CompoundData") -> Optional[float]:
         """Calculate activity ratio between compounds."""
         if not hasattr(self, "primary_activity") or not hasattr(other, "primary_activity"):
             return None
@@ -216,17 +227,19 @@ class SARAnalysisMixin:
             if similarity >= 0.7:  # High structural similarity
                 activity_ratio = self._calculate_activity_ratio(ref)
                 if activity_ratio and abs(activity_ratio) >= 10:  # Significant activity difference
-                    cliffs.append({
-                        "compound": ref.name,
-                        "similarity": similarity,
-                        "activity_ratio": activity_ratio,
-                        "structural_differences": self._find_structural_differences(ref),
-                        "significance": self._calculate_cliff_significance(similarity, activity_ratio),
-                    })
+                    cliffs.append(
+                        {
+                            "compound": ref.name,
+                            "similarity": similarity,
+                            "activity_ratio": activity_ratio,
+                            "structural_differences": self._find_structural_differences(ref),
+                            "significance": self._calculate_cliff_significance(similarity, activity_ratio),
+                        }
+                    )
 
         return sorted(cliffs, key=lambda x: x["significance"], reverse=True)
 
-    def _find_structural_differences(self, other: 'CompoundData') -> List[str]:
+    def _find_structural_differences(self, other: "CompoundData") -> List[str]:
         """Find key structural differences with another compound."""
         differences = []
         mol1 = Chem.MolFromSmiles(self.smiles)
@@ -288,17 +301,167 @@ class SARAnalysisMixin:
             if not activities:
                 continue
 
-            trends.append({
-                "feature": feature,
-                "avg_activity": sum(activities) / len(activities),
-                "activity_range": (min(activities), max(activities)),
-                "compound_count": len(compounds),
-                "correlation": self._calculate_feature_correlation(feature, compounds),
-            })
+            trends.append(
+                {
+                    "feature": feature,
+                    "avg_activity": sum(activities) / len(activities),
+                    "activity_range": (min(activities), max(activities)),
+                    "compound_count": len(compounds),
+                    "correlation": self._calculate_feature_correlation(feature, compounds),
+                }
+            )
 
         return sorted(trends, key=lambda x: abs(x["correlation"]), reverse=True)
 
-    def _get_compound_features(self, compound: 'CompoundData') -> Set[str]:
+    def _analyze_feature_importance(self) -> List[Dict]:
+        """Analyze importance of structural features for activity."""
+        if not hasattr(self, "reference_compounds"):
+            return []
+
+        features = {}
+        for ref in self.reference_compounds:
+            if not hasattr(ref, "primary_activity"):
+                continue
+
+            compound_features = self._get_compound_features(ref)
+            for feature in compound_features:
+                if feature not in features:
+                    features[feature] = {"compounds": [], "activities": []}
+                features[feature]["compounds"].append(ref)
+                features[feature]["activities"].append(ref.primary_activity)
+
+        importance = []
+        for feature, data in features.items():
+            if len(data["activities"]) < 2:
+                continue
+
+            avg_activity = sum(data["activities"]) / len(data["activities"])
+            importance.append(
+                {
+                    "feature": feature,
+                    "avg_activity": avg_activity,
+                    "compound_count": len(data["compounds"]),
+                    "activity_range": (min(data["activities"]), max(data["activities"])),
+                    "correlation": self._calculate_feature_correlation(feature, data["compounds"]),
+                }
+            )
+
+        return sorted(importance, key=lambda x: abs(x["correlation"]), reverse=True)
+
+    def _find_activity_switches(self) -> List[Dict]:
+        """Find structural changes that cause significant activity changes."""
+        if not hasattr(self, "reference_compounds"):
+            return []
+
+        switches = []
+        for i, ref1 in enumerate(self.reference_compounds):
+            for ref2 in self.reference_compounds[i + 1 :]:
+                similarity = self._calculate_similarity(ref1)
+                if similarity < 0.7:  # Only consider similar compounds
+                    continue
+
+                activity_ratio = self._calculate_activity_ratio(ref2)
+                if not activity_ratio or abs(activity_ratio) < 5:  # Significant activity difference
+                    continue
+
+                differences = self._find_structural_differences(ref2)
+                if differences:
+                    switches.append(
+                        {
+                            "compounds": [ref1.name, ref2.name],
+                            "similarity": similarity,
+                            "activity_ratio": activity_ratio,
+                            "structural_changes": differences,
+                            "significance": abs(activity_ratio) * similarity,
+                        }
+                    )
+
+        return sorted(switches, key=lambda x: x["significance"], reverse=True)
+
+    def _identify_optimal_features(self) -> Dict:
+        """Identify structural features associated with optimal activity."""
+        if not hasattr(self, "reference_compounds"):
+            return {}
+
+        # Group compounds by activity level
+        high_activity = []
+        low_activity = []
+        threshold = self._calculate_activity_threshold()
+
+        for ref in self.reference_compounds:
+            if not hasattr(ref, "primary_activity"):
+                continue
+
+            if ref.primary_activity > threshold:
+                high_activity.append(ref)
+            else:
+                low_activity.append(ref)
+
+        # Analyze features in high vs low activity compounds
+        high_features = self._analyze_group_features(high_activity)
+        low_features = self._analyze_group_features(low_activity)
+
+        # Identify distinguishing features
+        optimal_features = []
+        for feature, high_stats in high_features.items():
+            if feature not in low_features:
+                continue
+
+            low_stats = low_features[feature]
+            if high_stats["avg_activity"] > 2 * low_stats["avg_activity"]:
+                optimal_features.append(
+                    {
+                        "feature": feature,
+                        "high_activity_stats": high_stats,
+                        "low_activity_stats": low_stats,
+                        "enrichment": high_stats["avg_activity"] / low_stats["avg_activity"],
+                    }
+                )
+
+        return {
+            "optimal_features": sorted(optimal_features, key=lambda x: x["enrichment"], reverse=True),
+            "activity_threshold": threshold,
+            "high_activity_count": len(high_activity),
+            "low_activity_count": len(low_activity),
+        }
+
+    def _calculate_activity_threshold(self) -> float:
+        """Calculate activity threshold for optimal feature analysis."""
+        activities = []
+        for ref in self.reference_compounds:
+            if hasattr(ref, "primary_activity"):
+                activities.append(ref.primary_activity)
+
+        if not activities:
+            return 0.0
+
+        return sum(activities) / len(activities)  # Use mean as threshold
+
+    def _analyze_group_features(self, compounds: List["CompoundData"]) -> Dict:
+        """Analyze features for a group of compounds."""
+        features = {}
+        for compound in compounds:
+            compound_features = self._get_compound_features(compound)
+            for feature in compound_features:
+                if feature not in features:
+                    features[feature] = {
+                        "count": 0,
+                        "total_activity": 0.0,
+                        "compounds": [],
+                    }
+                features[feature]["count"] += 1
+                features[feature]["total_activity"] += compound.primary_activity
+                features[feature]["compounds"].append(compound)
+
+        # Calculate statistics
+        for feature in features:
+            count = features[feature]["count"]
+            features[feature]["avg_activity"] = features[feature]["total_activity"] / count
+            features[feature]["frequency"] = count / len(compounds)
+
+        return features
+
+    def _get_compound_features(self, compound: "CompoundData") -> Set[str]:
         """Get set of structural features for a compound."""
         features = set()
         mol = Chem.MolFromSmiles(compound.smiles)
@@ -319,7 +482,7 @@ class SARAnalysisMixin:
 
         return features
 
-    def _calculate_feature_correlation(self, feature: str, compounds: List['CompoundData']) -> float:
+    def _calculate_feature_correlation(self, feature: str, compounds: List["CompoundData"]) -> float:
         """Calculate correlation between feature and activity."""
         activities = []
         has_feature = []
@@ -369,20 +532,13 @@ class SARAnalysisMixin:
         """Analyze ring systems."""
         rings = []
         ring_info = mol.GetRingInfo()
-        
+
         for ring_atoms in ring_info.AtomRings():
             ring = {
                 "size": len(ring_atoms),
                 "aromatic": all(mol.GetAtomWithIdx(i).GetIsAromatic() for i in ring_atoms),
-                "heteroatoms": [
-                    mol.GetAtomWithIdx(i).GetSymbol()
-                    for i in ring_atoms
-                    if mol.GetAtomWithIdx(i).GetSymbol() != "C"
-                ],
-                "substitution_count": sum(
-                    len(set(mol.GetAtomWithIdx(i).GetNeighbors()) - set(ring_atoms))
-                    for i in ring_atoms
-                ),
+                "heteroatoms": [mol.GetAtomWithIdx(i).GetSymbol() for i in ring_atoms if mol.GetAtomWithIdx(i).GetSymbol() != "C"],
+                "substitution_count": sum(len(set(mol.GetAtomWithIdx(i).GetNeighbors()) - set(ring_atoms)) for i in ring_atoms),
             }
             rings.append(ring)
 
@@ -394,7 +550,7 @@ class SARAnalysisMixin:
         for atom in mol.GetAtoms():
             if atom.IsInRing():
                 continue
-            
+
             chain = self._trace_chain(mol, atom)
             if chain:
                 chains.append(chain)
@@ -410,7 +566,7 @@ class SARAnalysisMixin:
         while current and not current.IsInRing():
             visited.add(current.GetIdx())
             chain_atoms.append(current.GetIdx())
-            
+
             # Find next non-ring neighbor
             next_atom = None
             for neighbor in current.GetNeighbors():
@@ -424,14 +580,8 @@ class SARAnalysisMixin:
 
         return {
             "length": len(chain_atoms),
-            "composition": [
-                mol.GetAtomWithIdx(i).GetSymbol()
-                for i in chain_atoms
-            ],
-            "branching": sum(
-                len(mol.GetAtomWithIdx(i).GetNeighbors()) > 2
-                for i in chain_atoms
-            ),
+            "composition": [mol.GetAtomWithIdx(i).GetSymbol() for i in chain_atoms],
+            "branching": sum(len(mol.GetAtomWithIdx(i).GetNeighbors()) > 2 for i in chain_atoms),
         }
 
     def _analyze_functional_groups(self, mol: Chem.Mol) -> Dict:
@@ -455,19 +605,64 @@ class SARAnalysisMixin:
         return len(mol.GetSubstructMatches(pattern_mol))
 
     def _analyze_scaffolds(self, mol: Chem.Mol) -> List[Dict]:
-        """Analyze molecular scaffolds."""
+        """Analyze molecular scaffolds and R-groups."""
         from rdkit.Chem.Scaffolds import MurckoScaffold
 
         scaffolds = []
-        
+
         # Get Murcko scaffold
         scaffold_mol = MurckoScaffold.GetScaffoldForMol(mol)
         if scaffold_mol:
-            scaffolds.append({
+            scaffold_info = {
                 "type": "murcko",
                 "smiles": Chem.MolToSmiles(scaffold_mol),
                 "complexity": scaffold_mol.GetNumAtoms(),
                 "ring_count": scaffold_mol.GetRingInfo().NumRings(),
-            })
+            }
+
+            # Analyze R-groups
+            try:
+                rgroup_params = rdRGroupDecomposition.RGroupDecompositionParameters()
+                rgroup_params.removeHydrogensPostMatch = True
+                rgroup_params.onlyMatchAtRGroups = False
+
+                decomp = rdRGroupDecomposition.RGroupDecomposition(scaffold_mol, rgroup_params)
+                decomp.Add(mol)
+                if decomp.Process():
+                    rgroups = decomp.GetRGroupsAsColumns()
+                    if rgroups:
+                        scaffold_info["rgroups"] = {}
+                        for rgroup_label, rgroup_mols in rgroups.items():
+                            if rgroup_mols and rgroup_mols[0] is not None:
+                                scaffold_info["rgroups"][rgroup_label] = {
+                                    "smiles": Chem.MolToSmiles(rgroup_mols[0]),
+                                    "size": rgroup_mols[0].GetNumAtoms(),
+                                    "complexity": self._calculate_rgroup_complexity(rgroup_mols[0]),
+                                }
+            except Exception as e:
+                logger.debug(f"Error in R-group decomposition: {str(e)}")
+
+            scaffolds.append(scaffold_info)
 
         return scaffolds
+
+    def _calculate_rgroup_complexity(self, rgroup_mol: Chem.Mol) -> float:
+        """Calculate complexity score for an R-group."""
+        try:
+            # Basic complexity factors
+            num_atoms = rgroup_mol.GetNumAtoms()
+            num_bonds = rgroup_mol.GetNumBonds()
+            num_rings = rgroup_mol.GetRingInfo().NumRings()
+
+            # Normalize and combine scores
+            atom_score = min(1.0, num_atoms / 10)  # Smaller scale for R-groups
+            bond_score = min(1.0, num_bonds / 12)
+            ring_score = min(1.0, num_rings / 2)
+
+            # Weighted average
+            weights = [1.0, 1.0, 1.5]
+            total_weight = sum(weights)
+            score = sum([atom_score * weights[0], bond_score * weights[1], ring_score * weights[2]])
+            return float(score / total_weight)
+        except Exception:
+            return 0.0

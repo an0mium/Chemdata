@@ -1,23 +1,13 @@
-"""Compound export functionality.
+"""Export functionality for compound data.
 
-This module provides export capabilities for compound data:
-- Format conversion (JSON, CSV, TSV, etc.)
-- Report generation
-- Data serialization
-- Export validation
-
-Usage:
-    from binding_data_processor.models.compound.export import CompoundExporter
-
-    # Create exporter
-    exporter = CompoundExporter(...)
-
-    # Export to different formats
-    exporter.to_json(...)
-    exporter.to_csv(...)
-    exporter.to_report(...)
+This module provides classes and utilities for exporting compound data in various formats:
+- TSV format with essential data (CAS numbers, structures, properties)
+- JSON format with complete data (including all metadata)
+- Excel format for easier viewing
+- SDF format for chemical structure software
+- MOL format for individual structures
 """
 
-from .formats import CompoundExporter
+from .exporter import CompoundExporter
 
-__all__ = ['CompoundExporter']
+__all__ = ["CompoundExporter"]

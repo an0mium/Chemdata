@@ -1,27 +1,88 @@
 # ChemData Implementation Checklist
 
-## Morning: Community Integration Setup
+## Current Priority: Compound List Export
 
-### 1. Environment Setup ✓
-- [x] Review Reddit API credentials ✓
-- [x] Set up OAuth configuration ✓
-- [x] Configure rate limiting ✓
-- [x] Set up monitoring tools ✓
+### 1. Data Collection (Highest Priority)
+- [ ] Query BindingDB for compounds:
+  - [ ] 5-HT2 agonists
+  - [ ] NMDA antagonists
+  - [ ] Anti-addictive agents
+  - [ ] Physical enhancement compounds
+  - [ ] Longevity enhancement compounds
+  - [ ] Documented recreational/nootropic compounds
+- [ ] Collect protein/peptide data:
+  - [ ] Follistatin-288/315
+  - [ ] alpha-Klotho
+  - [ ] Myoglobin/Hemoglobin
+  - [ ] Profilin
+  - [ ] Apolipoproteins
+  - [ ] Tubulin/Actin/Troponin/Myosin
+- [ ] Collect biomolecule data:
+  - [ ] Creatinine
+  - [ ] Creatine
+  - [ ] ATP
 
-### 2. Code Review ✓
-- [x] Review existing clients:
-  - [x] web_enrichment/social_client.py ✓
-  - [x] web_enrichment/community_client.py ✓
-  - [x] web_enrichment/clients/reddit.py ✓
-  - [x] web_enrichment/clients/bluelight.py ✓
+### 2. Data Validation
+- [ ] Verify CAS numbers
+- [ ] Validate structures
+- [ ] Check completeness
+- [ ] Ensure accuracy
+- [ ] Cross-reference sources
 
-### 3. Test Environment ✓
-- [x] Run existing tests ✓
-- [x] Note any failures ✓
-- [x] Check test coverage ✓
-- [x] Review test structure ✓
+### 3. Export Generation
+- [ ] Compile complete list
+- [ ] Format TSV output
+- [ ] Include all identifiers
+- [ ] Add available metadata
+- [ ] Add prediction data
 
-## Current Focus: Document Processing
+## Recent Consolidations
+
+### Model Consolidation (Completed ✓)
+1. Nootropic Predictor ✓
+   - [x] Merged enhanced functionality into main nootropic.py ✓
+   - [x] Added comprehensive docstrings and type hints ✓
+   - [x] Improved error handling and validation ✓
+   - [x] Integrated BBB predictor and ensemble models ✓
+   - [x] Added prediction history tracking ✓
+   - [x] Removed redundant files ✓
+   - [x] Updated package structure ✓
+   - [x] Comprehensive test coverage ✓
+
+## Community Integration (80% Complete)
+
+### 1. Reddit Integration (80% Complete) ✓
+- [x] OAuth Setup:
+  - [x] Authorization endpoint ✓
+  - [x] Token handling ✓
+  - [x] Refresh mechanism ✓
+  - [x] Error handling ✓
+
+### 2. Content Monitoring ✓
+- [x] Basic subreddit monitoring:
+  - [x] r/researchchemicals ✓
+  - [x] r/nootropics ✓
+  - [x] r/DrugNerds ✓
+  - [x] r/Psychonaut ✓
+- [x] Enhanced monitoring features:
+  - [x] Real-time updates ✓
+  - [x] Historical data analysis ✓
+  - [x] User interaction tracking ✓
+  - [x] Community trend analysis ✓
+
+### 3. Core Features ✓
+- [x] Basic content analysis:
+  - [x] Text extraction ✓
+  - [x] Entity recognition ✓
+  - [x] Advanced sentiment analysis ✓
+  - [x] Comprehensive trend detection ✓
+- [x] Safety monitoring:
+  - [x] Risk detection ✓
+  - [x] Alert system ✓
+  - [x] Report generation ✓
+  - [x] Trend analysis ✓
+
+## Document Processing (80% Complete)
 
 ### 1. Core Implementation (80% Complete)
 - [x] PDF Processing:
@@ -55,92 +116,9 @@
   - [ ] HTML/XML
   - [ ] Plain text
 
-## Community Integration Status
-
-### 1. Reddit Integration (80% Complete) ✓
-- [x] OAuth Setup:
-  - [x] Authorization endpoint ✓
-  - [x] Token handling ✓
-  - [x] Refresh mechanism ✓
-  - [x] Error handling ✓
-
-### 2. Content Monitoring ✓
-- [x] Basic subreddit monitoring:
-  - [x] r/researchchemicals ✓
-  - [x] r/nootropics ✓
-  - [x] r/DrugNerds ✓
-  - [x] r/Psychonaut ✓
-- [x] Enhanced monitoring features:
-  - [x] Real-time updates ✓
-  - [x] Historical data analysis ✓
-  - [x] User interaction tracking ✓
-  - [x] Community trend analysis ✓
-
-### 3. Core Features ✓
-- [x] Basic content analysis:
-  - [x] Text extraction ✓
-  - [x] Entity recognition ✓
-  - [x] Advanced sentiment analysis ✓
-  - [x] Comprehensive trend detection ✓
-- [x] Safety monitoring:
-  - [x] Risk detection ✓
-  - [x] Alert system ✓
-  - [x] Report generation ✓
-  - [x] Trend analysis ✓
-
-### 4. Testing Infrastructure
-- [x] Basic test files:
-  - [x] test_reddit_client.py ✓
-  - [x] test_content_analysis.py ✓
-  - [x] test_safety_monitoring.py ✓
-  - [x] test_trend_detection.py ✓
-- [ ] Additional tests needed:
-  - [ ] Document processing
-  - [ ] Batch upload
-  - [ ] Integration tests
-
-## Next Steps
-
-### 1. Code Implementation
-- [ ] Complete document processing UI
-- [ ] Add batch upload support
-- [ ] Add processing queue
-- [ ] Add result visualization
-
-### 2. Documentation
-- [ ] Document processing docs
-- [ ] Batch upload guide
-- [ ] Integration examples
-- [ ] API reference
-
-### 3. Planning
-- [ ] Review progress daily
-- [ ] Update task list
-- [ ] Plan format support
-- [ ] Address blockers
-
-## Prerequisites
-
-### Tools (All Installed) ✓
-- [x] Python 3.8+ ✓
-- [x] Git ✓
-- [x] VSCode + extensions ✓
-- [x] Docker ✓
-
-### Access (Complete) ✓
-- [x] Basic Reddit API access ✓
-- [x] OAuth configuration ✓
-- [x] Development environment ✓
-
-### Documentation (In Progress)
-- [x] Basic API documentation ✓
-- [x] OAuth integration guide ✓
-- [ ] Document processing guide
-- [ ] Test documentation
-
 ## Success Criteria
 
-### Code
+### Code Quality
 - [x] All community tests passing ✓
 - [x] No linting errors ✓
 - [x] Type hints complete ✓

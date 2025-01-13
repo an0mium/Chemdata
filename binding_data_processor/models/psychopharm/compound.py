@@ -3,33 +3,28 @@
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Set
 
-from .base import BaseMixin, PsychoactiveClass, NootropicMechanism, RiskLevel
+from .base import PsychopharmBase, PsychoactiveClass, NootropicMechanism, RiskLevel
 from .binding import ReceptorProfileMixin
 from .activity import ActivityProfileMixin
 from .safety import SafetyProfileMixin
 
 
 @dataclass
-class PsychopharmCompound(
-    BaseMixin,
-    ReceptorProfileMixin,
-    ActivityProfileMixin,
-    SafetyProfileMixin
-):
+class PsychopharmCompound(PsychopharmBase, ReceptorProfileMixin, ActivityProfileMixin, SafetyProfileMixin):
     """Complete compound data model with psychopharmacological analysis."""
 
     # Core properties
     name: str = field(default="")
     smiles: Optional[str] = field(default=None)
     cas_number: Optional[str] = field(default=None)
-    
+
     # Classification
     psychoactive_class: PsychoactiveClass = field(default=PsychoactiveClass.UNKNOWN)
     secondary_classes: Set[PsychoactiveClass] = field(default_factory=set)
-    
+
     # Mechanisms
     nootropic_mechanisms: Set[NootropicMechanism] = field(default_factory=set)
-    
+
     # Additional metadata
     source_urls: Set[str] = field(default_factory=set)
     literature_references: Set[str] = field(default_factory=set)
@@ -40,16 +35,12 @@ class PsychopharmCompound(
         return {
             # Base data
             **self.get_base_dict(),
-            
             # Binding data
             "binding": self.get_binding_dict(),
-            
             # Activity data
             "activity": self.get_activity_dict(),
-            
             # Safety data
             "safety": self.get_safety_dict(),
-            
             # Additional metadata
             "metadata": {
                 "sources": list(self.source_urls),
@@ -62,16 +53,16 @@ class PsychopharmCompound(
         """Merge all data from another compound instance."""
         # Merge base data
         self.merge_base_data(other)
-        
+
         # Merge binding data
         self.merge_binding_data(other)
-        
+
         # Merge activity data
         self.merge_activity_data(other)
-        
+
         # Merge safety data
         self.merge_safety_data(other)
-        
+
         # Merge additional metadata
         self.source_urls.update(other.source_urls)
         self.literature_references.update(other.literature_references)
@@ -90,22 +81,22 @@ class PsychopharmCompound(
         """Update psychoactive classification from web data."""
         new_class = classification_data.get("primary_class")
         confidence = classification_data.get("confidence", 0.0)
-        
+
         if not new_class:
             return
-            
+
         if confidence > self.confidence_scores.get("classification", 0.0):
             # Store old class as secondary if it exists
             if self.psychoactive_class != PsychoactiveClass.UNKNOWN:
                 self.secondary_classes.add(self.psychoactive_class)
-                
+
             # Update to new class
             try:
                 self.psychoactive_class = PsychoactiveClass[new_class.upper()]
                 self.confidence_scores["classification"] = confidence
             except KeyError:
                 return
-                
+
             # Add any secondary classes
             for cls in classification_data.get("secondary_classes", []):
                 try:
@@ -128,11 +119,11 @@ class PsychopharmCompound(
         """Update compound data from web sources."""
         # Update metadata
         self._update_metadata(web_data)
-        
+
         # Update classification
         if "classification" in web_data:
             self._update_classification(web_data["classification"])
-            
+
         # Update mechanisms
         if "mechanisms" in web_data:
             self._update_mechanisms(web_data["mechanisms"])
@@ -142,15 +133,15 @@ class PsychopharmCompound(
         # Must have basic identification
         if not (self.name or self.smiles or self.cas_number):
             return False
-            
+
         # Must have some binding data
         if not self.receptor_profiles:
             return False
-            
+
         # Must have reasonable confidence scores
         if any(score > 1.0 for score in self.confidence_scores.values()):
             return False
-            
+
         # Must have consistent risk levels
         safety_dict = self.get_safety_dict()
         if "risk_assessment" in safety_dict:
@@ -160,7 +151,7 @@ class PsychopharmCompound(
                     RiskLevel[risks["overall_risk"].upper()]
                 except KeyError:
                     return False
-                    
+
         return True
 
     def __str__(self) -> str:

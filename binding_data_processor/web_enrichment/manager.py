@@ -23,13 +23,13 @@ from typing import Any, Dict, List, Optional, Set, Type
 
 from tqdm import tqdm
 
-from .base import WebClient, WebClientError
+from .base_client_enhanced import BaseWebClientEnhanced as WebClient, WebClientError
 from .clients.swiss import SwissClient
 from .clients.community import CommunityClient
 from .clients.social import SocialClient
 from .clients.patent import PatentClient
 from ..models.compound import Compound
-from ..pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ..pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 from ..pipeline.infrastructure.monitoring import MetricsCollector
 
 
@@ -56,7 +56,7 @@ class EnrichmentConfig:
     cache_dir: Optional[Path] = None
 
     # Circuit breaker
-    circuit_config: Optional[CircuitConfig] = None
+    circuit_config: Optional[CircuitBreakerConfig] = None
 
     # Client configs
     client_configs: Dict[str, Dict[str, Any]] = field(default_factory=dict)

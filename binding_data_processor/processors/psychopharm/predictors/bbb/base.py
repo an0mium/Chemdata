@@ -19,12 +19,12 @@ from sklearn.preprocessing import StandardScaler
 
 from .....models.core import CompoundData
 from .....models.psychopharm import BBBPermeability
-from ..base import PredictorBase, PredictionResult
+from ..base import BasePredictor, PredictionResult
 
 
-class BBBPredictorBase(PredictorBase):
+class BBBPredictorBase(BasePredictor):
     """Base class for BBB permeability prediction.
-    
+
     This class provides core functionality for predicting blood-brain barrier
     permeability using machine learning models. It handles:
     - Model loading and initialization
@@ -33,7 +33,7 @@ class BBBPredictorBase(PredictorBase):
     - Model training and evaluation
     - Prediction history tracking
     - Export capabilities
-    
+
     The class is designed to be extended by more specialized predictors that
     add additional capabilities like transporter prediction, web data
     enrichment, etc.
@@ -53,9 +53,10 @@ class BBBPredictorBase(PredictorBase):
         model_dir: Optional[str] = None,
         cache_dir: Optional[str] = None,
         log_level: int = logging.INFO,
+        from_pt: bool = False,
     ):
         """Initialize BBB predictor base.
-        
+
         Args:
             model_dir: Optional directory containing trained models
             cache_dir: Optional directory for caching
@@ -64,15 +65,13 @@ class BBBPredictorBase(PredictorBase):
         # Setup logging
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(log_level)
-        
+
         # Add file handler if model_dir provided
         if model_dir:
             log_path = Path(model_dir) / "bbb_predictor.log"
             fh = logging.FileHandler(log_path)
             fh.setLevel(log_level)
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
             fh.setFormatter(formatter)
             self.logger.addHandler(fh)
 
@@ -81,6 +80,8 @@ class BBBPredictorBase(PredictorBase):
             cache_dir=cache_dir,
             feature_types=["fingerprints", "descriptors", "enhanced"],
         )
+
+        self.from_pt = from_pt
 
         # Initialize feature scalers
         self.scalers = self._initialize_scalers()
@@ -95,11 +96,11 @@ class BBBPredictorBase(PredictorBase):
         # Initialize prediction history
         self.prediction_history = pd.DataFrame(
             columns=[
-                'compound_name',
-                'permeability_class',
-                'confidence',
-                'permeability_score',
-                'timestamp',
+                "compound_name",
+                "permeability_class",
+                "confidence",
+                "permeability_score",
+                "timestamp",
             ]
         )
 
@@ -108,13 +109,14 @@ class BBBPredictorBase(PredictorBase):
     def _initialize_scalers(self) -> Dict[str, StandardScaler]:
         """Initialize feature scalers for each feature type."""
         self.logger.debug("Initializing feature scalers")
-        return {
-            feature_type: StandardScaler()
-            for feature_type in self.feature_types
-        }
+        return {feature_type: StandardScaler() for feature_type in self.feature_types}
 
     def _load_models(self) -> Dict:
-        """Load BBB prediction models from disk."""
+        """Load BBB prediction models from disk.
+
+        If from_pt=True, will attempt to load PyTorch weights when TensorFlow
+        model files are not found.
+        """
         models = {}
         model_dir = Path(self.model_dir) if self.model_dir else self.DEFAULT_MODEL_DIR
 
@@ -125,11 +127,21 @@ class BBBPredictorBase(PredictorBase):
                     model_path = model_dir / filename
                     if model_path.exists():
                         self.logger.debug(f"Loading {model_name} from {model_path}")
-                        models[model_name] = np.load(model_path, allow_pickle=True)
+                        try:
+                            models[model_name] = np.load(model_path, allow_pickle=True)
+                        except FileNotFoundError as e:
+                            if self.from_pt and model_path.name.endswith(".h5"):
+                                # Try loading PyTorch weights instead
+                                pt_path = model_path.with_suffix(".pt")
+                                if pt_path.exists():
+                                    self.logger.info(f"Loading PyTorch weights from {pt_path}")
+                                    models[model_name] = np.load(pt_path, allow_pickle=True)
+                                else:
+                                    raise FileNotFoundError(f"Neither TensorFlow model ({model_path}) nor " f"PyTorch weights ({pt_path}) found")
+                            else:
+                                raise e
                     else:
-                        self.logger.warning(
-                            f"Model file not found: {model_path}, initializing new model"
-                        )
+                        self.logger.warning(f"Model file not found: {model_path}, initializing new model")
                         models[model_name] = self._initialize_model(model_name)
 
             except Exception as e:
@@ -146,7 +158,7 @@ class BBBPredictorBase(PredictorBase):
     def _initialize_model(self, model_name: str):
         """Initialize a single model with appropriate configuration."""
         self.logger.debug(f"Initializing new {model_name} model")
-        
+
         if model_name in ["rf_classifier"]:
             return RandomForestClassifier(
                 n_estimators=100,
@@ -176,17 +188,14 @@ class BBBPredictorBase(PredictorBase):
     def _initialize_models(self) -> Dict:
         """Initialize new BBB prediction models."""
         self.logger.info("Initializing new models")
-        return {
-            name: self._initialize_model(name)
-            for name in self.MODEL_FILENAMES
-        }
+        return {name: self._initialize_model(name) for name in self.MODEL_FILENAMES}
 
     def predict(self, compound: CompoundData) -> PredictionResult:
         """Generate BBB permeability predictions for a compound.
-        
+
         Args:
             compound: Compound to predict BBB permeability for
-            
+
         Returns:
             PredictionResult containing:
             - BBB permeability class
@@ -197,54 +206,40 @@ class BBBPredictorBase(PredictorBase):
         try:
             # Extract features
             features = self._extract_compound_features(compound)
-            
+
             # Get predictions
             predictions = self._get_all_predictions(features)
-            
+
             # Format result
             result = self._format_prediction_result(predictions, compound)
-            
+
             # Update history
             self._update_prediction_history(predictions, compound)
-            
-            self.logger.info(
-                f"Generated predictions for {compound.name}: "
-                f"{result.value.value} (confidence: {result.confidence:.3f})"
-            )
-            
+
+            self.logger.info(f"Generated predictions for {compound.name}: " f"{result.value.value} (confidence: {result.confidence:.3f})")
+
             return result
 
         except Exception as e:
-            self.logger.error(
-                "Error predicting BBB properties",
-                f"Compound {compound.name}: {str(e)}",
-                exc_info=True
-            )
+            self.logger.error("Error predicting BBB properties", f"Compound {compound.name}: {str(e)}", exc_info=True)
             return PredictionResult(
                 value=BBBPermeability.UNKNOWN,
                 confidence=0.0,
                 supporting_data={"error": str(e)},
             )
 
-    def _extract_compound_features(
-        self, compound: CompoundData
-    ) -> Dict[str, np.ndarray]:
+    def _extract_compound_features(self, compound: CompoundData) -> Dict[str, np.ndarray]:
         """Extract features from compound."""
         features = {}
         for feature_type in self.feature_types:
             features[feature_type] = self._extract_features(compound, feature_type)
-            self.logger.debug(
-                f"Extracted {feature_type} features: "
-                f"shape={features[feature_type].shape}"
-            )
+            self.logger.debug(f"Extracted {feature_type} features: " f"shape={features[feature_type].shape}")
         return features
 
-    def _get_all_predictions(
-        self, features: Dict[str, np.ndarray]
-    ) -> Dict[str, Tuple[str, float]]:
+    def _get_all_predictions(self, features: Dict[str, np.ndarray]) -> Dict[str, Tuple[str, float]]:
         """Get predictions from all models."""
         predictions = {}
-        
+
         # Get class predictions
         for model_name in ["rf_classifier", "gb_classifier"]:
             pred_class, confidence = self._predict_permeability_class(
@@ -253,7 +248,7 @@ class BBBPredictorBase(PredictorBase):
                 model_name,
             )
             predictions[model_name] = (pred_class, confidence)
-            
+
         # Get score predictions
         for model_name in ["rf_regressor", "gb_regressor"]:
             score, confidence = self._predict_permeability_score(
@@ -262,7 +257,7 @@ class BBBPredictorBase(PredictorBase):
                 model_name,
             )
             predictions[model_name] = (score, confidence)
-            
+
         return predictions
 
     def _predict_permeability_class(
@@ -279,12 +274,10 @@ class BBBPredictorBase(PredictorBase):
         # Get class probabilities
         probs = model.predict_proba(X_scaled)[0]
         pred_idx = np.argmax(probs)
-        
+
         # Map to BBBPermeability class
-        permeability_class = BBBPermeability(
-            model.classes_[pred_idx]
-        ).value
-        
+        permeability_class = BBBPermeability(model.classes_[pred_idx]).value
+
         return permeability_class, float(probs[pred_idx])
 
     def _predict_permeability_score(
@@ -300,9 +293,7 @@ class BBBPredictorBase(PredictorBase):
 
         # Get prediction and confidence
         score = model.predict(X_scaled)[0]
-        confidence = 1.0 - np.std(
-            [est.predict(X_scaled)[0] for est in model.estimators_]
-        )
+        confidence = 1.0 - np.std([est.predict(X_scaled)[0] for est in model.estimators_])
 
         return float(score), float(confidence)
 
@@ -317,7 +308,7 @@ class BBBPredictorBase(PredictorBase):
         for model_name in ["rf_classifier", "gb_classifier"]:
             pred_class, conf = predictions[model_name]
             class_preds.append((pred_class, conf))
-            
+
         final_class, class_conf = self._combine_predictions(
             class_preds,
             weights=[
@@ -325,13 +316,13 @@ class BBBPredictorBase(PredictorBase):
                 self.model_weights["gb_classifier"],
             ],
         )
-        
+
         # Combine score predictions
         score_preds = []
         for model_name in ["rf_regressor", "gb_regressor"]:
             score, conf = predictions[model_name]
             score_preds.append((score, conf))
-            
+
         final_score, score_conf = self._combine_predictions(
             score_preds,
             weights=[
@@ -339,7 +330,7 @@ class BBBPredictorBase(PredictorBase):
                 self.model_weights["gb_regressor"],
             ],
         )
-        
+
         return PredictionResult(
             value=BBBPermeability(final_class),
             confidence=class_conf,
@@ -363,7 +354,7 @@ class BBBPredictorBase(PredictorBase):
                 self.model_weights["gb_classifier"],
             ],
         )
-        
+
         final_score, _ = self._combine_predictions(
             [predictions[m] for m in ["rf_regressor", "gb_regressor"]],
             weights=[
@@ -371,18 +362,25 @@ class BBBPredictorBase(PredictorBase):
                 self.model_weights["gb_regressor"],
             ],
         )
-        
+
         # Add to history
-        self.prediction_history = pd.concat([
-            self.prediction_history,
-            pd.DataFrame([{
-                'compound_name': compound.name,
-                'permeability_class': final_class,
-                'confidence': class_conf,
-                'permeability_score': final_score,
-                'timestamp': pd.Timestamp.now(),
-            }])
-        ], ignore_index=True)
+        self.prediction_history = pd.concat(
+            [
+                self.prediction_history,
+                pd.DataFrame(
+                    [
+                        {
+                            "compound_name": compound.name,
+                            "permeability_class": final_class,
+                            "confidence": class_conf,
+                            "permeability_score": final_score,
+                            "timestamp": pd.Timestamp.now(),
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
 
     def _combine_predictions(
         self,
@@ -392,10 +390,10 @@ class BBBPredictorBase(PredictorBase):
         """Combine multiple predictions with optional weights."""
         if weights is None:
             weights = [1.0 / len(predictions)] * len(predictions)
-            
+
         # Normalize weights
         weights = np.array(weights) / sum(weights)
-        
+
         # For classification
         if isinstance(predictions[0][0], str):
             # Get unique classes and their weighted confidences
@@ -404,27 +402,21 @@ class BBBPredictorBase(PredictorBase):
                 if pred_class not in class_confs:
                     class_confs[pred_class] = 0
                 class_confs[pred_class] += conf * weight
-                
+
             # Get class with highest weighted confidence
             final_class = max(class_confs.items(), key=lambda x: x[1])[0]
             final_conf = class_confs[final_class]
-            
+
             return final_class, final_conf
-            
+
         # For regression
         else:
             # Weighted average of predictions
-            final_pred = sum(
-                pred * conf * weight
-                for (pred, conf), weight in zip(predictions, weights)
-            )
-            
+            final_pred = sum(pred * conf * weight for (pred, conf), weight in zip(predictions, weights))
+
             # Average of confidences
-            final_conf = sum(
-                conf * weight
-                for (_, conf), weight in zip(predictions, weights)
-            )
-            
+            final_conf = sum(conf * weight for (_, conf), weight in zip(predictions, weights))
+
             return final_pred, final_conf
 
     def save_models(self, save_dir: Optional[str] = None) -> None:
@@ -446,11 +438,11 @@ class BBBPredictorBase(PredictorBase):
                 # Save current version
                 model_path = save_dir / self.MODEL_FILENAMES[model_name]
                 np.save(model_path, model)
-                
+
                 # Save versioned copy
                 version_path = version_dir / self.MODEL_FILENAMES[model_name]
                 np.save(version_path, model)
-                
+
                 self.logger.debug(f"Saved {model_name} to {model_path}")
             except Exception as e:
                 self.logger.error(f"Error saving {model_name}: {str(e)}")
@@ -474,21 +466,17 @@ class BBBPredictorBase(PredictorBase):
     def get_prediction_statistics(self) -> pd.DataFrame:
         """Get statistics about predictions made so far."""
         stats = pd.DataFrame()
-        
+
         # Class distribution
-        stats['class_dist'] = (
-            self.prediction_history['permeability_class'].value_counts()
-        )
-        
+        stats["class_dist"] = self.prediction_history["permeability_class"].value_counts()
+
         # Average confidence by class
-        stats['avg_confidence'] = (
-            self.prediction_history.groupby('permeability_class')['confidence'].mean()
-        )
-        
+        stats["avg_confidence"] = self.prediction_history.groupby("permeability_class")["confidence"].mean()
+
         # Score statistics
-        stats['score_mean'] = self.prediction_history['permeability_score'].mean()
-        stats['score_std'] = self.prediction_history['permeability_score'].std()
-        
+        stats["score_mean"] = self.prediction_history["permeability_score"].mean()
+        stats["score_std"] = self.prediction_history["permeability_score"].std()
+
         return stats
 
     def export_predictions(
@@ -499,10 +487,10 @@ class BBBPredictorBase(PredictorBase):
         """Export prediction history to TSV file."""
         if columns is None:
             columns = self.prediction_history.columns
-        
+
         self.prediction_history[columns].to_csv(
             output_path,
-            sep='\t',
+            sep="\t",
             index=False,
         )
         self.logger.info(f"Exported predictions to {output_path}")
@@ -515,13 +503,13 @@ class BBBPredictorBase(PredictorBase):
         **kwargs,
     ) -> Dict[str, float]:
         """Retrain models with new data.
-        
+
         Args:
             compounds: List of compounds to train on
             labels: BBB permeability class labels
             scores: Optional permeability scores for regression
             **kwargs: Additional training parameters
-            
+
         Returns:
             Dictionary of training metrics
         """
@@ -559,6 +547,6 @@ class BBBPredictorBase(PredictorBase):
 
         # Save updated models
         self.save_models()
-        
+
         self.logger.info("Model retraining completed successfully")
         return metrics

@@ -9,7 +9,7 @@ import json
 
 from ..http_client_enhanced import HTTPClientEnhanced
 from ...pipeline.infrastructure.circuit_breaker import (
-    CircuitConfig,
+    CircuitBreakerConfig,
     CircuitBreakerError,
 )
 
@@ -21,7 +21,7 @@ def client(tmp_path):
         name="test_client",
         cache_dir=tmp_path / "cache",
         rate_limit=0,  # Disable rate limiting for tests
-        circuit_config=CircuitConfig(
+        circuit_config=CircuitBreakerConfig(
             failure_threshold=2,
             failure_timeout=1,
             reset_timeout=1,
@@ -175,9 +175,9 @@ def test_cleanup(client):
     """Test cleanup on close."""
     # Add some cache entries
     client.memory_cache["key"] = "value"
-    
+
     # Close client
     client.close()
-    
+
     # Cache should be cleared
     assert len(client.memory_cache) == 0

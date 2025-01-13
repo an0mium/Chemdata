@@ -14,12 +14,12 @@ from datetime import datetime
 import logging
 import re
 
-from crawl4ai import AsyncWebCrawler, Config
+from crawl4ai import AsyncWebCrawler, BrowserConfig
 from bs4 import BeautifulSoup
 
-from ..base_client import BaseClient
+from ..clients.base import WebClient  # Updated import path
 from ..validation.enhanced import EnhancedValidator
-from ...models.compound import CompoundData
+from ...models.compound.base.core import CompoundData  # Updated import path
 from ...pipeline.infrastructure.rate_limiter import RateLimiter, RateLimit
 from ...pipeline.infrastructure.circuit_breaker import CircuitBreaker, ErrorCode, McpError
 
@@ -56,7 +56,7 @@ class ScienceDirectResearchData:
     metadata: Dict[str, Any] = None
 
 
-class EnhancedScienceDirectClient(BaseClient):
+class EnhancedScienceDirectClient(WebClient):  # Updated parent class
     """Enhanced ScienceDirect client with anti-bot detection."""
 
     BASE_URL = "https://www.sciencedirect.com"
@@ -116,8 +116,8 @@ class EnhancedScienceDirectClient(BaseClient):
         self.quota_reset = datetime.now()
 
         # Configure Crawl4AI with anti-bot detection avoidance
-        self.config = Config(
-            javascript=Config.JavaScript(
+        self.config = BrowserConfig(
+            javascript=BrowserConfig.JavaScript(
                 enabled=True,
                 wait_for_network=True,
                 wait_for_selectors=[
@@ -128,9 +128,9 @@ class EnhancedScienceDirectClient(BaseClient):
                 ],
                 stealth_mode=True,  # Enable stealth mode
             ),
-            screenshot=Config.Screenshot(enabled=True, full_page=True),
-            extraction=Config.Extraction(
-                llm=Config.LLM(
+            screenshot=BrowserConfig.Screenshot(enabled=True, full_page=True),
+            extraction=BrowserConfig.Extraction(
+                llm=BrowserConfig.LLM(
                     provider=llm_provider,
                     api_token=api_token,
                     prompts={
@@ -150,12 +150,12 @@ class EnhancedScienceDirectClient(BaseClient):
                     "doi": ".DOI",
                 },
             ),
-            proxy=Config.Proxy(
+            proxy=BrowserConfig.Proxy(
                 enabled=proxy_enabled,
                 rotation=proxy_rotation,
                 retry_count=proxy_retry_count,
             ),
-            rate_limit=Config.RateLimit(
+            rate_limit=BrowserConfig.RateLimit(
                 requests_per_minute=rate_limit,
                 delay_after_failure=rate_limit_delay,
             ),
@@ -355,7 +355,7 @@ class EnhancedScienceDirectClient(BaseClient):
         """Get articles about a compound.
 
         Args:
-            compound: Compound to search for
+            compound: CompoundData to search for
             max_results: Maximum number of results
 
         Returns:
@@ -555,7 +555,7 @@ class EnhancedScienceDirectClient(BaseClient):
         """Build search query for compound.
 
         Args:
-            compound: Compound to search for
+            compound: CompoundData to search for
 
         Returns:
             Search query
@@ -590,7 +590,7 @@ class EnhancedScienceDirectClient(BaseClient):
 
         Args:
             article: Article to check
-            compound: Compound to check against
+            compound: CompoundData to check against
 
         Returns:
             True if relevant
@@ -599,8 +599,7 @@ class EnhancedScienceDirectClient(BaseClient):
             # Check if compound is mentioned
             if not any(
                 name.lower() in article.abstract.lower()
-                for name in [compound.name, compound.cas_number, compound.iupac_name]
-                + [compound.common_name_1, compound.common_name_2, compound.common_name_3]
+                for name in [compound.name, compound.cas_number, compound.iupac_name] + [compound.common_name_1, compound.common_name_2, compound.common_name_3]
                 if name and name != "N/A"
             ):
                 return False

@@ -25,7 +25,7 @@ from rdkit.Chem import (
     MACCSkeys,
     Draw,
     rdDeprotect,
-    rdDecomposition,
+    rdRGroupDecomposition,
     rdMolDescriptors,
     rdMolTransforms,
     rdFMCS,
@@ -87,15 +87,9 @@ class BaseStructureProcessor:
             self.clustering = DBSCAN(eps=0.5, min_samples=5)
 
             # Initialize ML models
-            self.activity_classifier = RandomForestClassifier(
-                n_estimators=100, random_state=42
-            )
-            self.affinity_regressor = RandomForestRegressor(
-                n_estimators=100, random_state=42
-            )
-            self.toxicity_classifier = RandomForestClassifier(
-                n_estimators=100, random_state=42
-            )
+            self.activity_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
+            self.affinity_regressor = RandomForestRegressor(n_estimators=100, random_state=42)
+            self.toxicity_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
 
     def validate_structure(self, smiles: str) -> Optional[Chem.Mol]:
         """Validate and standardize chemical structure."""
@@ -213,7 +207,7 @@ class BaseStructureProcessor:
         mol: Chem.Mol,
         fp_type: str = "morgan",
         params: Optional[Dict] = None,
-    ) -> Optional[Union[Chem.ExplicitBitVect, np.ndarray]]:
+    ) -> Optional[Union[DataStructs.ExplicitBitVect, np.ndarray]]:
         """Generate molecular fingerprint."""
         try:
             if mol is None:
@@ -331,9 +325,7 @@ class BaseStructureProcessor:
             if include_3d and mol.GetNumConformers() > 0:
                 descriptors["asphericity"] = Descriptors3D.Asphericity(mol)
                 descriptors["eccentricity"] = Descriptors3D.Eccentricity(mol)
-                descriptors["inertial_shape_factor"] = (
-                    Descriptors3D.InertialShapeFactor(mol)
-                )
+                descriptors["inertial_shape_factor"] = Descriptors3D.InertialShapeFactor(mol)
                 descriptors["npr1"] = Descriptors3D.NPR1(mol)
                 descriptors["npr2"] = Descriptors3D.NPR2(mol)
                 descriptors["pmi1"] = Descriptors3D.PMI1(mol)
@@ -393,9 +385,7 @@ class BaseStructureProcessor:
 
             return Data(
                 x=torch.tensor(atom_features, dtype=torch.float),
-                edge_index=torch.tensor(edge_indices, dtype=torch.long)
-                .t()
-                .contiguous(),
+                edge_index=torch.tensor(edge_indices, dtype=torch.long).t().contiguous(),
                 edge_attr=torch.tensor(edge_features, dtype=torch.float),
             )
 

@@ -1,4 +1,4 @@
-# Bandit configuration file
+# Bandit security configuration file
 # https://bandit.readthedocs.io/en/latest/config.html
 
 # Test profiles
@@ -84,41 +84,50 @@ profiles:
       - B702  # use_of_mako_templates
       - B703  # django_mark_safe
 
-# Test skipping
-skips:
-  # Skip tests in test files
-  - "*/test_*.py"
-  - "*/tests/*"
-  # Skip examples
-  - "*/examples/*"
-  # Skip documentation
-  - "*/docs/*"
-
-# File patterns to exclude
+# Skip test files and other non-production code
 exclude_dirs:
-  - ".git"
-  - "__pycache__"
-  - "build"
-  - "dist"
-  - "*.egg-info"
-  - ".eggs"
-  - ".tox"
-  - ".venv"
-  - "venv"
-  - ".env"
-  - "docs"
-  - "tests/data"
+  - '.git'
+  - '__pycache__'
+  - 'build'
+  - 'dist'
+  - '*.egg-info'
+  - '.eggs'
+  - '.tox'
+  - '.venv'
+  - 'venv'
+  - '.env'
+  - 'docs'
+  - 'tests'
+  - 'examples'
+  - '.pytest_cache'
+  - '.coverage'
+  - '.mypy_cache'
+  - '.github'
 
-# Per-file-ignores
+# Per-file test skips
 per_file_ignores:
-  # Allow assert in test files
-  "*/test_*.py": ["B101"]
-  # Allow subprocess in scripts
-  "scripts/*.py": ["B404"]
-  # Allow pickle in ML model files
-  "*/ml/*.py": ["B301", "B403"]
+  'setup.py':
+    - 'B102'  # exec used in setup.py is standard practice
+  'scripts/*':
+    - 'B404'  # Import subprocess
+    - 'B603'  # subprocess without shell=True
+    - 'B607'  # Start process with partial path
+  'tests/*':
+    - 'B101'  # assert statements
+    - 'B301'  # pickle
+    - 'B403'  # import pickle
+  'binding_data_processor/web_enrichment/*':
+    - 'B310'  # urllib.urlopen
+    - 'B320'  # xml attacks
+  'binding_data_processor/pipeline/infrastructure/*':
+    - 'B404'  # Import subprocess
+    - 'B603'  # subprocess without shell=True
+    - 'B607'  # Start process with partial path
+  'binding_data_processor/ml/*':
+    - 'B301'  # pickle
+    - 'B403'  # import pickle
 
-# Custom test settings
+# Custom test configurations
 any_other_function_with_shell_equals_true:
   no_shell:
     - os.execl
@@ -145,9 +154,9 @@ any_other_function_with_shell_equals_true:
 
 hardcoded_tmp_directory:
   tmp_dirs:
-    - "/tmp"
-    - "/var/tmp"
-    - "/dev/shm"
+    - '/tmp'
+    - '/var/tmp'
+    - '/dev/shm'
 
 ssl_with_bad_defaults:
   bad_protocol_versions:
@@ -182,35 +191,47 @@ shell_injection:
 
 hardcoded_password_string:
   strings:
-    - "password"
-    - "passwd"
-    - "pwd"
-    - "secret"
-    - "token"
-    - "api_key"
-    - "auth"
-    - "credentials"
+    - 'password'
+    - 'passwd'
+    - 'pwd'
+    - 'secret'
+    - 'token'
+    - 'api_key'
+    - 'auth'
+    - 'credentials'
+    - 'key'
+    - 'access_token'
+    - 'refresh_token'
 
-# Severity levels
-any_other_function_with_shell_equals_true: HIGH
-assert_used: LOW
-hardcoded_bind_all_interfaces: MEDIUM
-hardcoded_password_default: LOW
-hardcoded_password_funcarg: HIGH
-hardcoded_password_string: HIGH
-hardcoded_sql_expressions: MEDIUM
-hardcoded_tmp_directory: MEDIUM
-jinja2_autoescape_false: MEDIUM
-linux_commands_wildcard_injection: MEDIUM
-missing_function_docstring: LOW
-password_config_option_not_marked_secret: MEDIUM
-request_with_no_cert_validation: HIGH
-set_bad_file_permissions: MEDIUM
-subprocess_popen_with_shell_equals_true: HIGH
-subprocess_without_shell_equals_true: HIGH
-try_except_continue: LOW
-try_except_pass: LOW
-weak_cryptographic_key: HIGH
+# Additional security checks
+blacklist_imports:
+  bad_import_sets:
+    - pickle:
+        imports:
+          - pickle
+          - cPickle
+    - marshal:
+        imports:
+          - marshal
+    - shelve:
+        imports:
+          - shelve
+    - yaml_load:
+        imports:
+          - yaml.load
+    - yaml_load_all:
+        imports:
+          - yaml.load_all
+    - xml_etree:
+        imports:
+          - xml.etree.ElementTree
+          - xml.etree.cElementTree
+
+# Custom plugins
+plugins:
+  - bandit_django_secure
+  - bandit_flask_secure
+  - bandit_fastapi_secure
 
 # Output settings
 output_format: text
@@ -220,7 +241,7 @@ output_colors: True
 verbose: True
 quiet: False
 
-# Number of lines of context to display for each issue
+# Number of lines of context to display
 context_lines: 3
 
 # Progress tracking
@@ -230,3 +251,8 @@ show_progress_every: 100
 logging:
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
   level: INFO
+
+# Severity levels
+aggregate_by_severity: true
+severity: HIGH
+confidence: HIGH

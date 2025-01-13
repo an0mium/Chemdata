@@ -29,11 +29,21 @@ Key Features:
 - Structured data validation
 """
 
-from .base import (
+from ..compound.types import (
+    CompoundType,
+    LegalStatus,
     PsychoactiveClass,
     NootropicMechanism,
     BBBPermeability,
+    BindingType,
     RiskLevel,
+    ToxicityClass,
+    TargetData,
+    StringSet,
+    StringDict,
+    ValidationErrors,
+    OptionalStr,
+    TargetDict,
     DoseRange,
     TimeRange,
     RiskScore,
@@ -56,13 +66,14 @@ class PsychopharmMixin(
     WebEnrichmentMixin,
 ):
     """Main mixin class combining all psychopharmacological functionality.
-    
+
     This mixin combines all the specialized mixins into a single class that can be
     used to add complete psychopharmacological analysis capabilities to any class.
-    
+
     For a complete compound data model that includes all this functionality, use
     PsychopharmCompound instead.
     """
+
     pass
 
 
@@ -72,22 +83,20 @@ __all__ = [
     "NootropicMechanism",
     "BBBPermeability",
     "RiskLevel",
+    "ToxicityClass",
     "DoseRange",
     "TimeRange",
     "RiskScore",
     "EffectScore",
     "ReceptorBinding",
-    
     # Individual mixins
     "ReceptorProfileMixin",
     "ActivityProfileMixin",
     "SafetyProfileMixin",
     "CommunityDataMixin",
     "WebEnrichmentMixin",
-    
     # Combined mixin
     "PsychopharmMixin",
-    
     # Complete compound model
     "PsychopharmCompound",
 ]

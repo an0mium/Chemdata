@@ -10,7 +10,7 @@ import responses
 
 from ..social_client_enhanced import SocialClientEnhanced
 from ...models.compound import Compound
-from ...pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ...pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 
 
 @pytest.fixture
@@ -21,7 +21,7 @@ def client(tmp_path):
         reddit_client_secret="test_secret",
         twitter_bearer_token="test_token",
         cache_dir=tmp_path / "cache",
-        circuit_config=CircuitConfig(
+        circuit_config=CircuitBreakerConfig(
             failure_threshold=2,
             failure_timeout=1,
             reset_timeout=1,
@@ -65,9 +65,7 @@ def mock_tweet():
     tweet.author = Mock(username="test_user")
     tweet.created_at = datetime.now()
     tweet.public_metrics = {"retweet_count": 5, "like_count": 10}
-    tweet.entities = {
-        "hashtags": [{"tag": "research"}]
-    }
+    tweet.entities = {"hashtags": [{"tag": "research"}]}
     return tweet
 
 
@@ -114,7 +112,7 @@ def test_get_cached_reddit_data(client, compound, tmp_path):
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
     cache_file = cache_dir / f"reddit_{compound.name}.json"
-    
+
     data = {
         "posts": [
             {
@@ -145,7 +143,7 @@ def test_get_cached_twitter_data(client, compound, tmp_path):
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
     cache_file = cache_dir / f"twitter_{compound.name}.json"
-    
+
     data = {
         "tweets": [
             {

@@ -17,62 +17,92 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingRegressor
 from sklearn.preprocessing import StandardScaler
 
 from ....models.core import CompoundData
-from ....models.psychopharm import AbusePotential, TolerancePattern, WithdrawalSeverity
-from ..base import PredictionResult
-from .base import PredictorBase
+from ....models.compound.types import AbusePotential, TolerancePattern, WithdrawalSeverity
+from .types import PredictionResult
+from .base import BasePredictor
 
 
-class AbusePotentialPredictor(PredictorBase):
+class AbusePotentialPredictor(BasePredictor):
     """Predict abuse potential and related risks."""
 
     # Abuse-related mechanisms
     ABUSE_MECHANISMS = {
         "reward": {
-            "dopamine_release", "dopamine_reuptake", "serotonin_release",
-            "opioid_agonism", "gaba_modulation", "glutamate_modulation",
-            "reward_sensitization", "incentive_salience",
+            "dopamine_release",
+            "dopamine_reuptake",
+            "serotonin_release",
+            "opioid_agonism",
+            "gaba_modulation",
+            "glutamate_modulation",
+            "reward_sensitization",
+            "incentive_salience",
         },
         "reinforcement": {
-            "positive_reinforcement", "negative_reinforcement",
-            "behavioral_sensitization", "craving_induction",
-            "habit_formation", "compulsive_use",
+            "positive_reinforcement",
+            "negative_reinforcement",
+            "behavioral_sensitization",
+            "craving_induction",
+            "habit_formation",
+            "compulsive_use",
         },
         "dependence": {
-            "physical_dependence", "psychological_dependence",
-            "withdrawal_induction", "tolerance_development",
-            "receptor_adaptation", "neuroadaptation",
+            "physical_dependence",
+            "psychological_dependence",
+            "withdrawal_induction",
+            "tolerance_development",
+            "receptor_adaptation",
+            "neuroadaptation",
         },
     }
 
     # Tolerance patterns
     TOLERANCE_PATTERNS = {
         "acute": {
-            "rapid_tolerance", "tachyphylaxis", "acute_desensitization",
-            "dose_escalation", "effect_reduction",
+            "rapid_tolerance",
+            "tachyphylaxis",
+            "acute_desensitization",
+            "dose_escalation",
+            "effect_reduction",
         },
         "chronic": {
-            "metabolic_tolerance", "receptor_downregulation",
-            "enzyme_induction", "cross_tolerance", "reverse_tolerance",
+            "metabolic_tolerance",
+            "receptor_downregulation",
+            "enzyme_induction",
+            "cross_tolerance",
+            "reverse_tolerance",
         },
         "behavioral": {
-            "behavioral_tolerance", "context_dependent",
-            "learned_tolerance", "environmental_tolerance",
+            "behavioral_tolerance",
+            "context_dependent",
+            "learned_tolerance",
+            "environmental_tolerance",
         },
     }
 
     # Withdrawal symptoms
     WITHDRAWAL_SYMPTOMS = {
         "physical": {
-            "autonomic_symptoms", "pain_sensitivity", "sleep_disturbance",
-            "appetite_changes", "thermoregulation", "seizure_risk",
+            "autonomic_symptoms",
+            "pain_sensitivity",
+            "sleep_disturbance",
+            "appetite_changes",
+            "thermoregulation",
+            "seizure_risk",
         },
         "psychological": {
-            "anxiety", "depression", "irritability", "anhedonia",
-            "cognitive_impairment", "emotional_instability",
+            "anxiety",
+            "depression",
+            "irritability",
+            "anhedonia",
+            "cognitive_impairment",
+            "emotional_instability",
         },
         "craving": {
-            "drug_craving", "obsessive_thoughts", "compulsive_seeking",
-            "relapse_risk", "cue_reactivity",
+            "drug_craving",
+            "obsessive_thoughts",
+            "compulsive_seeking",
+            "relapse_risk",
+            "cue_reactivity",
         },
     }
 
@@ -97,15 +127,13 @@ class AbusePotentialPredictor(PredictorBase):
         # Setup logging
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(log_level)
-        
+
         # Add file handler if model_dir provided
         if model_dir:
             log_path = Path(model_dir) / "abuse_predictor.log"
             fh = logging.FileHandler(log_path)
             fh.setLevel(log_level)
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
             fh.setFormatter(formatter)
             self.logger.addHandler(fh)
 
@@ -113,7 +141,7 @@ class AbusePotentialPredictor(PredictorBase):
         self.abuse_mechanisms = abuse_mechanisms or self.ABUSE_MECHANISMS
         self.tolerance_patterns = tolerance_patterns or self.TOLERANCE_PATTERNS
         self.withdrawal_symptoms = withdrawal_symptoms or self.WITHDRAWAL_SYMPTOMS
-        
+
         # Initialize base class
         super().__init__(
             model_dir=model_dir,
@@ -127,23 +155,23 @@ class AbusePotentialPredictor(PredictorBase):
         # Initialize prediction history
         self.prediction_history = pd.DataFrame(
             columns=[
-                'compound_name',
-                'abuse_potential',
-                'potential_confidence',
-                'mechanism_category',
-                'mechanism',
-                'mechanism_score',
-                'mechanism_confidence',
-                'tolerance_pattern',
-                'tolerance_score',
-                'tolerance_confidence',
-                'withdrawal_severity',
-                'withdrawal_confidence',
-                'symptom_category',
-                'symptom',
-                'symptom_severity',
-                'symptom_confidence',
-                'timestamp',
+                "compound_name",
+                "abuse_potential",
+                "potential_confidence",
+                "mechanism_category",
+                "mechanism",
+                "mechanism_score",
+                "mechanism_confidence",
+                "tolerance_pattern",
+                "tolerance_score",
+                "tolerance_confidence",
+                "withdrawal_severity",
+                "withdrawal_confidence",
+                "symptom_category",
+                "symptom",
+                "symptom_severity",
+                "symptom_confidence",
+                "timestamp",
             ]
         )
 
@@ -152,10 +180,7 @@ class AbusePotentialPredictor(PredictorBase):
     def _initialize_scalers(self) -> Dict[str, StandardScaler]:
         """Initialize feature scalers for each feature type."""
         self.logger.debug("Initializing feature scalers")
-        return {
-            feature_type: StandardScaler()
-            for feature_type in self.feature_types
-        }
+        return {feature_type: StandardScaler() for feature_type in self.feature_types}
 
     def _load_models(self) -> Dict:
         """Load abuse prediction models from disk."""
@@ -171,9 +196,7 @@ class AbusePotentialPredictor(PredictorBase):
                     self.logger.debug("Loading abuse potential model")
                     models["potential"] = np.load(potential_path, allow_pickle=True)
                 else:
-                    self.logger.warning(
-                        "Potential predictor not found, initializing new model"
-                    )
+                    self.logger.warning("Potential predictor not found, initializing new model")
                     models["potential"] = self._initialize_potential_model()
 
                 # Load mechanism prediction models
@@ -184,13 +207,9 @@ class AbusePotentialPredictor(PredictorBase):
                         model_path = model_dir / f"mechanism_{mechanism}.pkl"
                         if model_path.exists():
                             self.logger.debug(f"Loading mechanism model for {mechanism}")
-                            category_models[mechanism] = np.load(
-                                model_path, allow_pickle=True
-                            )
+                            category_models[mechanism] = np.load(model_path, allow_pickle=True)
                         else:
-                            self.logger.warning(
-                                f"Model not found for {mechanism}, initializing new model"
-                            )
+                            self.logger.warning(f"Model not found for {mechanism}, initializing new model")
                             category_models[mechanism] = self._initialize_mechanism_model()
                     mechanism_models[category] = category_models
                 models["mechanisms"] = mechanism_models
@@ -203,13 +222,9 @@ class AbusePotentialPredictor(PredictorBase):
                         model_path = model_dir / f"tolerance_{pattern}.pkl"
                         if model_path.exists():
                             self.logger.debug(f"Loading tolerance model for {pattern}")
-                            category_models[pattern] = np.load(
-                                model_path, allow_pickle=True
-                            )
+                            category_models[pattern] = np.load(model_path, allow_pickle=True)
                         else:
-                            self.logger.warning(
-                                f"Model not found for {pattern}, initializing new model"
-                            )
+                            self.logger.warning(f"Model not found for {pattern}, initializing new model")
                             category_models[pattern] = self._initialize_tolerance_model()
                     tolerance_models[category] = category_models
                 models["tolerance"] = tolerance_models
@@ -222,13 +237,9 @@ class AbusePotentialPredictor(PredictorBase):
                         model_path = model_dir / f"withdrawal_{symptom}.pkl"
                         if model_path.exists():
                             self.logger.debug(f"Loading withdrawal model for {symptom}")
-                            category_models[symptom] = np.load(
-                                model_path, allow_pickle=True
-                            )
+                            category_models[symptom] = np.load(model_path, allow_pickle=True)
                         else:
-                            self.logger.warning(
-                                f"Model not found for {symptom}, initializing new model"
-                            )
+                            self.logger.warning(f"Model not found for {symptom}, initializing new model")
                             category_models[symptom] = self._initialize_withdrawal_model()
                     withdrawal_models[category] = category_models
                 models["withdrawal"] = withdrawal_models
@@ -284,7 +295,7 @@ class AbusePotentialPredictor(PredictorBase):
     def _initialize_models(self) -> Dict:
         """Initialize all abuse prediction models."""
         self.logger.info("Initializing new models")
-        
+
         models = {
             "potential": self._initialize_potential_model(),
             "mechanisms": {},
@@ -294,26 +305,17 @@ class AbusePotentialPredictor(PredictorBase):
 
         # Initialize mechanism models
         for category, mechanisms in self.abuse_mechanisms.items():
-            category_models = {
-                mechanism: self._initialize_mechanism_model()
-                for mechanism in mechanisms
-            }
+            category_models = {mechanism: self._initialize_mechanism_model() for mechanism in mechanisms}
             models["mechanisms"][category] = category_models
 
         # Initialize tolerance models
         for category, patterns in self.tolerance_patterns.items():
-            category_models = {
-                pattern: self._initialize_tolerance_model()
-                for pattern in patterns
-            }
+            category_models = {pattern: self._initialize_tolerance_model() for pattern in patterns}
             models["tolerance"][category] = category_models
 
         # Initialize withdrawal models
         for category, symptoms in self.withdrawal_symptoms.items():
-            category_models = {
-                symptom: self._initialize_withdrawal_model()
-                for symptom in symptoms
-            }
+            category_models = {symptom: self._initialize_withdrawal_model() for symptom in symptoms}
             models["withdrawal"][category] = category_models
 
         return models
@@ -346,11 +348,11 @@ class AbusePotentialPredictor(PredictorBase):
                     # Save current version
                     model_path = save_dir / f"mechanism_{mechanism}.pkl"
                     np.save(model_path, model)
-                    
+
                     # Save versioned copy
                     version_path = version_dir / f"mechanism_{mechanism}.pkl"
                     np.save(version_path, model)
-                    
+
                     self.logger.debug(f"Saved mechanism model for {mechanism}")
 
             # Save tolerance pattern models
@@ -359,11 +361,11 @@ class AbusePotentialPredictor(PredictorBase):
                     # Save current version
                     model_path = save_dir / f"tolerance_{pattern}.pkl"
                     np.save(model_path, model)
-                    
+
                     # Save versioned copy
                     version_path = version_dir / f"tolerance_{pattern}.pkl"
                     np.save(version_path, model)
-                    
+
                     self.logger.debug(f"Saved tolerance model for {pattern}")
 
             # Save withdrawal symptom models
@@ -372,11 +374,11 @@ class AbusePotentialPredictor(PredictorBase):
                     # Save current version
                     model_path = save_dir / f"withdrawal_{symptom}.pkl"
                     np.save(model_path, model)
-                    
+
                     # Save versioned copy
                     version_path = version_dir / f"withdrawal_{symptom}.pkl"
                     np.save(version_path, model)
-                    
+
                     self.logger.debug(f"Saved withdrawal model for {symptom}")
 
             # Save scalers
@@ -399,21 +401,15 @@ class AbusePotentialPredictor(PredictorBase):
             # Extract features
             features = {}
             for feature_type in self.feature_types:
-                features[feature_type] = self._extract_features(
-                    compound, feature_type
-                )
-                self.logger.debug(
-                    f"Extracted {feature_type} features: shape={features[feature_type].shape}"
-                )
+                features[feature_type] = self._extract_features(compound, feature_type)
+                self.logger.debug(f"Extracted {feature_type} features: shape={features[feature_type].shape}")
 
             # Predict abuse potential
             potential, potential_confidence = self._predict_potential(
                 self.models["potential"],
                 features,
             )
-            self.logger.debug(
-                f"Abuse potential: {potential} (confidence: {potential_confidence:.3f})"
-            )
+            self.logger.debug(f"Abuse potential: {potential} (confidence: {potential_confidence:.3f})")
 
             # Predict abuse mechanisms
             mechanism_predictions = {}
@@ -426,7 +422,7 @@ class AbusePotentialPredictor(PredictorBase):
                         features,
                         mechanism,
                     )
-                    
+
                     if conf > 0.5:  # Confidence threshold
                         category_predictions[mechanism] = {
                             "score": score,
@@ -434,28 +430,35 @@ class AbusePotentialPredictor(PredictorBase):
                         }
 
                         # Update prediction history
-                        self.prediction_history = pd.concat([
-                            self.prediction_history,
-                            pd.DataFrame([{
-                                'compound_name': compound.name,
-                                'abuse_potential': potential,
-                                'potential_confidence': potential_confidence,
-                                'mechanism_category': category,
-                                'mechanism': mechanism,
-                                'mechanism_score': score,
-                                'mechanism_confidence': conf,
-                                'tolerance_pattern': None,
-                                'tolerance_score': None,
-                                'tolerance_confidence': None,
-                                'withdrawal_severity': None,
-                                'withdrawal_confidence': None,
-                                'symptom_category': None,
-                                'symptom': None,
-                                'symptom_severity': None,
-                                'symptom_confidence': None,
-                                'timestamp': pd.Timestamp.now(),
-                            }])
-                        ], ignore_index=True)
+                        self.prediction_history = pd.concat(
+                            [
+                                self.prediction_history,
+                                pd.DataFrame(
+                                    [
+                                        {
+                                            "compound_name": compound.name,
+                                            "abuse_potential": potential,
+                                            "potential_confidence": potential_confidence,
+                                            "mechanism_category": category,
+                                            "mechanism": mechanism,
+                                            "mechanism_score": score,
+                                            "mechanism_confidence": conf,
+                                            "tolerance_pattern": None,
+                                            "tolerance_score": None,
+                                            "tolerance_confidence": None,
+                                            "withdrawal_severity": None,
+                                            "withdrawal_confidence": None,
+                                            "symptom_category": None,
+                                            "symptom": None,
+                                            "symptom_severity": None,
+                                            "symptom_confidence": None,
+                                            "timestamp": pd.Timestamp.now(),
+                                        }
+                                    ]
+                                ),
+                            ],
+                            ignore_index=True,
+                        )
 
                 if category_predictions:
                     mechanism_predictions[category] = category_predictions
@@ -471,7 +474,7 @@ class AbusePotentialPredictor(PredictorBase):
                         features,
                         pattern,
                     )
-                    
+
                     if conf > 0.5:  # Confidence threshold
                         category_predictions[pattern] = {
                             "score": score,
@@ -479,28 +482,35 @@ class AbusePotentialPredictor(PredictorBase):
                         }
 
                         # Update prediction history
-                        self.prediction_history = pd.concat([
-                            self.prediction_history,
-                            pd.DataFrame([{
-                                'compound_name': compound.name,
-                                'abuse_potential': potential,
-                                'potential_confidence': potential_confidence,
-                                'mechanism_category': None,
-                                'mechanism': None,
-                                'mechanism_score': None,
-                                'mechanism_confidence': None,
-                                'tolerance_pattern': pattern,
-                                'tolerance_score': score,
-                                'tolerance_confidence': conf,
-                                'withdrawal_severity': None,
-                                'withdrawal_confidence': None,
-                                'symptom_category': None,
-                                'symptom': None,
-                                'symptom_severity': None,
-                                'symptom_confidence': None,
-                                'timestamp': pd.Timestamp.now(),
-                            }])
-                        ], ignore_index=True)
+                        self.prediction_history = pd.concat(
+                            [
+                                self.prediction_history,
+                                pd.DataFrame(
+                                    [
+                                        {
+                                            "compound_name": compound.name,
+                                            "abuse_potential": potential,
+                                            "potential_confidence": potential_confidence,
+                                            "mechanism_category": None,
+                                            "mechanism": None,
+                                            "mechanism_score": None,
+                                            "mechanism_confidence": None,
+                                            "tolerance_pattern": pattern,
+                                            "tolerance_score": score,
+                                            "tolerance_confidence": conf,
+                                            "withdrawal_severity": None,
+                                            "withdrawal_confidence": None,
+                                            "symptom_category": None,
+                                            "symptom": None,
+                                            "symptom_severity": None,
+                                            "symptom_confidence": None,
+                                            "timestamp": pd.Timestamp.now(),
+                                        }
+                                    ]
+                                ),
+                            ],
+                            ignore_index=True,
+                        )
 
                 if category_predictions:
                     tolerance_predictions[category] = category_predictions
@@ -516,7 +526,7 @@ class AbusePotentialPredictor(PredictorBase):
                         features,
                         symptom,
                     )
-                    
+
                     if conf > 0.5:  # Confidence threshold
                         category_predictions[symptom] = {
                             "severity": severity,
@@ -524,28 +534,35 @@ class AbusePotentialPredictor(PredictorBase):
                         }
 
                         # Update prediction history
-                        self.prediction_history = pd.concat([
-                            self.prediction_history,
-                            pd.DataFrame([{
-                                'compound_name': compound.name,
-                                'abuse_potential': potential,
-                                'potential_confidence': potential_confidence,
-                                'mechanism_category': None,
-                                'mechanism': None,
-                                'mechanism_score': None,
-                                'mechanism_confidence': None,
-                                'tolerance_pattern': None,
-                                'tolerance_score': None,
-                                'tolerance_confidence': None,
-                                'withdrawal_severity': None,
-                                'withdrawal_confidence': None,
-                                'symptom_category': category,
-                                'symptom': symptom,
-                                'symptom_severity': severity,
-                                'symptom_confidence': conf,
-                                'timestamp': pd.Timestamp.now(),
-                            }])
-                        ], ignore_index=True)
+                        self.prediction_history = pd.concat(
+                            [
+                                self.prediction_history,
+                                pd.DataFrame(
+                                    [
+                                        {
+                                            "compound_name": compound.name,
+                                            "abuse_potential": potential,
+                                            "potential_confidence": potential_confidence,
+                                            "mechanism_category": None,
+                                            "mechanism": None,
+                                            "mechanism_score": None,
+                                            "mechanism_confidence": None,
+                                            "tolerance_pattern": None,
+                                            "tolerance_score": None,
+                                            "tolerance_confidence": None,
+                                            "withdrawal_severity": None,
+                                            "withdrawal_confidence": None,
+                                            "symptom_category": category,
+                                            "symptom": symptom,
+                                            "symptom_severity": severity,
+                                            "symptom_confidence": conf,
+                                            "timestamp": pd.Timestamp.now(),
+                                        }
+                                    ]
+                                ),
+                            ],
+                            ignore_index=True,
+                        )
 
                 if category_predictions:
                     withdrawal_predictions[category] = category_predictions
@@ -560,26 +577,17 @@ class AbusePotentialPredictor(PredictorBase):
                     "withdrawal": withdrawal_predictions,
                     **self._format_supporting_data(
                         features,
-                        [(mechanism, pred["confidence"])
-                         for preds in mechanism_predictions.values()
-                         for mechanism, pred in preds.items()],
+                        [(mechanism, pred["confidence"]) for preds in mechanism_predictions.values() for mechanism, pred in preds.items()],
                     ),
                 },
             )
-            
-            self.logger.info(
-                f"Generated predictions for {compound.name}: "
-                f"{result.value.value} (confidence: {result.confidence:.3f})"
-            )
-            
+
+            self.logger.info(f"Generated predictions for {compound.name}: " f"{result.value.value} (confidence: {result.confidence:.3f})")
+
             return result
 
         except Exception as e:
-            self.logger.error(
-                "Error predicting abuse potential",
-                f"Compound {compound.name}: {str(e)}",
-                exc_info=True
-            )
+            self.logger.error("Error predicting abuse potential", f"Compound {compound.name}: {str(e)}", exc_info=True)
             return PredictionResult(
                 value=AbusePotential.UNKNOWN,
                 confidence=0.0,
@@ -599,12 +607,10 @@ class AbusePotentialPredictor(PredictorBase):
         # Get class probabilities
         probs = model.predict_proba(X_scaled)[0]
         pred_idx = np.argmax(probs)
-        
+
         # Map to AbusePotential
-        potential = AbusePotential(
-            model.classes_[pred_idx]
-        ).value
-        
+        potential = AbusePotential(model.classes_[pred_idx]).value
+
         return potential, float(probs[pred_idx])
 
     def _predict_mechanism(
@@ -620,9 +626,7 @@ class AbusePotentialPredictor(PredictorBase):
 
         # Get prediction and confidence
         score = model.predict(X_scaled)[0]
-        confidence = 1.0 - np.std(
-            [est.predict(X_scaled)[0] for est in model.estimators_]
-        )
+        confidence = 1.0 - np.std([est.predict(X_scaled)[0] for est in model.estimators_])
 
         return float(score), float(confidence)
 
@@ -639,9 +643,7 @@ class AbusePotentialPredictor(PredictorBase):
 
         # Get prediction and confidence
         score = model.predict(X_scaled)[0]
-        confidence = 1.0 - np.std(
-            [est.predict(X_scaled)[0] for est in model.estimators_]
-        )
+        confidence = 1.0 - np.std([est.predict(X_scaled)[0] for est in model.estimators_])
 
         return float(score), float(confidence)
 
@@ -658,56 +660,38 @@ class AbusePotentialPredictor(PredictorBase):
 
         # Get prediction and confidence
         severity = model.predict(X_scaled)[0]
-        confidence = 1.0 - np.std(
-            [est.predict(X_scaled)[0] for est in model.estimators_]
-        )
+        confidence = 1.0 - np.std([est.predict(X_scaled)[0] for est in model.estimators_])
 
         return float(severity), float(confidence)
 
     def get_prediction_statistics(self) -> pd.DataFrame:
         """Get statistics about predictions made so far."""
         stats = pd.DataFrame()
-        
+
         # Abuse potential distribution
-        stats['potential_dist'] = (
-            self.prediction_history['abuse_potential'].value_counts(normalize=True)
-        )
-        
+        stats["potential_dist"] = self.prediction_history["abuse_potential"].value_counts(normalize=True)
+
         # Average potential confidence
-        stats['potential_confidence'] = (
-            self.prediction_history.groupby('abuse_potential')['potential_confidence'].mean()
-        )
-        
+        stats["potential_confidence"] = self.prediction_history.groupby("abuse_potential")["potential_confidence"].mean()
+
         # Mechanism score distribution
-        stats['mechanism_score'] = (
-            self.prediction_history.groupby(['mechanism_category', 'mechanism'])['mechanism_score'].mean()
-        )
-        
+        stats["mechanism_score"] = self.prediction_history.groupby(["mechanism_category", "mechanism"])["mechanism_score"].mean()
+
         # Mechanism confidence distribution
-        stats['mechanism_confidence'] = (
-            self.prediction_history.groupby(['mechanism_category', 'mechanism'])['mechanism_confidence'].mean()
-        )
-        
+        stats["mechanism_confidence"] = self.prediction_history.groupby(["mechanism_category", "mechanism"])["mechanism_confidence"].mean()
+
         # Tolerance score distribution
-        stats['tolerance_score'] = (
-            self.prediction_history.groupby('tolerance_pattern')['tolerance_score'].mean()
-        )
-        
+        stats["tolerance_score"] = self.prediction_history.groupby("tolerance_pattern")["tolerance_score"].mean()
+
         # Tolerance confidence distribution
-        stats['tolerance_confidence'] = (
-            self.prediction_history.groupby('tolerance_pattern')['tolerance_confidence'].mean()
-        )
-        
+        stats["tolerance_confidence"] = self.prediction_history.groupby("tolerance_pattern")["tolerance_confidence"].mean()
+
         # Symptom severity distribution
-        stats['symptom_severity'] = (
-            self.prediction_history.groupby(['symptom_category', 'symptom'])['symptom_severity'].mean()
-        )
-        
+        stats["symptom_severity"] = self.prediction_history.groupby(["symptom_category", "symptom"])["symptom_severity"].mean()
+
         # Symptom confidence distribution
-        stats['symptom_confidence'] = (
-            self.prediction_history.groupby(['symptom_category', 'symptom'])['symptom_confidence'].mean()
-        )
-        
+        stats["symptom_confidence"] = self.prediction_history.groupby(["symptom_category", "symptom"])["symptom_confidence"].mean()
+
         return stats
 
     def retrain(
@@ -720,10 +704,8 @@ class AbusePotentialPredictor(PredictorBase):
         **kwargs,
     ) -> Dict[str, float]:
         """Retrain models with new data."""
-        self.logger.info(
-            f"Retraining models with {len(compounds)} compounds"
-        )
-        
+        self.logger.info(f"Retraining models with {len(compounds)} compounds")
+
         # Extract features
         X = []
         for compound in compounds:
@@ -752,9 +734,7 @@ class AbusePotentialPredictor(PredictorBase):
                     model.fit(X, scores)
                     score = model.score(X, scores)
                     metrics[f"mechanism_{mechanism}_score"] = score
-                    self.logger.debug(
-                        f"Mechanism model for {mechanism} training score: {score:.3f}"
-                    )
+                    self.logger.debug(f"Mechanism model for {mechanism} training score: {score:.3f}")
 
         # Train tolerance pattern models
         for category, patterns in tolerance_data.items():
@@ -765,9 +745,7 @@ class AbusePotentialPredictor(PredictorBase):
                     model.fit(X, scores)
                     score = model.score(X, scores)
                     metrics[f"tolerance_{pattern}_score"] = score
-                    self.logger.debug(
-                        f"Tolerance model for {pattern} training score: {score:.3f}"
-                    )
+                    self.logger.debug(f"Tolerance model for {pattern} training score: {score:.3f}")
 
         # Train withdrawal symptom models
         for category, symptoms in withdrawal_data.items():
@@ -778,12 +756,10 @@ class AbusePotentialPredictor(PredictorBase):
                     model.fit(X, severities)
                     score = model.score(X, severities)
                     metrics[f"withdrawal_{symptom}_score"] = score
-                    self.logger.debug(
-                        f"Withdrawal model for {symptom} training score: {score:.3f}"
-                    )
+                    self.logger.debug(f"Withdrawal model for {symptom} training score: {score:.3f}")
 
         # Save updated models
         self.save_models()
-        
+
         self.logger.info("Model retraining completed successfully")
         return metrics

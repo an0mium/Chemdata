@@ -16,9 +16,9 @@ from dataclasses import dataclass
 
 import aiohttp
 import praw
-from crawl4ai import AsyncWebCrawler, Config
+from crawl4ai import AsyncWebCrawler, BrowserConfig
 
-from ..base_client import BaseWebClient
+from .base import WebClient
 from ..validation.schema import BaseSchema
 from ..storage.reddit_storage import RedditStorage
 from ...pipeline.infrastructure.rate_limiter import RateLimit
@@ -71,7 +71,7 @@ class RedditPostData(BaseSchema):
     metadata: Dict[str, Any]
 
 
-class RedditOAuthClient(BaseWebClient):
+class RedditOAuthClient(WebClient):
     """Enhanced Reddit client with OAuth and monitoring."""
 
     OAUTH_URL = "https://www.reddit.com/api/v1/authorize"
@@ -163,8 +163,8 @@ class RedditOAuthClient(BaseWebClient):
         )
 
         # Configure Crawl4AI for fallback scraping
-        self.scraper_config = Config(
-            javascript=Config.JavaScript(
+        self.scraper_config = BrowserConfig(
+            javascript=BrowserConfig.JavaScript(
                 enabled=True,
                 wait_for_network=True,
                 wait_for_selectors=[
@@ -174,9 +174,9 @@ class RedditOAuthClient(BaseWebClient):
                 ],
                 stealth_mode=True,
             ),
-            screenshot=Config.Screenshot(enabled=True, full_page=True),
-            extraction=Config.Extraction(
-                llm=Config.LLM(
+            screenshot=BrowserConfig.Screenshot(enabled=True, full_page=True),
+            extraction=BrowserConfig.Extraction(
+                llm=BrowserConfig.LLM(
                     provider=llm_provider,
                     api_token=api_token,
                     prompts={
@@ -195,12 +195,12 @@ class RedditOAuthClient(BaseWebClient):
                     "num_comments": ".comments",
                 },
             ),
-            proxy=Config.Proxy(
+            proxy=BrowserConfig.Proxy(
                 enabled=True,
                 rotation=True,
                 retry_count=3,
             ),
-            rate_limit=Config.RateLimit(
+            rate_limit=BrowserConfig.RateLimit(
                 requests_per_minute=SCRAPE_RATE_LIMIT.requests,
                 delay_after_failure=60,
             ),
@@ -698,10 +698,7 @@ class RedditOAuthClient(BaseWebClient):
         else:
             # Log informational finding
             self.logger.info(
-                f"Found relevant post in r/{post['subreddit']}:"
-                f"\nTitle: {post['title']}"
-                f"\nURL: https://reddit.com{post['permalink']}"
-                f"\nCompounds: {analysis['compounds']}"
+                f"Found relevant post in r/{post['subreddit']}:" f"\nTitle: {post['title']}" f"\nURL: https://reddit.com{post['permalink']}" f"\nCompounds: {analysis['compounds']}"
             )
 
     async def _process_post(self, post_data: Dict[str, Any]) -> Optional[RedditPostData]:
@@ -918,11 +915,7 @@ class RedditOAuthClient(BaseWebClient):
         data_score = self._calculate_extracted_data(post)
 
         # Combine scores with weights
-        total_score = (
-            field_score * FIELD_PRESENCE_WEIGHT
-            + quality_score * QUALITY_FACTORS_WEIGHT
-            + data_score * EXTRACTED_DATA_WEIGHT
-        )
+        total_score = field_score * FIELD_PRESENCE_WEIGHT + quality_score * QUALITY_FACTORS_WEIGHT + data_score * EXTRACTED_DATA_WEIGHT
 
         return total_score
 

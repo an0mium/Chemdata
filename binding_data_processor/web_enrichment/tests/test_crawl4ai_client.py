@@ -12,7 +12,7 @@ from ..crawl4ai_client import (
     PatentSchema,
     CommunitySchema,
     CircuitBreaker,
-    CircuitConfig,
+    CircuitBreakerConfig,
 )
 
 
@@ -91,7 +91,7 @@ def client():
 @pytest.fixture
 def client_with_circuit_config():
     """Create client with custom circuit breaker config."""
-    config = CircuitConfig(
+    config = CircuitBreakerConfig(
         error_threshold=3,
         recovery_timeout=60,
         half_open_timeout=30,

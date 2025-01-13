@@ -2,11 +2,11 @@
 
 import pytest
 
-from ..property_analysis import PropertyAnalysisMixin
+from ..property_analysis import PropertyAnalyzer
 
 
-class TestCompound(PropertyAnalysisMixin):
-    """Test class implementing PropertyAnalysisMixin."""
+class TestCompound(PropertyAnalyzer):
+    """Test class implementing PropertyAnalyzer."""
 
     def __init__(self, property_data=None, experimental_data=None):
         self._property_analysis = {}
@@ -60,7 +60,7 @@ def test_physicochemical_analysis(test_property_data):
     """Test physicochemical property analysis."""
     compound = TestCompound(property_data=test_property_data["drug_like"])
     properties = compound._analyze_physicochemical()
-    
+
     # Check all properties are present
     assert properties["molecular_weight"] == 320.0
     assert properties["logp"] == 2.8
@@ -78,7 +78,7 @@ def test_drug_likeness_analysis(test_property_data):
     # Test drug-like compound
     drug_like = TestCompound(property_data=test_property_data["drug_like"])
     dl_analysis = drug_like._analyze_drug_likeness()
-    
+
     # Check Lipinski's Rule of 5
     assert dl_analysis["lipinski"]["mw_ok"]
     assert dl_analysis["lipinski"]["logp_ok"]
@@ -97,7 +97,7 @@ def test_drug_likeness_analysis(test_property_data):
     # Test non-drug-like compound
     non_drug_like = TestCompound(property_data=test_property_data["non_drug_like"])
     ndl_analysis = non_drug_like._analyze_drug_likeness()
-    
+
     # Should fail Lipinski rules
     assert not ndl_analysis["lipinski"]["mw_ok"]
     assert not ndl_analysis["lipinski"]["logp_ok"]
@@ -119,7 +119,7 @@ def test_property_alerts(test_property_data):
     # Test non-drug-like compound (should have many alerts)
     compound = TestCompound(property_data=test_property_data["non_drug_like"])
     alerts = compound._analyze_property_alerts()
-    
+
     # Check molecular weight alert
     mw_alert = next(a for a in alerts if a["type"] == "molecular_weight")
     assert mw_alert["description"] == "High molecular weight may reduce bioavailability"
@@ -147,7 +147,7 @@ def test_bioavailability_analysis(test_property_data):
     # Test drug-like compound
     drug_like = TestCompound(property_data=test_property_data["drug_like"])
     drug_like_bio = drug_like._analyze_bioavailability()
-    
+
     # Should have good bioavailability
     assert drug_like_bio["classification"] in ["high", "moderate"]
     assert drug_like_bio["score"] >= 0.7
@@ -158,7 +158,7 @@ def test_bioavailability_analysis(test_property_data):
     # Test non-drug-like compound
     non_drug_like = TestCompound(property_data=test_property_data["non_drug_like"])
     non_drug_like_bio = non_drug_like._analyze_bioavailability()
-    
+
     # Should have poor bioavailability
     assert non_drug_like_bio["classification"] in ["low", "very low"]
     assert non_drug_like_bio["score"] <= 0.5
@@ -172,7 +172,7 @@ def test_bbb_permeability(test_property_data):
     # Test drug-like compound
     drug_like = TestCompound(property_data=test_property_data["drug_like"])
     drug_like_bbb = drug_like._analyze_bioavailability()["bbb_permeability"]
-    
+
     # Should have good BBB permeability
     assert drug_like_bbb["classification"] in ["high", "moderate"]
     assert drug_like_bbb["score"] >= 0.6
@@ -180,7 +180,7 @@ def test_bbb_permeability(test_property_data):
     # Test non-drug-like compound
     non_drug_like = TestCompound(property_data=test_property_data["non_drug_like"])
     non_drug_like_bbb = non_drug_like._analyze_bioavailability()["bbb_permeability"]
-    
+
     # Should have poor BBB permeability
     assert non_drug_like_bbb["classification"] == "low"
     assert non_drug_like_bbb["score"] <= 0.4
@@ -189,7 +189,7 @@ def test_bbb_permeability(test_property_data):
 def test_no_property_data():
     """Test analysis with no property data."""
     compound = TestCompound()
-    
+
     # Should handle missing data gracefully
     properties = compound._analyze_physicochemical()
     assert all(v is None for v in properties.values())
@@ -210,18 +210,13 @@ def test_no_property_data():
 def test_experimental_data_confidence(test_property_data):
     """Test confidence adjustment with experimental data."""
     # Test with experimental data
-    compound_with_exp = TestCompound(
-        property_data=test_property_data["drug_like"],
-        experimental_data={"bioavailability": 0.8}
-    )
+    compound_with_exp = TestCompound(property_data=test_property_data["drug_like"], experimental_data={"bioavailability": 0.8})
     bio_with_exp = compound_with_exp._analyze_bioavailability()
-    
+
     # Test without experimental data
-    compound_no_exp = TestCompound(
-        property_data=test_property_data["drug_like"]
-    )
+    compound_no_exp = TestCompound(property_data=test_property_data["drug_like"])
     bio_no_exp = compound_no_exp._analyze_bioavailability()
-    
+
     # Confidence should be higher with experimental data
     assert bio_with_exp["confidence"] > bio_no_exp["confidence"]
 
@@ -234,7 +229,7 @@ def test_partial_property_data(test_property_data):
         "logp": test_property_data["drug_like"]["logp"],
     }
     compound = TestCompound(property_data=partial_data)
-    
+
     # Should still analyze available properties
     properties = compound._analyze_physicochemical()
     assert properties["molecular_weight"] == partial_data["molecular_weight"]

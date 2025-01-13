@@ -24,7 +24,7 @@ from fake_useragent import UserAgent
 
 from ....pipeline.infrastructure.circuit_breaker import (
     CircuitBreaker,
-    CircuitConfig,
+    CircuitBreakerConfig,
 )
 
 T = TypeVar("T")  # Generic type for circuit breaker return value
@@ -43,11 +43,11 @@ class HTTPClient:
         cache_ttl: int = 86400,  # 24 hours
         cache_size: int = 1000,
         proxies: Optional[Dict[str, str]] = None,
-        circuit_config: Optional[CircuitConfig] = None,
+        circuit_config: Optional[CircuitBreakerConfig] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize HTTP client.
-        
+
         Args:
             name: Client name for circuit breaker
             cache_dir: Optional directory for persistent cache
@@ -108,7 +108,7 @@ class HTTPClient:
         fallback: Optional[Callable[..., requests.Response]] = None,
     ) -> requests.Response:
         """Make GET request with circuit breaker and caching.
-        
+
         Args:
             url: Request URL
             params: Optional query parameters
@@ -116,10 +116,10 @@ class HTTPClient:
             use_cache: Whether to use cache
             cache_key: Optional cache key override
             fallback: Optional fallback function if circuit is open
-            
+
         Returns:
             Response object
-            
+
         Raises:
             requests.RequestException: For request errors
         """
@@ -167,17 +167,17 @@ class HTTPClient:
         fallback: Optional[Callable[..., requests.Response]] = None,
     ) -> requests.Response:
         """Make POST request with circuit breaker.
-        
+
         Args:
             url: Request URL
             data: Optional form data
             json_data: Optional JSON data
             headers: Optional request headers
             fallback: Optional fallback function if circuit is open
-            
+
         Returns:
             Response object
-            
+
         Raises:
             requests.RequestException: For request errors
         """
@@ -313,8 +313,7 @@ class HTTPClient:
             "circuit_breaker": self.circuit.get_metrics(),
             "cache": {
                 "memory_size": len(self.memory_cache),
-                "disk_size": len(list(self.cache_dir.glob("*.json")))
-                if self.cache_dir else 0,
+                "disk_size": len(list(self.cache_dir.glob("*.json"))) if self.cache_dir else 0,
             },
         }
 

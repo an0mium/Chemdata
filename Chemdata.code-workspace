@@ -54,7 +54,8 @@
         "python.testing.pytestArgs": [
             "tests",
             "--no-cov"
-        ]
+        ],
+        "git.ignoreLimitWarning": true
     },
     "extensions": {
         "recommendations": [

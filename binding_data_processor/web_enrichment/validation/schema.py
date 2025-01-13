@@ -14,7 +14,13 @@ from enum import Enum
 
 import jsonschema
 from jsonschema import ValidationError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+
+
+class BaseSchema:
+    """Base class for all schema objects."""
+
+    pass
 
 
 class DataSource(Enum):
@@ -50,6 +56,8 @@ class ValidationResult:
 class ResearchData(BaseModel):
     """Research paper data model."""
 
+    model_config = ConfigDict(extra="forbid")
+
     title: str = Field(..., description="Paper title")
     abstract: str = Field(..., description="Paper abstract")
     authors: List[str] = Field(default_factory=list, description="List of authors")
@@ -65,6 +73,8 @@ class ResearchData(BaseModel):
 class PatentData(BaseModel):
     """Patent document data model."""
 
+    model_config = ConfigDict(extra="forbid")
+
     title: str = Field(..., description="Patent title")
     abstract: str = Field(..., description="Patent abstract")
     inventors: List[str] = Field(default_factory=list, description="List of inventors")
@@ -75,13 +85,13 @@ class PatentData(BaseModel):
     url: str = Field(..., description="Source URL")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Extraction confidence score")
     claims: List[str] = Field(default_factory=list, description="Patent claims")
-    chemical_structures: List[Dict[str, str]] = Field(
-        default_factory=list, description="Chemical structures mentioned in patent"
-    )
+    chemical_structures: List[Dict[str, str]] = Field(default_factory=list, description="Chemical structures mentioned in patent")
 
 
 class CommunityData(BaseModel):
     """Community forum data model."""
+
+    model_config = ConfigDict(extra="forbid")
 
     title: Optional[str] = Field(None, description="Post title")
     content: str = Field(..., description="Post content")
@@ -105,6 +115,8 @@ class CommunityData(BaseModel):
 
 class WebDataSchema(BaseModel):
     """Combined web data schema."""
+
+    model_config = ConfigDict(extra="forbid")
 
     research: List[ResearchData] = Field(default_factory=list, description="Research paper data")
     patents: List[PatentData] = Field(default_factory=list, description="Patent data")
@@ -461,3 +473,17 @@ class SchemaValidator:
         elif isinstance(value, bool):
             return value
         raise ValueError(f"Expected boolean, got {type(value)}")
+
+
+def validate_community_data(data: Dict[str, Any], level: Optional[ValidationLevel] = None) -> ValidationResult:
+    """Validate community data against schema.
+
+    Args:
+        data: Community data to validate
+        level: Optional validation level (defaults to NORMAL)
+
+    Returns:
+        ValidationResult containing validation status and any errors/warnings
+    """
+    validator = SchemaValidator(level=level or ValidationLevel.NORMAL)
+    return validator.validate(data, DataSource.COMMUNITY, "forum")

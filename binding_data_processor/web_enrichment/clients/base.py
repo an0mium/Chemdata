@@ -8,6 +8,7 @@ This module provides a base client with:
 - Data validation
 - Error handling
 - Metrics collection
+- Async support
 """
 
 import logging
@@ -29,7 +30,7 @@ from ..validation.data import (
     ValidationConfig,
     ValidationIssue,
 )
-from ...pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ...pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 
 
 class WebClientError(Exception):
@@ -112,7 +113,7 @@ class WebClient(ABC):
         max_retries: int = 3,
         timeout: int = 30,
         cache_ttl: int = 3600,
-        circuit_config: Optional[CircuitConfig] = None,
+        circuit_config: Optional[CircuitBreakerConfig] = None,
         validation_level: ValidationLevel = ValidationLevel.NORMAL,
         logger: Optional[logging.Logger] = None,
     ):
@@ -159,12 +160,34 @@ class WebClient(ABC):
         self.validation_errors = 0
         self.http_errors = 0
 
+        # Initialize session
+        self.session_id = None
+
     @abstractmethod
     def _get_validation_config(self) -> ValidationConfig:
         """Get validation configuration.
 
         Returns:
             Validation configuration
+        """
+        pass
+
+    @abstractmethod
+    async def get_compound_data(
+        self,
+        name: str,
+        cas_number: Optional[str] = None,
+        use_cache: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """Get data for a compound.
+
+        Args:
+            name: Compound name
+            cas_number: Optional CAS number
+            use_cache: Whether to use cached results
+
+        Returns:
+            Dictionary of compound data or None if not found
         """
         pass
 
@@ -582,6 +605,20 @@ class WebClient(ABC):
             ValueError: If value is invalid
         """
         return DataCleaner.clean_duration(value)
+
+    def _get_cache_key(self, *args: Any, **kwargs: Any) -> str:
+        """Generate cache key from arguments.
+
+        Args:
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+
+        Returns:
+            Cache key string
+        """
+        key_parts = [str(arg) for arg in args]
+        key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items()))
+        return ":".join([self.name] + key_parts)
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get client metrics.

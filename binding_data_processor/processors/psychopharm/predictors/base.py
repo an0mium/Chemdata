@@ -18,34 +18,35 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
-from ....models.compound import PsychoactiveCompound
+from ....models.compound import PsychopharmCompound
 from ....models.compound.ml.predictors import PredictionResult
 from ...structure.ml.features import EnhancedFeatureExtractor
 from ...structure.ml.fingerprints import FingerprintGenerator
 from ...structure.ml.descriptors import DescriptorGenerator
-from ....utils.cache import CacheManager
+from ....infrastructure.cache.base import CacheManager
 
 
 @dataclass
 class PredictorConfig:
     """Configuration for predictors."""
+
     # Model parameters
     model_path: Optional[str] = None
     model_version: str = "1.0.0"
     batch_size: int = 32
-    
+
     # Feature parameters
     feature_type: str = "fingerprint"
     feature_params: Dict[str, Any] = None
-    
+
     # Prediction parameters
     confidence_threshold: float = 0.7
     ensemble_size: int = 5
-    
+
     # Web enrichment
     use_web_data: bool = True
     web_sources: List[str] = None
-    
+
     def __post_init__(self):
         """Initialize default values."""
         if self.feature_params is None:
@@ -54,7 +55,7 @@ class PredictorConfig:
             self.web_sources = ["chembl", "pubchem", "patents"]
 
 
-class PredictorBase(ABC):
+class BasePredictor(ABC):
     """Base class for all psychopharmacological predictors."""
 
     def __init__(
@@ -66,7 +67,7 @@ class PredictorBase(ABC):
         log_level: int = logging.INFO,
     ):
         """Initialize predictor.
-        
+
         Args:
             config: Optional predictor configuration
             model_dir: Optional directory containing trained models
@@ -77,15 +78,13 @@ class PredictorBase(ABC):
         # Setup logging
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(log_level)
-        
+
         # Add file handler if model_dir provided
         if model_dir:
             log_path = Path(model_dir) / f"{self.__class__.__name__}.log"
             fh = logging.FileHandler(log_path)
             fh.setLevel(log_level)
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
             fh.setFormatter(formatter)
             self.logger.addHandler(fh)
 
@@ -93,7 +92,7 @@ class PredictorBase(ABC):
         self.config = config or PredictorConfig()
         self.model_dir = Path(model_dir) if model_dir else None
         self.cache = CacheManager(cache_dir) if cache_dir else None
-        
+
         # Initialize feature generators
         self.feature_types = feature_types or ["fingerprints", "descriptors"]
         self.feature_extractors = {
@@ -111,7 +110,7 @@ class PredictorBase(ABC):
     @abstractmethod
     def _load_models(self) -> Dict:
         """Load ML models from disk.
-        
+
         Returns:
             Dict mapping model names to loaded model objects
         """
@@ -124,15 +123,15 @@ class PredictorBase(ABC):
 
     def _extract_features(
         self,
-        compound: PsychoactiveCompound,
+        compound: PsychopharmCompound,
         feature_type: Optional[str] = None,
     ) -> np.ndarray:
         """Extract features from compound.
-        
+
         Args:
             compound: Compound to extract features from
             feature_type: Optional specific feature type to extract
-            
+
         Returns:
             Feature vector or dict of feature vectors if no type specified
         """
@@ -146,24 +145,22 @@ class PredictorBase(ABC):
                 for ft in self.feature_types:
                     features[ft] = self._extract_feature_type(compound, ft)
                 return features
-                
+
         except Exception as e:
-            self.logger.error(
-                f"Feature extraction error for {compound.name}: {str(e)}"
-            )
+            self.logger.error(f"Feature extraction error for {compound.name}: {str(e)}")
             return np.array([]) if feature_type else {}
 
     def _extract_feature_type(
         self,
-        compound: PsychoactiveCompound,
+        compound: PsychopharmCompound,
         feature_type: str,
     ) -> np.ndarray:
         """Extract specific feature type from compound.
-        
+
         Args:
             compound: Compound to extract features from
             feature_type: Type of features to extract
-            
+
         Returns:
             Feature vector
         """
@@ -190,45 +187,36 @@ class PredictorBase(ABC):
     @abstractmethod
     def _predict_raw(self, features: np.ndarray) -> Tuple[Any, float]:
         """Make raw prediction from features.
-        
+
         Args:
             features: Feature vector
-            
+
         Returns:
             Tuple of (prediction, confidence)
         """
         pass
 
     @abstractmethod
-    def _process_prediction(
-        self,
-        prediction: Any,
-        confidence: float,
-        compound: PsychoactiveCompound
-    ) -> PredictionResult:
+    def _process_prediction(self, prediction: Any, confidence: float, compound: PsychopharmCompound) -> PredictionResult:
         """Process raw prediction into result.
-        
+
         Args:
             prediction: Raw prediction
             confidence: Prediction confidence
             compound: Input compound
-            
+
         Returns:
             Processed prediction result
         """
         pass
 
-    def predict(
-        self,
-        compound: PsychoactiveCompound,
-        use_cache: bool = True
-    ) -> PredictionResult:
+    def predict(self, compound: PsychopharmCompound, use_cache: bool = True) -> PredictionResult:
         """Make prediction for compound.
-        
+
         Args:
             compound: Compound to make prediction for
             use_cache: Whether to use cached predictions
-            
+
         Returns:
             Prediction result
         """
@@ -246,20 +234,10 @@ class PredictorBase(ABC):
             prediction, confidence = self._predict_raw(features)
 
             # Validate prediction
-            is_valid, error = self._validate_prediction(
-                prediction,
-                confidence,
-                self.config.confidence_threshold
-            )
+            is_valid, error = self._validate_prediction(prediction, confidence, self.config.confidence_threshold)
             if not is_valid:
-                self.logger.warning(
-                    f"Invalid prediction for {compound.name}: {error}"
-                )
-                return PredictionResult(
-                    value=None,
-                    confidence=0.0,
-                    metadata={"error": error}
-                )
+                self.logger.warning(f"Invalid prediction for {compound.name}: {error}")
+                return PredictionResult(value=None, confidence=0.0, metadata={"error": error})
 
             # Process result
             result = self._process_prediction(prediction, confidence, compound)
@@ -269,28 +247,18 @@ class PredictorBase(ABC):
                 self._cache_prediction(compound, result)
 
             return result
-            
-        except Exception as e:
-            self.logger.error(
-                f"Prediction error for {compound.name}: {str(e)}"
-            )
-            return PredictionResult(
-                value=None,
-                confidence=0.0,
-                metadata={"error": str(e)}
-            )
 
-    def predict_batch(
-        self,
-        compounds: List[PsychoactiveCompound],
-        use_cache: bool = True
-    ) -> List[PredictionResult]:
+        except Exception as e:
+            self.logger.error(f"Prediction error for {compound.name}: {str(e)}")
+            return PredictionResult(value=None, confidence=0.0, metadata={"error": str(e)})
+
+    def predict_batch(self, compounds: List[PsychopharmCompound], use_cache: bool = True) -> List[PredictionResult]:
         """Make predictions for multiple compounds.
-        
+
         Args:
             compounds: List of compounds
             use_cache: Whether to use cached predictions
-            
+
         Returns:
             List of prediction results
         """
@@ -325,17 +293,13 @@ class PredictorBase(ABC):
 
         return results
 
-    def _process_batch(
-        self,
-        batch: List[np.ndarray],
-        compounds: List[PsychoactiveCompound]
-    ) -> List[PredictionResult]:
+    def _process_batch(self, batch: List[np.ndarray], compounds: List[PsychopharmCompound]) -> List[PredictionResult]:
         """Process a batch of compounds.
-        
+
         Args:
             batch: List of feature vectors
             compounds: Corresponding compounds
-            
+
         Returns:
             List of prediction results
         """
@@ -359,27 +323,20 @@ class PredictorBase(ABC):
 
         return results
 
-    def _check_cache(
-        self,
-        compound: PsychoactiveCompound
-    ) -> Optional[PredictionResult]:
+    def _check_cache(self, compound: PsychopharmCompound) -> Optional[PredictionResult]:
         """Check for cached prediction.
-        
+
         Args:
             compound: Compound to check cache for
-            
+
         Returns:
             Cached prediction if available, else None
         """
         return compound.get_cached_prediction(self.__class__.__name__)
 
-    def _cache_prediction(
-        self,
-        compound: PsychoactiveCompound,
-        result: PredictionResult
-    ) -> None:
+    def _cache_prediction(self, compound: PsychopharmCompound, result: PredictionResult) -> None:
         """Cache prediction result.
-        
+
         Args:
             compound: Compound to cache prediction for
             result: Prediction result to cache
@@ -393,12 +350,12 @@ class PredictorBase(ABC):
         min_confidence: float = 0.5,
     ) -> Tuple[bool, str]:
         """Validate prediction value and confidence.
-        
+
         Args:
             value: Prediction value to validate
             confidence: Confidence score to validate
             min_confidence: Minimum required confidence threshold
-            
+
         Returns:
             Tuple of (is_valid, error_message)
         """
@@ -421,30 +378,25 @@ class PredictorBase(ABC):
         importances: Optional[Dict[str, float]] = None,
     ) -> Dict:
         """Format supporting data for prediction result.
-        
+
         Args:
             features: Dict mapping feature types to feature arrays
             predictions: List of (value, confidence) prediction tuples
             importances: Optional dict mapping feature names to importance scores
-            
+
         Returns:
             Dict containing formatted supporting data
         """
         return {
             "feature_types": list(features.keys()),
-            "feature_counts": {
-                k: len(v) for k, v in features.items()
-            },
-            "model_predictions": [
-                {"value": val, "confidence": conf}
-                for val, conf in predictions
-            ],
+            "feature_counts": {k: len(v) for k, v in features.items()},
+            "model_predictions": [{"value": val, "confidence": conf} for val, conf in predictions],
             "feature_importances": importances or {},
         }
 
     def save_models(self, save_dir: Optional[str] = None) -> None:
         """Save models to disk with versioning.
-        
+
         Args:
             save_dir: Optional directory to save models to
         """
@@ -459,7 +411,7 @@ class PredictorBase(ABC):
         self.logger.info(f"Saving models to {save_dir}")
 
         # Save with versioning
-        timestamp = np.datetime64('now').astype(str)
+        timestamp = np.datetime64("now").astype(str)
         version_dir = save_dir / f"version_{timestamp}"
         version_dir.mkdir(exist_ok=True)
 
@@ -468,49 +420,42 @@ class PredictorBase(ABC):
                 # Save current version
                 model_path = save_dir / f"{name}.pkl"
                 np.save(model_path, model)
-                
+
                 # Save versioned copy
                 version_path = version_dir / f"{name}.pkl"
                 np.save(version_path, model)
-                
+
                 self.logger.debug(f"Saved model {name}")
 
         except Exception as e:
             self.logger.error(f"Error saving models: {str(e)}")
 
-    def retrain(
-        self,
-        compounds: List[PsychoactiveCompound],
-        labels: List[Any],
-        **kwargs
-    ) -> Dict[str, float]:
+    def retrain(self, compounds: List[PsychopharmCompound], labels: List[Any], **kwargs) -> Dict[str, float]:
         """Retrain models with new data.
-        
+
         Args:
             compounds: List of compounds to train on
             labels: List of corresponding labels
             **kwargs: Additional training parameters
-            
+
         Returns:
             Dict containing training metrics
-            
+
         Raises:
             NotImplementedError: If retraining is not supported
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support retraining"
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} does not support retraining")
 
 
-class EnsemblePredictor(PredictorBase):
+class EnsemblePredictor(BasePredictor):
     """Base class for ensemble predictors."""
 
     def __init__(self, config: Optional[PredictorConfig] = None, **kwargs):
         """Initialize ensemble predictor.
-        
+
         Args:
             config: Optional predictor configuration
-            **kwargs: Additional arguments passed to PredictorBase
+            **kwargs: Additional arguments passed to BasePredictor
         """
         super().__init__(config, **kwargs)
         self._models = []
@@ -523,10 +468,10 @@ class EnsemblePredictor(PredictorBase):
 
     def _predict_raw(self, features: np.ndarray) -> Tuple[Any, float]:
         """Make ensemble prediction.
-        
+
         Args:
             features: Feature vector
-            
+
         Returns:
             Tuple of (prediction, confidence)
         """
@@ -545,17 +490,13 @@ class EnsemblePredictor(PredictorBase):
         return final_pred, final_conf
 
     @abstractmethod
-    def _predict_with_model(
-        self,
-        model: Any,
-        features: np.ndarray
-    ) -> Tuple[Any, float]:
+    def _predict_with_model(self, model: Any, features: np.ndarray) -> Tuple[Any, float]:
         """Make prediction with single model.
-        
+
         Args:
             model: Model to use
             features: Feature vector
-            
+
         Returns:
             Tuple of (prediction, confidence)
         """
@@ -564,10 +505,10 @@ class EnsemblePredictor(PredictorBase):
     @abstractmethod
     def _aggregate_predictions(self, predictions: List[Any]) -> Any:
         """Aggregate predictions from ensemble.
-        
+
         Args:
             predictions: List of predictions
-            
+
         Returns:
             Aggregated prediction
         """
@@ -576,30 +517,26 @@ class EnsemblePredictor(PredictorBase):
     @abstractmethod
     def _aggregate_confidences(self, confidences: List[float]) -> float:
         """Aggregate confidences from ensemble.
-        
+
         Args:
             confidences: List of confidence values
-            
+
         Returns:
             Aggregated confidence
         """
         pass
 
 
-class WebEnrichedPredictor(PredictorBase):
+class WebEnrichedPredictor(BasePredictor):
     """Base class for predictors that use web data."""
 
-    def predict(
-        self,
-        compound: PsychoactiveCompound,
-        use_cache: bool = True
-    ) -> PredictionResult:
+    def predict(self, compound: PsychopharmCompound, use_cache: bool = True) -> PredictionResult:
         """Make prediction using both ML and web data.
-        
+
         Args:
             compound: Compound to make prediction for
             use_cache: Whether to use cached predictions
-            
+
         Returns:
             Prediction result
         """
@@ -619,31 +556,26 @@ class WebEnrichedPredictor(PredictorBase):
         return self._combine_predictions(ml_result, web_data, compound)
 
     @abstractmethod
-    def _get_web_data(self, compound: PsychoactiveCompound) -> Optional[Dict]:
+    def _get_web_data(self, compound: PsychopharmCompound) -> Optional[Dict]:
         """Get relevant web data for compound.
-        
+
         Args:
             compound: Compound to get data for
-            
+
         Returns:
             Dictionary of web data if available
         """
         pass
 
     @abstractmethod
-    def _combine_predictions(
-        self,
-        ml_result: PredictionResult,
-        web_data: Dict,
-        compound: PsychoactiveCompound
-    ) -> PredictionResult:
+    def _combine_predictions(self, ml_result: PredictionResult, web_data: Dict, compound: PsychopharmCompound) -> PredictionResult:
         """Combine ML and web-based predictions.
-        
+
         Args:
             ml_result: ML prediction result
             web_data: Web data
             compound: Input compound
-            
+
         Returns:
             Combined prediction result
         """

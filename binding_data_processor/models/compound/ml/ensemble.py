@@ -28,7 +28,7 @@ from sklearn.model_selection import cross_val_score, KFold
 from sklearn.preprocessing import StandardScaler
 
 from ....models.core import CompoundData
-from ..features import FeatureExtractor
+from ....processors.structure.ml.features import EnhancedFeatureExtractor
 
 
 class EnsembleBase:
@@ -59,8 +59,7 @@ class EnsembleBase:
 
         # Initialize feature extraction
         self.feature_types = feature_types or ["fingerprints", "descriptors"]
-        self.feature_extractor = FeatureExtractor(
-            cache_dir=self.cache_dir,
+        self.feature_extractor = EnhancedFeatureExtractor(
             feature_types=self.feature_types,
         )
 
@@ -87,7 +86,7 @@ class EnsembleBase:
         Returns:
             Feature array
         """
-        return self.feature_extractor.extract_features(compound, feature_type)
+        return self.feature_extractor.extract_features([compound.mol], [feature_type])[feature_type]
 
     def _scale_features(
         self,

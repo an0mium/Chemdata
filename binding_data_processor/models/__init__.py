@@ -92,9 +92,9 @@ from .compound import (
 )
 
 # Import mixins for custom implementations
-from .enrichment import WebEnrichmentMixin
-from .predictions import PredictionsMixin
-from .analysis import AnalysisMixin
+from .compound.enrichment import WebEnrichmentMixin
+from .compound.ml.predictors import PredictionsMixin
+from .compound.analysis.base import AnalysisMixin
 
 # Version reflecting combined functionality
 __version__ = "2.1.0"
@@ -102,56 +102,54 @@ __version__ = "2.1.0"
 # Export all public classes and types
 __all__ = [
     # Main interface
-    'Compound',
-    
+    "Compound",
     # Base classes
-    'BaseCompound',
-    'EnrichedCompound',
-    'MLCompound',
-    'AnalyzedCompound',
-    
+    "BaseCompound",
+    "CompoundData",  # Alias for BaseCompound
+    "EnrichedCompound",
+    "MLCompound",
+    "AnalyzedCompound",
     # Types
-    'CompoundType',
-    'LegalStatus',
-    'PsychoactiveClass',
-    'NootropicMechanism',
-    'BBBPermeability',
-    'BindingType',
-    'ActivityType',
-    'RiskLevel',
-    'TargetData',
-    
+    "CompoundType",
+    "LegalStatus",
+    "PsychoactiveClass",
+    "NootropicMechanism",
+    "BBBPermeability",
+    "BindingType",
+    "ActivityType",
+    "RiskLevel",
+    "TargetData",
     # Mixins
-    'WebEnrichmentMixin',
-    'PredictionsMixin',
-    'AnalysisMixin',
-    
+    "WebEnrichmentMixin",
+    "PredictionsMixin",
+    "AnalysisMixin",
     # Exceptions
-    'ValidationError',
+    "ValidationError",
 ]
+
+# For backwards compatibility
+CompoundData = BaseCompound
+
 
 # Deprecation warnings for old files
 def _warn_deprecated(old_name: str, new_name: str) -> None:
-    warnings.warn(
-        f"{old_name} is deprecated and will be removed in a future version. "
-        f"Use {new_name} instead.",
-        DeprecationWarning,
-        stacklevel=2
-    )
+    warnings.warn(f"{old_name} is deprecated and will be removed in a future version. " f"Use {new_name} instead.", DeprecationWarning, stacklevel=2)
+
 
 class _DeprecatedModule:
     def __init__(self, old_name: str, new_name: str):
         self._old_name = old_name
         self._new_name = new_name
-        
+
     def __getattr__(self, name):
         _warn_deprecated(self._old_name, self._new_name)
         return getattr(Compound, name)
 
+
 # Deprecated imports with warnings
-compound = _DeprecatedModule('compound.py', 'compound/__init__.py')
-compound_base = _DeprecatedModule('compound_base.py', 'compound/base.py')
-compound_ml = _DeprecatedModule('compound_ml.py', 'compound/ml.py')
-compound_enrichment = _DeprecatedModule('compound_enrichment.py', 'compound/enrichment.py')
-compound_analysis = _DeprecatedModule('compound_analysis.py', 'compound/analysis.py')
-compound_export = _DeprecatedModule('compound_export.py', 'compound/export.py')
+compound = _DeprecatedModule("compound.py", "compound/__init__.py")
+compound_base = _DeprecatedModule("compound_base.py", "compound/base.py")
+compound_ml = _DeprecatedModule("compound_ml.py", "compound/ml.py")
+compound_enrichment = _DeprecatedModule("compound_enrichment.py", "compound/enrichment.py")
+compound_analysis = _DeprecatedModule("compound_analysis.py", "compound/analysis.py")
+compound_export = _DeprecatedModule("compound_export.py", "compound/export.py")

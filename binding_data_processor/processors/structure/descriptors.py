@@ -12,10 +12,23 @@ from rdkit.Chem import (
     Descriptors,
     Fragments,
     Crippen,
-    rdDecomposition,
     rdMolDescriptors,
     QED,
+    rdRGroupDecomposition,
+    MolSurf,
 )
+from rdkit.Chem.MolSurf import (
+    PEOE_VSA1,
+    PEOE_VSA2,
+    PEOE_VSA3,
+    SMR_VSA1,
+    SMR_VSA2,
+    SMR_VSA3,
+    SlogP_VSA1,
+    SlogP_VSA2,
+    SlogP_VSA3,
+)
+from rdkit.Chem.Scaffolds import MurckoScaffold
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +76,7 @@ class MLDescriptorCalculator:
 
             # Get feature importance
             importance = self.rf_model.feature_importances_
-            self.important_descriptors = [
-                desc
-                for i, desc in enumerate(self.descriptor_names)
-                if importance[i] > np.mean(importance)
-            ]
+            self.important_descriptors = [desc for i, desc in enumerate(self.descriptor_names) if importance[i] > np.mean(importance)]
 
             # Train outlier detector
             self.isolation_forest.fit(X_scaled)
@@ -127,9 +136,7 @@ class MLDescriptorCalculator:
             self.logger.error(f"Error checking outlier: {str(e)}")
             return True
 
-    def get_important_descriptors(
-        self, mol: Chem.Mol
-    ) -> Dict[str, Tuple[float, float]]:
+    def get_important_descriptors(self, mol: Chem.Mol) -> Dict[str, Tuple[float, float]]:
         """
         Get most important descriptors and their contributions.
 
@@ -234,7 +241,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
                 ),
                 "BertzCT": (Descriptors.BertzCT, "Bertz complexity index"),
                 "BalabanJ": (Descriptors.BalabanJ, "Balaban J index"),
-                "WienerIndex": (Descriptors.WienerIndex, "Wiener path index"),
+                "WienerIndex": (lambda m: sum(sum(Chem.GetDistanceMatrix(m)[i][j] for j in range(i + 1, m.GetNumAtoms())) for i in range(m.GetNumAtoms())), "Wiener path index"),
             },
         },
         "connectivity": {
@@ -254,24 +261,15 @@ class DescriptorCalculator(MLDescriptorCalculator):
         "electronic": {
             "description": "Electronic and charge-based descriptors",
             "descriptors": {
-                "PEOE_VSA1": (
-                    rdMolDescriptors.PEOE_VSA1,
-                    "PE/OE charge VSA descriptor 1",
-                ),
-                "PEOE_VSA2": (
-                    rdMolDescriptors.PEOE_VSA2,
-                    "PE/OE charge VSA descriptor 2",
-                ),
-                "PEOE_VSA3": (
-                    rdMolDescriptors.PEOE_VSA3,
-                    "PE/OE charge VSA descriptor 3",
-                ),
-                "SMR_VSA1": (rdMolDescriptors.SMR_VSA1, "MR VSA descriptor 1"),
-                "SMR_VSA2": (rdMolDescriptors.SMR_VSA2, "MR VSA descriptor 2"),
-                "SMR_VSA3": (rdMolDescriptors.SMR_VSA3, "MR VSA descriptor 3"),
-                "SlogP_VSA1": (rdMolDescriptors.SlogP_VSA1, "LogP VSA descriptor 1"),
-                "SlogP_VSA2": (rdMolDescriptors.SlogP_VSA2, "LogP VSA descriptor 2"),
-                "SlogP_VSA3": (rdMolDescriptors.SlogP_VSA3, "LogP VSA descriptor 3"),
+                "PEOE_VSA1": (PEOE_VSA1, "PE/OE charge VSA descriptor 1"),
+                "PEOE_VSA2": (PEOE_VSA2, "PE/OE charge VSA descriptor 2"),
+                "PEOE_VSA3": (PEOE_VSA3, "PE/OE charge VSA descriptor 3"),
+                "SMR_VSA1": (SMR_VSA1, "MR VSA descriptor 1"),
+                "SMR_VSA2": (SMR_VSA2, "MR VSA descriptor 2"),
+                "SMR_VSA3": (SMR_VSA3, "MR VSA descriptor 3"),
+                "SlogP_VSA1": (SlogP_VSA1, "LogP VSA descriptor 1"),
+                "SlogP_VSA2": (SlogP_VSA2, "LogP VSA descriptor 2"),
+                "SlogP_VSA3": (SlogP_VSA3, "LogP VSA descriptor 3"),
                 "MolarRefractivity": (Crippen.MolMR, "Molar refractivity"),
                 "MaxPartialCharge": (
                     Descriptors.MaxPartialCharge,
@@ -291,7 +289,14 @@ class DescriptorCalculator(MLDescriptorCalculator):
                     "Labute accessible surface area",
                 ),
                 "TPSA": (Descriptors.TPSA, "Topological polar surface area"),
-                "MolVolume": (Descriptors.MolVolume, "Molecular volume"),
+                "MolVolume": (
+                    lambda m: (
+                        AllChem.ComputeMolVolume(m)
+                        if m.GetNumConformers() > 0
+                        else (AllChem.EmbedMolecule(m, randomSeed=42) != -1 and AllChem.MMFFOptimizeMolecule(m) != -1 and AllChem.ComputeMolVolume(m) or 0.0)
+                    ),
+                    "Molecular volume",
+                ),
                 "Asphericity": (
                     rdMolDescriptors.CalcAsphericity,
                     "Molecular asphericity",
@@ -317,19 +322,20 @@ class DescriptorCalculator(MLDescriptorCalculator):
         "fragment": {
             "description": "Fragment-based descriptors",
             "descriptors": {
-                "fr_Al_OH": (rdMolDescriptors.fr_Al_OH, "Aliphatic hydroxyl groups"),
-                "fr_Ar_OH": (rdMolDescriptors.fr_Ar_OH, "Aromatic hydroxyl groups"),
-                "fr_NH2": (rdMolDescriptors.fr_NH2, "Primary amines"),
-                "fr_NH1": (rdMolDescriptors.fr_NH1, "Secondary amines"),
-                "fr_NH0": (rdMolDescriptors.fr_NH0, "Tertiary amines"),
-                "fr_Ar_N": (rdMolDescriptors.fr_Ar_N, "Aromatic nitrogens"),
-                "fr_COOH": (rdMolDescriptors.fr_COOH, "Carboxylic acids"),
-                "fr_COO": (rdMolDescriptors.fr_COO, "Esters"),
-                "fr_ketone": (rdMolDescriptors.fr_ketone, "Ketones"),
-                "fr_ether": (rdMolDescriptors.fr_ether, "Ethers"),
-                "fr_phenol": (rdMolDescriptors.fr_phenol, "Phenols"),
-                "fr_aldehyde": (rdMolDescriptors.fr_aldehyde, "Aldehydes"),
-                "fr_amide": (rdMolDescriptors.fr_amide, "Amides"),
+                "fr_Al_OH": (Fragments.fr_Al_OH, "Aliphatic hydroxyl groups"),
+                "fr_Ar_OH": (Fragments.fr_Ar_OH, "Aromatic hydroxyl groups"),
+                "fr_NH2": (Fragments.fr_NH2, "Primary amines"),
+                "fr_NH1": (Fragments.fr_NH1, "Secondary amines"),
+                "fr_NH0": (Fragments.fr_NH0, "Tertiary amines"),
+                "fr_Ar_N": (Fragments.fr_Ar_N, "Aromatic nitrogens"),
+                "fr_Al_COO": (Fragments.fr_Al_COO, "Aliphatic carboxylic acids"),
+                "fr_Ar_COO": (Fragments.fr_Ar_COO, "Aromatic carboxylic acids"),
+                "fr_COO": (Fragments.fr_COO, "Esters"),
+                "fr_ketone": (Fragments.fr_ketone, "Ketones"),
+                "fr_ether": (Fragments.fr_ether, "Ethers"),
+                "fr_phenol": (Fragments.fr_phenol, "Phenols"),
+                "fr_aldehyde": (Fragments.fr_aldehyde, "Aldehydes"),
+                "fr_amide": (Fragments.fr_amide, "Amides"),
             },
         },
     }
@@ -339,10 +345,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
         super().__init__()
         self.logger = logging.getLogger(__name__)
         # Pre-compile SMARTS patterns
-        self.structure_patterns = {
-            name: Chem.MolFromSmarts(smarts)
-            for name, smarts in self.STRUCTURE_PATTERNS.items()
-        }
+        self.structure_patterns = {name: Chem.MolFromSmarts(smarts) for name, smarts in self.STRUCTURE_PATTERNS.items()}
 
     def calculate_descriptors(
         self,
@@ -374,19 +377,13 @@ class DescriptorCalculator(MLDescriptorCalculator):
                     results["predicted_activity"] = activity_pred
 
                 # Add outlier score
-                results["outlier_score"] = float(
-                    self.isolation_forest.score_samples(
-                        np.array(list(results.values())).reshape(1, -1)
-                    )[0]
-                )
+                results["outlier_score"] = float(self.isolation_forest.score_samples(np.array(list(results.values())).reshape(1, -1))[0])
 
                 # Add importance-weighted druglikeness
                 druglike_score = self.get_druglikeness_score(mol)
                 if druglike_score is not None:
                     imp_descriptors = self.get_important_descriptors(mol)
-                    weighted_score = sum(
-                        druglike_score * imp[1] for imp in imp_descriptors.values()
-                    ) / len(imp_descriptors)
+                    weighted_score = sum(druglike_score * imp[1] for imp in imp_descriptors.values()) / len(imp_descriptors)
                     results["ml_druglikeness"] = float(weighted_score)
 
             return results
@@ -425,10 +422,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
                 return []
 
             # Calculate descriptors in parallel
-            results = Parallel(n_jobs=n_jobs)(
-                delayed(self.calculate_descriptors)(mol, categories, names, use_ml)
-                for mol in valid_mols
-            )
+            results = Parallel(n_jobs=n_jobs)(delayed(self.calculate_descriptors)(mol, categories, names, use_ml) for mol in valid_mols)
 
             # Add QED scores
             for i, mol in enumerate(valid_mols):
@@ -442,13 +436,31 @@ class DescriptorCalculator(MLDescriptorCalculator):
             for i, mol in enumerate(valid_mols):
                 try:
                     # Get Murcko scaffold
-                    scaffold = rdDecomposition.GetScaffoldForMol(mol)
+                    scaffold = MurckoScaffold.GetScaffoldForMol(mol)
                     results[i]["scaffold_smiles"] = Chem.MolToSmiles(scaffold)
 
+                    # Get R-group decomposition
+                    try:
+                        rgroup_decomp = rdRGroupDecomposition.RGroupDecompositionParameters()
+                        rgroup_decomp.removeHydrogensPostMatch = True
+                        rgroup_decomp.onlyMatchAtRGroups = False
+                        decomp = rdRGroupDecomposition.RGroupDecomposition(scaffold, rgroup_decomp)
+                        decomp.Add(mol)
+                        if decomp.Process():
+                            rgroups = decomp.GetRGroupsAsColumns()
+                            if rgroups:
+                                results[i]["rgroup_count"] = len(rgroups)
+                                for rgroup_label, rgroup_mols in rgroups.items():
+                                    if rgroup_mols and rgroup_mols[0] is not None:
+                                        results[i][f"rgroup_{rgroup_label}_smiles"] = Chem.MolToSmiles(rgroup_mols[0])
+                    except Exception as e:
+                        self.logger.debug(f"Error in R-group decomposition: {str(e)}")
+
                     # Get largest ring system
-                    ring_info = rdDecomposition.GetRingSystems(mol)
-                    if ring_info:
-                        max_ring = max(ring_info, key=len)
+                    ring_info = mol.GetRingInfo()
+                    rings = ring_info.AtomRings()
+                    if rings:
+                        max_ring = max(rings, key=len)
                         results[i]["largest_ring_size"] = len(max_ring)
                 except Exception as e:
                     self.logger.debug(f"Error in decomposition: {str(e)}")
@@ -459,9 +471,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
             self.logger.error(f"Error calculating batch descriptors: {str(e)}")
             return []
 
-    def get_druglikeness_score(
-        self, mol: Chem.Mol, use_ml: bool = True
-    ) -> Optional[float]:
+    def get_druglikeness_score(self, mol: Chem.Mol, use_ml: bool = True) -> Optional[float]:
         """
         Calculate ML-enhanced druglikeness score.
 
@@ -495,9 +505,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
             self.logger.error(f"Error calculating druglikeness: {str(e)}")
             return None
 
-    def get_complexity_score(
-        self, mol: Chem.Mol, use_ml: bool = True
-    ) -> Optional[float]:
+    def get_complexity_score(self, mol: Chem.Mol, use_ml: bool = True) -> Optional[float]:
         """
         Calculate ML-enhanced complexity score.
 
@@ -630,9 +638,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
                                     value = value.item()
                                 results[name] = float(value)
                             except Exception as e:
-                                self.logger.warning(
-                                    f"Error calculating descriptor {name}: {str(e)}"
-                                )
+                                self.logger.warning(f"Error calculating descriptor {name}: {str(e)}")
             else:
                 # Calculate descriptors by category
                 for cat_name, cat_info in self.DESCRIPTOR_CATEGORIES.items():
@@ -644,9 +650,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
                                     value = value.item()
                                 results[name] = float(value)
                             except Exception as e:
-                                self.logger.warning(
-                                    f"Error calculating descriptor {name}: {str(e)}"
-                                )
+                                self.logger.warning(f"Error calculating descriptor {name}: {str(e)}")
 
             # Add structural feature counts
             for name, pattern in self.structure_patterns.items():
@@ -690,9 +694,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
             self.logger.error(f"Error calculating batch descriptors: {str(e)}")
             return []
 
-    def calculate_fragment_descriptors(
-        self, mol: Chem.Mol, include_rings: bool = True
-    ) -> Dict[str, float]:
+    def calculate_fragment_descriptors(self, mol: Chem.Mol, include_rings: bool = True) -> Dict[str, float]:
         """
         Calculate fragment-based descriptors.
 
@@ -710,11 +712,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
             fragment_counts = {}
 
             # Get all available fragment functions
-            fragment_functions = [
-                (name, func)
-                for name, func in Fragments.__dict__.items()
-                if name.startswith("fr_") and callable(func)
-            ]
+            fragment_functions = [(name, func) for name, func in Fragments.__dict__.items() if name.startswith("fr_") and callable(func)]
 
             # Calculate all fragment counts
             for name, func in fragment_functions:
@@ -731,9 +729,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
                 ring_counts = {}
                 for ring in ring_info.AtomRings():
                     size = len(ring)
-                    ring_counts[f"ring_{size}"] = float(
-                        ring_counts.get(f"ring_{size}", 0) + 1
-                    )
+                    ring_counts[f"ring_{size}"] = float(ring_counts.get(f"ring_{size}", 0) + 1)
                 fragment_counts.update(ring_counts)
 
             return fragment_counts
@@ -742,9 +738,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
             self.logger.error(f"Error calculating fragment descriptors: {str(e)}")
             return {}
 
-    def get_descriptor_info(
-        self, category: Optional[str] = None, name: Optional[str] = None
-    ) -> Dict:
+    def get_descriptor_info(self, category: Optional[str] = None, name: Optional[str] = None) -> Dict:
         """
         Get information about available descriptors.
 
@@ -771,15 +765,8 @@ class DescriptorCalculator(MLDescriptorCalculator):
                 if category in self.DESCRIPTOR_CATEGORIES:
                     return {
                         "category": category,
-                        "description": self.DESCRIPTOR_CATEGORIES[category][
-                            "description"
-                        ],
-                        "descriptors": {
-                            name: desc[1]
-                            for name, desc in self.DESCRIPTOR_CATEGORIES[category][
-                                "descriptors"
-                            ].items()
-                        },
+                        "description": self.DESCRIPTOR_CATEGORIES[category]["description"],
+                        "descriptors": {name: desc[1] for name, desc in self.DESCRIPTOR_CATEGORIES[category]["descriptors"].items()},
                     }
                 return {}
 
@@ -787,9 +774,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
             return {
                 cat_name: {
                     "description": cat_info["description"],
-                    "descriptors": {
-                        name: desc[1] for name, desc in cat_info["descriptors"].items()
-                    },
+                    "descriptors": {name: desc[1] for name, desc in cat_info["descriptors"].items()},
                 }
                 for cat_name, cat_info in self.DESCRIPTOR_CATEGORIES.items()
             }
@@ -798,9 +783,7 @@ class DescriptorCalculator(MLDescriptorCalculator):
             self.logger.error(f"Error getting descriptor info: {str(e)}")
             return {}
 
-    def get_druglikeness_score(
-        self, mol: Chem.Mol, method: str = "combined"
-    ) -> Optional[float]:
+    def get_druglikeness_score(self, mol: Chem.Mol, method: str = "combined") -> Optional[float]:
         """
         Calculate druglikeness score using multiple methods.
 

@@ -11,10 +11,10 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime
 
-from crawl4ai import AsyncWebCrawler, Config
+from crawl4ai import AsyncWebCrawler, BrowserConfig
 from bs4 import BeautifulSoup
 
-from ..base_client import BaseWebClient
+from .base import WebClient
 from ..validation.schema import BaseSchema
 from ..storage.bluelight_storage import BluelightStorage
 
@@ -31,6 +31,8 @@ class BluelightPostData(BaseSchema):
     author: Optional[str]
     subforum: str
     date: Optional[str]
+    score: Optional[int]
+    num_replies: Optional[int]
     compounds: List[str]
     effects: List[str]
     mechanisms: List[str]
@@ -39,7 +41,7 @@ class BluelightPostData(BaseSchema):
     metadata: Dict[str, Any]
 
 
-class BluelightCrawl4AIClient(BaseWebClient):
+class BluelightClient(WebClient):
     """Enhanced Bluelight client using Crawl4AI."""
 
     BASE_URL = "https://bluelight.org/xf"
@@ -49,6 +51,8 @@ class BluelightCrawl4AIClient(BaseWebClient):
         "other-drugs",
         "scientific-research",
         "drug-studies",
+        "psychopharmacology",
+        "pharmacology-toxicology",
     ]
 
     def __init__(
@@ -69,8 +73,8 @@ class BluelightCrawl4AIClient(BaseWebClient):
         self.api_token = api_token
 
         # Configure Crawl4AI with anti-bot detection avoidance
-        self.config = Config(
-            javascript=Config.JavaScript(
+        self.config = BrowserConfig(
+            javascript=BrowserConfig.JavaScript(
                 enabled=True,
                 wait_for_network=True,
                 wait_for_selectors=[
@@ -78,12 +82,11 @@ class BluelightCrawl4AIClient(BaseWebClient):
                     ".message-content",
                     ".message-attribution",
                 ],
-                # Use stealth mode to avoid detection
-                stealth_mode=True,
+                stealth_mode=True,  # Enable stealth mode
             ),
-            screenshot=Config.Screenshot(enabled=True, full_page=True),
-            extraction=Config.Extraction(
-                llm=Config.LLM(
+            screenshot=BrowserConfig.Screenshot(enabled=True, full_page=True),
+            extraction=BrowserConfig.Extraction(
+                llm=BrowserConfig.LLM(
                     provider=llm_provider,
                     api_token=api_token,
                     prompts={
@@ -94,21 +97,23 @@ class BluelightCrawl4AIClient(BaseWebClient):
                     },
                 ),
                 css={
-                    "title": ".p-title-value",
+                    "title": ".message-attribution-main .u-concealed",
                     "content": ".message-content .bbWrapper",
-                    "author": ".message-name",
-                    "subforum": ".p-breadcrumbs li:last-child",
+                    "author": ".message-attribution-main .username",
+                    "subforum": ".p-breadcrumbs span:last-child",
                     "date": ".message-attribution-main time",
+                    "score": ".message-attribution .reaction-score",
+                    "num_replies": ".message-attribution .message-responseCount",
                 },
             ),
-            proxy=Config.Proxy(
+            proxy=BrowserConfig.Proxy(
                 enabled=True,
-                rotation=True,  # Rotate proxies to avoid blocks
+                rotation=True,
                 retry_count=3,
             ),
-            rate_limit=Config.RateLimit(
-                requests_per_minute=5,  # Very conservative rate limiting
-                delay_after_failure=120,
+            rate_limit=BrowserConfig.RateLimit(
+                requests_per_minute=10,
+                delay_after_failure=60,
             ),
         )
 
@@ -162,6 +167,8 @@ class BluelightCrawl4AIClient(BaseWebClient):
                             author=post.get("author"),
                             subforum=post.get("subforum", subforum),
                             date=post.get("date"),
+                            score=post.get("score"),
+                            num_replies=post.get("num_replies"),
                             compounds=post.get("compounds", []),
                             effects=post.get("effects", []),
                             mechanisms=post.get("mechanisms", []),
@@ -218,6 +225,8 @@ class BluelightCrawl4AIClient(BaseWebClient):
         authors = content.get("author", [])
         subforums = content.get("subforum", [])
         dates = content.get("date", [])
+        scores = content.get("score", [])
+        num_replies = content.get("num_replies", [])
 
         # Get LLM-extracted data
         compounds = content.get("compounds", [])
@@ -233,6 +242,8 @@ class BluelightCrawl4AIClient(BaseWebClient):
                 "author": authors[i] if i < len(authors) else None,
                 "subforum": subforums[i] if i < len(subforums) else subforum,
                 "date": self._parse_date(dates[i]) if i < len(dates) else None,
+                "score": self._parse_score(scores[i]) if i < len(scores) else None,
+                "num_replies": self._parse_num_replies(num_replies[i]) if i < len(num_replies) else None,
                 "url": self._extract_url(titles[i]) if i < len(titles) else None,
                 "compounds": compounds,
                 "effects": effects,
@@ -244,10 +255,11 @@ class BluelightCrawl4AIClient(BaseWebClient):
         # Store posts in database
         storage = BluelightStorage()
         for post in posts:
-            storage.store_post(
-                post_id=post["url"].split("/")[-1],
-                data=post,
-            )
+            if post.get("url"):
+                storage.store_post(
+                    post_id=post["url"].split("/")[-1],
+                    data=post,
+                )
 
         return posts
 
@@ -269,6 +281,54 @@ class BluelightCrawl4AIClient(BaseWebClient):
 
             dt = parse(date_text)
             return dt.isoformat()
+        except Exception:
+            pass
+
+        return None
+
+    def _parse_score(self, score_text: Optional[str]) -> Optional[int]:
+        """Parse score from Bluelight format.
+
+        Args:
+            score_text: Score text to parse
+
+        Returns:
+            Score as integer or None
+        """
+        if not score_text:
+            return None
+
+        try:
+            # Extract number from score text
+            import re
+
+            match = re.search(r"\b(\d+)\b", score_text)
+            if match:
+                return int(match.group(1))
+        except Exception:
+            pass
+
+        return None
+
+    def _parse_num_replies(self, replies_text: Optional[str]) -> Optional[int]:
+        """Parse number of replies from Bluelight format.
+
+        Args:
+            replies_text: Replies text to parse
+
+        Returns:
+            Number of replies as integer or None
+        """
+        if not replies_text:
+            return None
+
+        try:
+            # Extract number from replies text
+            import re
+
+            match = re.search(r"\b(\d+)\b", replies_text)
+            if match:
+                return int(match.group(1))
         except Exception:
             pass
 
@@ -313,7 +373,7 @@ class BluelightCrawl4AIClient(BaseWebClient):
         total = 0
 
         # Check key fields presence
-        fields = ["title", "content", "author", "subforum", "date", "url"]
+        fields = ["title", "content", "author", "subforum", "date", "score", "num_replies", "url"]
         for field in fields:
             total += 1
             if post.get(field):

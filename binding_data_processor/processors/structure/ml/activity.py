@@ -1,38 +1,95 @@
-"""Enhanced activity prediction and analysis using machine learning.
+"""Activity prediction for psychopharmacological compounds.
 
-This module provides comprehensive functionality for:
-1. Binding affinity prediction using graph neural networks and ensemble methods
-2. Activity classification and regression with uncertainty estimation 
-3. Target prediction and binding site analysis
-4. Structure-activity relationship analysis
-5. Psychopharmacological activity prediction
-6. Toxicity and abuse potential assessment
-7. Web data integration and enrichment
-8. Model interpretability and visualization
+This module provides:
+1. Activity type prediction (agonist, antagonist, etc.)
+2. Psychopharmacological effect prediction
+3. Receptor interaction prediction
+4. Multi-label classification
+5. Confidence scoring and uncertainty estimation
+6. Web data integration
 """
 
 import logging
-from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import torch
 from rdkit import Chem
+from torch_geometric.data import Batch, Data
 
-from .models.gnn import EnhancedGNN
-from .models.ensemble import EnsembleModel
-from .predictors.affinity import AffinityPredictor
-from .predictors.activity import ActivityPredictor
-from .predictors.toxicity import ToxicityPredictor
-from .predictors.abuse import AbusePotentialPredictor
-from .analysis.sar import SARAnalyzer
-from .analysis.visualization import PredictionVisualizer
-from ..pharmacophore import PharmacophoreGenerator
-from ...web_enrichment import WebDataEnricher
+from ....models.compound.ml.ensemble import EnsembleModel
+from .models import EnhancedGNN
+from .models.graph_utils import mol_to_graph
+from ...base import PredictorBase
 
 
-class ActivityPredictionPipeline:
-    """Comprehensive activity prediction and analysis pipeline."""
+logger = logging.getLogger(__name__)
+
+
+class ActivityPredictor(PredictorBase):
+    """Activity prediction with uncertainty estimation."""
+
+    # Activity type categories
+    ACTIVITY_TYPES = [
+        "agonist",
+        "antagonist",
+        "partial_agonist",
+        "inverse_agonist",
+        "positive_modulator",
+        "negative_modulator",
+    ]
+
+    # Psychopharmacological effects
+    PSYCHO_EFFECTS = [
+        "anxiolytic",
+        "antidepressant",
+        "antipsychotic",
+        "sedative",
+        "stimulant",
+        "psychedelic",
+        "dissociative",
+        "entactogenic",
+        "nootropic",
+        "euphoriant",
+    ]
+
+    # Receptor interactions
+    RECEPTOR_TYPES = [
+        "5-HT2A",
+        "5-HT2B",
+        "5-HT2C",
+        "5-HT1A",
+        "D2",
+        "NMDA",
+        "GABA-A",
+        "mu-opioid",
+        "kappa-opioid",
+        "sigma",
+        "CB1",
+        "CB2",
+    ]
+
+    # Default model configurations
+    DEFAULT_GNN_CONFIG = {
+        "type": "gnn",
+        "input_dim": 74,  # RDKit atom features
+        "hidden_dim": 256,
+        "output_dim": len(ACTIVITY_TYPES) + len(PSYCHO_EFFECTS) + len(RECEPTOR_TYPES),
+        "num_layers": 4,
+        "heads": 8,
+        "dropout": 0.2,
+        "residual": True,
+        "uncertainty": True,
+    }
+
+    DEFAULT_RF_CONFIG = {
+        "type": "rf_classifier",
+        "n_estimators": 200,
+        "max_depth": 15,
+        "class_weight": "balanced",
+        "n_jobs": -1,
+        "random_state": 42,
+    }
 
     def __init__(
         self,
@@ -40,203 +97,116 @@ class ActivityPredictionPipeline:
         use_ensemble: bool = True,
         uncertainty: bool = True,
         device: Optional[str] = None,
+        model_configs: Optional[List[Dict]] = None,
     ):
-        """Initialize prediction pipeline.
+        """Initialize predictor.
 
         Args:
             model_dir: Directory containing pre-trained models
             use_ensemble: Whether to use ensemble models
-            uncertainty: Whether to estimate prediction uncertainty
+            uncertainty: Whether to estimate uncertainty
             device: Device to run models on
+            model_configs: Optional model configurations
         """
-        self.logger = logging.getLogger(__name__)
-        self.model_dir = Path(model_dir) if model_dir else None
+        super().__init__()
+        self.model_dir = model_dir
         self.use_ensemble = use_ensemble
         self.uncertainty = uncertainty
         self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
 
-        # Initialize predictors
-        self.affinity_predictor = AffinityPredictor(
-            model_dir=self.model_dir,
-            use_ensemble=use_ensemble,
-            uncertainty=uncertainty,
-            device=self.device,
-        )
+        # Set up model configurations
+        if model_configs is None:
+            if use_ensemble:
+                model_configs = [
+                    self.DEFAULT_GNN_CONFIG,
+                    self.DEFAULT_GNN_CONFIG.copy(),  # Different random init
+                    self.DEFAULT_RF_CONFIG,
+                ]
+            else:
+                model_configs = [self.DEFAULT_GNN_CONFIG]
 
-        self.activity_predictor = ActivityPredictor(
-            model_dir=self.model_dir,
-            use_ensemble=use_ensemble,
-            uncertainty=uncertainty,
-            device=self.device,
-        )
+        # Initialize models
+        if use_ensemble:
+            self.model = EnsembleModel(
+                model_configs=model_configs,
+                device=self.device,
+                uncertainty=uncertainty,
+            )
+        else:
+            self.model = EnhancedGNN(
+                **model_configs[0],
+                device=self.device,
+                uncertainty=uncertainty,
+            ).to(self.device)
 
-        self.toxicity_predictor = ToxicityPredictor(
-            model_dir=self.model_dir,
-            use_ensemble=use_ensemble,
-            uncertainty=uncertainty,
-            device=self.device,
-        )
+        # Load pre-trained models if available
+        if model_dir:
+            self._load_models()
 
-        self.abuse_predictor = AbusePotentialPredictor(
-            model_dir=self.model_dir,
-            use_ensemble=use_ensemble,
-            uncertainty=uncertainty,
-            device=self.device,
-        )
-
-        # Initialize analyzers
-        self.sar_analyzer = SARAnalyzer()
-        self.visualizer = PredictionVisualizer()
-
-        # Initialize enrichment components
-        self.pharmacophore_gen = PharmacophoreGenerator()
-        self.web_enricher = WebDataEnricher()
-
-    def predict_compound(
+    def predict(
         self,
-        compound: Union[str, Chem.Mol],
-        include_web_data: bool = True,
+        compound: Union[str, Chem.Mol, Data, Batch],
         confidence_threshold: float = 0.5,
     ) -> Dict:
-        """Comprehensive compound prediction and analysis.
+        """Predict compound activities.
 
         Args:
-            compound: SMILES string or RDKit molecule
-            include_web_data: Whether to include web data
+            compound: Input compound
             confidence_threshold: Minimum confidence threshold
 
         Returns:
             Dictionary containing:
-            - Binding affinity predictions
-            - Activity predictions
-            - Toxicity predictions
-            - Abuse potential predictions
-            - Structural analysis
-            - Web data (if requested)
-            - Visualization data
+            - activity_types: Predicted activity types with probabilities
+            - psycho_effects: Predicted psychopharmacological effects
+            - receptor_interactions: Predicted receptor interactions
+            - uncertainties: Prediction uncertainties (if enabled)
+            - confidence_scores: Prediction confidence scores
+            - feature_importance: Feature importance scores
         """
         try:
-            # Convert input to molecule
-            mol = (
-                compound
-                if isinstance(compound, Chem.Mol)
-                else Chem.MolFromSmiles(compound)
-            )
-            if mol is None:
-                raise ValueError("Invalid compound input")
+            # Convert input to appropriate format
+            if isinstance(compound, str):
+                mol = Chem.MolFromSmiles(compound)
+                if mol is None:
+                    raise ValueError("Invalid SMILES string")
+                data = mol_to_graph(mol)
+            elif isinstance(compound, Chem.Mol):
+                data = mol_to_graph(compound)
+            else:
+                data = compound
 
-            # Get predictions
-            results = {}
+            # Make prediction
+            if self.uncertainty:
+                preds, uncerts = self.model(data)
+                confidences = self._calculate_confidence(preds, uncerts)
+            else:
+                preds = self.model(data)
+                uncerts = None
+                confidences = self._calculate_confidence(preds)
 
-            # Binding affinity
-            affinity_results = self.affinity_predictor.predict(mol)
-            results.update(affinity_results)
+            # Split predictions by category
+            results = self._process_predictions(preds, confidences, uncerts, confidence_threshold)
 
-            # Activity
-            activity_results = self.activity_predictor.predict(
-                mol, confidence_threshold
-            )
-            results.update(activity_results)
-
-            # Toxicity
-            toxicity_results = self.toxicity_predictor.predict(
-                mol, confidence_threshold
-            )
-            results.update(toxicity_results)
-
-            # Abuse potential
-            abuse_results = self.abuse_predictor.predict(mol, confidence_threshold)
-            results.update(abuse_results)
-
-            # Add pharmacophore analysis
-            results["pharmacophore"] = self.pharmacophore_gen.generate(mol)
-
-            # Add structural analysis
-            results["structural_analysis"] = self.sar_analyzer.analyze_compound(mol)
-
-            # Add visualization data
-            results["visualization"] = self.visualizer.generate_visualization(
-                mol, results
-            )
-
-            # Add web data if requested
-            if include_web_data:
-                web_data = self.web_enricher.enrich_compound(Chem.MolToSmiles(mol))
-                results.update(web_data)
+            # Get feature importance
+            results["feature_importance"] = self.model.get_feature_importance(data)
 
             return results
 
         except Exception as e:
-            self.logger.error(f"Error in predict_compound: {str(e)}")
+            logger.error(f"Error in activity prediction: {str(e)}")
             return {}
 
-    def analyze_compound_series(
+    def predict_batch(
         self,
-        compounds: List[Union[str, Chem.Mol]],
-        activities: Optional[np.ndarray] = None,
-        threshold: float = 0.5,
-    ) -> Dict:
-        """Analyze series of compounds.
-
-        Args:
-            compounds: List of compounds
-            activities: Optional known activity values
-            threshold: Activity threshold
-
-        Returns:
-            Dictionary containing:
-            - SAR analysis
-            - Activity patterns
-            - Structural patterns
-            - Series visualization
-        """
-        try:
-            # Convert compounds to molecules
-            mols = []
-            for comp in compounds:
-                mol = comp if isinstance(comp, Chem.Mol) else Chem.MolFromSmiles(comp)
-                if mol is not None:
-                    mols.append(mol)
-
-            if not mols:
-                return {}
-
-            # Get predictions if activities not provided
-            if activities is None:
-                activities = np.array(
-                    [
-                        float(self.affinity_predictor.predict(mol)["binding_affinity"])
-                        for mol in mols
-                    ]
-                )
-
-            # Analyze SAR
-            results = self.sar_analyzer.analyze_series(mols, activities, threshold)
-
-            # Add series visualization
-            results["visualization"] = self.visualizer.visualize_series(
-                mols, activities
-            )
-
-            return results
-
-        except Exception as e:
-            self.logger.error(f"Error in analyze_compound_series: {str(e)}")
-            return {}
-
-    def batch_predict(
-        self,
-        compounds: List[Union[str, Chem.Mol]],
+        compounds: List[Union[str, Chem.Mol, Data]],
         batch_size: int = 32,
-        include_web_data: bool = True,
         confidence_threshold: float = 0.5,
     ) -> List[Dict]:
-        """Make predictions for multiple compounds.
+        """Predict activities for multiple compounds.
 
         Args:
             compounds: List of compounds
             batch_size: Batch size for predictions
-            include_web_data: Whether to include web data
             confidence_threshold: Minimum confidence threshold
 
         Returns:
@@ -249,20 +219,168 @@ class ActivityPredictionPipeline:
             for i in range(0, len(compounds), batch_size):
                 batch = compounds[i : i + batch_size]
 
-                # Get predictions for batch
-                batch_results = [
-                    self.predict_compound(
-                        comp,
-                        include_web_data=include_web_data,
-                        confidence_threshold=confidence_threshold,
-                    )
-                    for comp in batch
-                ]
+                # Convert batch to graphs
+                graphs = []
+                for comp in batch:
+                    if isinstance(comp, str):
+                        mol = Chem.MolFromSmiles(comp)
+                        if mol is not None:
+                            graphs.append(mol_to_graph(mol))
+                    elif isinstance(comp, Chem.Mol):
+                        graphs.append(mol_to_graph(comp))
+                    else:
+                        graphs.append(comp)
 
-                results.extend(batch_results)
+                if not graphs:
+                    continue
+
+                # Create batch
+                batch_data = Batch.from_data_list(graphs)
+
+                # Get predictions
+                if self.uncertainty:
+                    preds, uncerts = self.model(batch_data)
+                    confidences = self._calculate_confidence(preds, uncerts)
+                else:
+                    preds = self.model(batch_data)
+                    uncerts = None
+                    confidences = self._calculate_confidence(preds)
+
+                # Get feature importance
+                importance = self.model.get_feature_importance(batch_data)
+
+                # Process results for each compound
+                for j in range(len(graphs)):
+                    pred = preds[j]
+                    conf = confidences[j]
+                    unc = uncerts[j] if uncerts is not None else None
+
+                    # Process predictions
+                    result = self._process_predictions(pred, conf, unc, confidence_threshold)
+
+                    # Add feature importance
+                    result["feature_importance"] = {k: v[j] for k, v in importance.items()}
+
+                    results.append(result)
 
             return results
 
         except Exception as e:
-            self.logger.error(f"Error in batch_predict: {str(e)}")
+            logger.error(f"Error in batch prediction: {str(e)}")
             return []
+
+    def _process_predictions(
+        self,
+        predictions: torch.Tensor,
+        confidences: torch.Tensor,
+        uncertainties: Optional[torch.Tensor] = None,
+        confidence_threshold: float = 0.5,
+    ) -> Dict:
+        """Process raw predictions into structured results.
+
+        Args:
+            predictions: Raw model predictions
+            confidences: Confidence scores
+            uncertainties: Optional uncertainty estimates
+            confidence_threshold: Minimum confidence threshold
+
+        Returns:
+            Processed prediction dictionary
+        """
+        # Convert tensors to numpy
+        preds = predictions.cpu().numpy()
+        confs = confidences.cpu().numpy()
+        uncs = uncertainties.cpu().numpy() if uncertainties is not None else None
+
+        # Get indices for each category
+        n_activities = len(self.ACTIVITY_TYPES)
+        n_effects = len(self.PSYCHO_EFFECTS)
+
+        activity_slice = slice(0, n_activities)
+        effects_slice = slice(n_activities, n_activities + n_effects)
+        receptor_slice = slice(n_activities + n_effects, None)
+
+        # Process activity types
+        activities = []
+        for i, (act_type, prob, conf) in enumerate(zip(self.ACTIVITY_TYPES, preds[activity_slice], confs[activity_slice])):
+            if conf >= confidence_threshold:
+                activities.append(
+                    {
+                        "type": act_type,
+                        "probability": float(prob),
+                        "confidence": float(conf),
+                    }
+                )
+                if uncs is not None:
+                    activities[-1]["uncertainty"] = float(uncs[i])
+
+        # Process psychopharmacological effects
+        effects = []
+        for i, (effect, prob, conf) in enumerate(zip(self.PSYCHO_EFFECTS, preds[effects_slice], confs[effects_slice])):
+            if conf >= confidence_threshold:
+                effects.append(
+                    {
+                        "effect": effect,
+                        "probability": float(prob),
+                        "confidence": float(conf),
+                    }
+                )
+                if uncs is not None:
+                    effects[-1]["uncertainty"] = float(uncs[i + n_activities])
+
+        # Process receptor interactions
+        receptors = []
+        for i, (receptor, prob, conf) in enumerate(zip(self.RECEPTOR_TYPES, preds[receptor_slice], confs[receptor_slice])):
+            if conf >= confidence_threshold:
+                receptors.append(
+                    {
+                        "receptor": receptor,
+                        "probability": float(prob),
+                        "confidence": float(conf),
+                    }
+                )
+                if uncs is not None:
+                    receptors[-1]["uncertainty"] = float(uncs[i + n_activities + n_effects])
+
+        return {
+            "activity_types": activities,
+            "psycho_effects": effects,
+            "receptor_interactions": receptors,
+        }
+
+    def _calculate_confidence(
+        self,
+        predictions: torch.Tensor,
+        uncertainties: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Calculate prediction confidence scores.
+
+        Args:
+            predictions: Model predictions
+            uncertainties: Optional uncertainty estimates
+
+        Returns:
+            Confidence scores
+        """
+        if uncertainties is not None:
+            # Use uncertainty-based confidence
+            confidence = 1.0 / (1.0 + uncertainties)
+        else:
+            # Use prediction probability-based confidence
+            confidence = torch.sigmoid(predictions)
+
+        return confidence
+
+    def _load_models(self) -> None:
+        """Load pre-trained models."""
+        try:
+            if self.use_ensemble:
+                model_path = f"{self.model_dir}/activity_ensemble.pt"
+            else:
+                model_path = f"{self.model_dir}/activity_gnn.pt"
+
+            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+            logger.info(f"Loaded model from {model_path}")
+
+        except Exception as e:
+            logger.error(f"Error loading models: {str(e)}")

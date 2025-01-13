@@ -14,7 +14,7 @@ from chembl_webresource_client.new_client import new_client
 import time
 from functools import lru_cache
 
-from ..web_enrichment.base_client import BaseWebClient
+from ..web_enrichment.clients.base_client import BaseWebClient
 from ..models.compound import Compound, BindingData
 from ..pipeline.infrastructure.circuit_breaker import CircuitBreaker
 
@@ -53,9 +53,7 @@ class ChEMBLClient(BaseWebClient):
                     self.mechanism = new_client.mechanism
                     return
             except Exception as e:
-                self.logger.warning(
-                    f"Error initializing ChEMBL clients (attempt {attempt + 1}/{max_retries}): {str(e)}"
-                )
+                self.logger.warning(f"Error initializing ChEMBL clients (attempt {attempt + 1}/{max_retries}): {str(e)}")
                 if attempt < max_retries - 1:
                     time.sleep(2**attempt)  # Exponential backoff
                 else:
@@ -108,9 +106,7 @@ class ChEMBLClient(BaseWebClient):
 
                 # Try structure search if SMILES is available
                 if compound.get("smiles"):
-                    results = list(
-                        self.molecule.filter(molecule_structures__canonical_smiles__flexmatch=compound["smiles"])
-                    )
+                    results = list(self.molecule.filter(molecule_structures__canonical_smiles__flexmatch=compound["smiles"]))
                     if results:
                         data = self.get_compound_by_chembl_id(results[0]["molecule_chembl_id"])
                         if use_cache and self.cache_dir:
@@ -187,9 +183,7 @@ class ChEMBLClient(BaseWebClient):
                 data.update(
                     {
                         "name": molecule_data.get("pref_name", ""),
-                        "synonyms": [
-                            s.get("synonym", "") for s in molecule_data.get("molecule_synonyms", []) if s.get("synonym")
-                        ],
+                        "synonyms": [s.get("synonym", "") for s in molecule_data.get("molecule_synonyms", []) if s.get("synonym")],
                         "smiles": molecule_data.get("molecule_structures", {}).get("canonical_smiles"),
                         "inchi": molecule_data.get("molecule_structures", {}).get("standard_inchi"),
                         "inchi_key": molecule_data.get("molecule_structures", {}).get("standard_inchi_key"),
@@ -215,8 +209,7 @@ class ChEMBLClient(BaseWebClient):
 
                     binding = BindingData(
                         target_common_name=activity.get("target_pref_name") or "N/A",
-                        target_protein_name=(activity.get("target_components", [{}]) or [{}])[0].get("protein_name")
-                        or "N/A",
+                        target_protein_name=(activity.get("target_components", [{}]) or [{}])[0].get("protein_name") or "N/A",
                         target_gene_name=(activity.get("target_components", [{}]) or [{}])[0].get("gene_name") or "N/A",
                         target_organism=activity.get("target_organism", "N/A"),
                         affinity_value=float(activity.get("value") or 0.0),

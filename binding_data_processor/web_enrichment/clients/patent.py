@@ -13,9 +13,9 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from ...models.compound import Compound
-from ..base_client import BaseWebClient
+from ...web_enrichment.base_client import BaseWebClient
 from ..llm_utils import extract_chemical_info, analyze_patent_text
-from ...pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ...pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 
 
 class PatentClient(BaseWebClient):
@@ -25,7 +25,7 @@ class PatentClient(BaseWebClient):
         self,
         google_patents_key: Optional[str] = None,
         lens_api_key: Optional[str] = None,
-        circuit_config: Optional[CircuitConfig] = None,
+        circuit_config: Optional[CircuitBreakerConfig] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize patent client.

@@ -30,9 +30,7 @@ class SimilarityProcessor(BaseStructureProcessor):
             "description": "Morgan (ECFP-like) fingerprints",
             "radius": 2,
             "bits": 2048,
-            "generator": lambda mol, radius: AllChem.GetMorganFingerprintAsBitVect(
-                mol, radius, nBits=2048
-            ),
+            "generator": lambda mol, radius: AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=2048),
         },
         "maccs": {
             "description": "MACCS keys (166 bits)",
@@ -44,29 +42,23 @@ class SimilarityProcessor(BaseStructureProcessor):
             "bits": 2048,
             "min_path": 1,
             "max_path": 7,
-            "generator": lambda mol, _: rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect(
-                mol, nBits=2048
-            ),
+            "generator": lambda mol, _: rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect(mol, nBits=2048),
         },
         "atom_pairs": {
             "description": "Atom pairs fingerprints",
             "bits": 2048,
             "max_length": 30,
-            "generator": lambda mol, _: rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect(
-                mol, nBits=2048
-            ),
+            "generator": lambda mol, _: rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect(mol, nBits=2048),
         },
         "torsion": {
             "description": "Topological torsion fingerprints",
             "bits": 2048,
-            "generator": lambda mol, _: rdMolDescriptors.GetHashedTopologicalTorsionFingerprintAsBitVect(
-                mol, nBits=2048
-            ),
+            "generator": lambda mol, _: rdMolDescriptors.GetHashedTopologicalTorsionFingerprintAsBitVect(mol, nBits=2048),
         },
         "pharmacophore": {
             "description": "3D pharmacophore fingerprints",
             "bits": 2048,
-            "generator": lambda mol, _: Pharmacophore.Generate3DFingerprint(mol),
+            "generator": lambda mol, _: self._generate_pharmacophore_fingerprint(mol),
         },
     }
 
@@ -102,7 +94,7 @@ class SimilarityProcessor(BaseStructureProcessor):
         },
         "shape": {
             "description": "3D shape similarity",
-            "function": rdShapeHelpers.ShapeTanimotoMol,
+            "function": lambda mol1, mol2: 1.0 - rdShapeHelpers.ShapeTanimotoDist(mol1, mol2),
         },
     }
 
@@ -140,8 +132,35 @@ class SimilarityProcessor(BaseStructureProcessor):
         except Exception as e:
             self.logger.error(f"Error initializing fingerprint generators: {str(e)}")
 
+    def _generate_pharmacophore_fingerprint(self, mol: Chem.Mol) -> Optional[DataStructs.ExplicitBitVect]:
+        """Generate pharmacophore fingerprint using detected features."""
+        try:
+            if not mol.GetNumConformers():
+                AllChem.EmbedMolecule(mol, randomSeed=42)
+                AllChem.MMFFOptimizeMolecule(mol)
+
+            features = self.detect_features(mol)
+            if not features:
+                return None
+
+            # Convert features to bit vector
+            fp = DataStructs.ExplicitBitVect(self.FINGERPRINT_TYPES["pharmacophore"]["bits"])
+            for feature in features:
+                # Hash feature type and position
+                idx = hash((feature["type"], tuple(feature["position"]))) % fp.GetNumBits()
+                fp.SetBit(idx)
+
+            return fp
+
+        except Exception as e:
+            self.logger.error(f"Error generating pharmacophore fingerprint: {str(e)}")
+            return None
+
     def _get_cached_fingerprint(
-        self, mol: Chem.Mol, fp_type: str, radius: int
+        self,
+        mol: Chem.Mol,
+        fp_type: str,
+        radius: int,
     ) -> Optional[DataStructs.ExplicitBitVect]:
         """Get fingerprint from cache or generate new one."""
         try:
@@ -175,8 +194,7 @@ class SimilarityProcessor(BaseStructureProcessor):
         use_3d: bool = False,
         **kwargs,
     ) -> Optional[float]:
-        """
-        Calculate chemical similarity between two molecules.
+        """Calculate chemical similarity between two molecules.
 
         Args:
             mol1: First RDKit molecule
@@ -197,7 +215,7 @@ class SimilarityProcessor(BaseStructureProcessor):
             # Handle 3D similarity methods
             if use_3d:
                 if method == "shape":
-                    return rdShapeHelpers.ShapeTanimotoMol(mol1, mol2)
+                    return self.SIMILARITY_METRICS["shape"]["function"](mol1, mol2)
                 elif method == "pharmacophore":
                     return self._calculate_pharmacophore_similarity(mol1, mol2)
 
@@ -221,22 +239,26 @@ class SimilarityProcessor(BaseStructureProcessor):
             self.logger.error(f"Error calculating similarity: {str(e)}")
             return None
 
-    def _calculate_pharmacophore_similarity(
-        self, mol1: Chem.Mol, mol2: Chem.Mol
-    ) -> Optional[float]:
+    def _calculate_pharmacophore_similarity(self, mol1: Chem.Mol, mol2: Chem.Mol) -> Optional[float]:
         """Calculate pharmacophore-based similarity."""
         try:
-            # Generate 3D conformers if needed
-            for mol in [mol1, mol2]:
-                if not mol.GetNumConformers():
-                    AllChem.EmbedMolecule(mol, randomSeed=42)
-                    AllChem.MMFFOptimizeMolecule(mol)
+            features1 = self.detect_features(mol1)
+            features2 = self.detect_features(mol2)
 
-            # Generate pharmacophore fingerprints
-            fp1 = Pharmacophore.Generate3DFingerprint(mol1)
-            fp2 = Pharmacophore.Generate3DFingerprint(mol2)
+            if not features1 or not features2:
+                return 0.0
 
-            return DataStructs.TanimotoSimilarity(fp1, fp2)
+            # Compare pharmacophore features
+            matches = 0
+            total = max(len(features1), len(features2))
+
+            for f1 in features1:
+                for f2 in features2:
+                    if f1["type"] == f2["type"] and self._positions_match(f1["position"], f2["position"]):
+                        matches += 1
+                        break
+
+            return matches / total if total > 0 else 0.0
 
         except Exception as e:
             self.logger.error(f"Error calculating pharmacophore similarity: {str(e)}")
@@ -334,6 +356,15 @@ class SimilarityProcessor(BaseStructureProcessor):
             self.logger.error(f"Error calculating similarity matrix: {str(e)}")
             return None
 
+    def _positions_match(
+        self,
+        pos1: Tuple[float, float, float],
+        pos2: Tuple[float, float, float],
+        threshold: float = 2.0,
+    ) -> bool:
+        """Check if two 3D positions are within threshold distance."""
+        return np.linalg.norm(np.array(pos1) - np.array(pos2)) <= threshold
+
     def find_similar_compounds(
         self,
         query_mol: Chem.Mol,
@@ -344,8 +375,7 @@ class SimilarityProcessor(BaseStructureProcessor):
         radius: int = 2,
         use_ml: bool = False,
     ) -> List[Tuple[int, float]]:
-        """
-        Find similar compounds in a library.
+        """Find similar compounds in a library.
 
         Args:
             query_mol: Query molecule
@@ -365,9 +395,7 @@ class SimilarityProcessor(BaseStructureProcessor):
 
             # Use ML model if available and requested
             if use_ml and fp_type in self._ml_models:
-                return self.predict_similarity_ml(
-                    query_mol, library_mols, fp_type, threshold
-                )
+                return self.predict_similarity_ml(query_mol, library_mols, fp_type, threshold)
 
             # Traditional fingerprint similarity
             query_fp = self._get_cached_fingerprint(query_mol, fp_type, radius)
@@ -403,8 +431,7 @@ class SimilarityProcessor(BaseStructureProcessor):
         fp_type: str = "morgan",
         model_type: str = "rf",
     ) -> bool:
-        """
-        Train ML model for similarity prediction.
+        """Train ML model for similarity prediction.
 
         Args:
             active_mols: List of active molecules
@@ -470,8 +497,7 @@ class SimilarityProcessor(BaseStructureProcessor):
         fp_type: str = "morgan",
         threshold: float = 0.5,
     ) -> List[Tuple[int, float]]:
-        """
-        Predict similar compounds using ML model.
+        """Predict similar compounds using ML model.
 
         Args:
             query_mol: Query molecule

@@ -21,6 +21,7 @@ from rdkit.Chem import (
     rdMolDescriptors,
     rdMolTransforms,
 )
+from rdkit.Chem.AllChem import ChemicalReaction
 from rdkit.Chem.Draw import rdMolDraw2D, IPythonConsole
 
 # Optional ML imports
@@ -59,6 +60,8 @@ class StructureDepiction:
         "magenta": (1.0, 0.0, 1.0),
         "orange": (1.0, 0.5, 0.0),
         "purple": (0.5, 0.0, 0.5),
+        "white": (1.0, 1.0, 1.0),
+        "black": (0.0, 0.0, 0.0),
     }
 
     def __init__(self, config: Optional[Dict] = None):
@@ -95,13 +98,27 @@ class StructureDepiction:
     def depict_molecule(
         self,
         mol: Chem.Mol,
+        size: Optional[Tuple[int, int]] = None,
         highlight_atoms: Optional[List[int]] = None,
         highlight_bonds: Optional[List[int]] = None,
-        highlight_color: Optional[Tuple[float, float, float]] = None,
+        highlight_colors: Optional[Dict[int, Tuple[float, float, float]]] = None,
         legend: Optional[str] = None,
         return_pil: bool = False,
-    ) -> Union[bytes, Image.Image]:
-        """Generate 2D depiction of molecule."""
+    ) -> Union[str, bytes, Image.Image, None]:
+        """Generate depiction of molecule.
+
+        Args:
+            mol: RDKit molecule
+            size: Image size (width, height)
+            highlight_atoms: List of atom indices to highlight
+            highlight_bonds: List of bond indices to highlight
+            highlight_colors: Dict mapping indices to RGB colors
+            legend: Optional legend text
+            return_pil: Return PIL Image instead of SVG/bytes
+
+        Returns:
+            SVG string, image bytes, PIL Image, or None if error
+        """
         try:
             if mol is None:
                 return None
@@ -111,11 +128,14 @@ class StructureDepiction:
             if mol is None:
                 return None
 
+            # Set up size
+            size = size or self.drawing_options["size"]
+
             # Create drawing object
-            drawer = rdMolDraw2D.MolDraw2DCairo(
-                self.drawing_options["size"][0],
-                self.drawing_options["size"][1],
-            )
+            if return_pil:
+                drawer = rdMolDraw2D.MolDraw2DCairo(size[0], size[1])
+            else:
+                drawer = rdMolDraw2D.MolDraw2DSVG(size[0], size[1])
 
             # Set drawing options
             opts = drawer.drawOptions()
@@ -126,11 +146,13 @@ class StructureDepiction:
             opts.addBondIndices = self.drawing_options["add_bond_indices"]
             opts.clearBackground = False
 
-            # Set highlighting
+            # Set up highlighting
             highlight_atoms = highlight_atoms or []
             highlight_bonds = highlight_bonds or []
-            highlight_color = highlight_color or self.drawing_options["highlight_color"]
-            highlight_radii = {i: 0.5 for i in highlight_atoms}
+            colors = {}
+            if highlight_colors:
+                for idx, color in highlight_colors.items():
+                    colors[idx] = color
 
             # Draw molecule
             drawer.DrawMolecule(
@@ -138,8 +160,7 @@ class StructureDepiction:
                 legend=legend or "",
                 highlightAtoms=highlight_atoms,
                 highlightBonds=highlight_bonds,
-                highlightColor=highlight_color,
-                highlightRadii=highlight_radii,
+                highlightAtomColors=colors,
             )
             drawer.FinishDrawing()
 
@@ -190,9 +211,7 @@ class StructureDepiction:
             colors = {}
 
             for i, match in enumerate(matches):
-                color = list(self.HIGHLIGHT_COLORS.values())[
-                    i % len(self.HIGHLIGHT_COLORS)
-                ]
+                color = list(self.HIGHLIGHT_COLORS.values())[i % len(self.HIGHLIGHT_COLORS)]
                 for atom_idx in match:
                     highlight_atoms.add(atom_idx)
                     colors[atom_idx] = color
@@ -218,19 +237,37 @@ class StructureDepiction:
 
     def depict_reaction(
         self,
-        rxn: Chem.ChemicalReaction,
+        rxn: ChemicalReaction,
+        size: Optional[Tuple[int, int]] = None,
         highlight_by_reactant: bool = True,
         return_pil: bool = False,
-    ) -> Union[bytes, Image.Image]:
-        """Generate depiction of chemical reaction."""
+    ) -> Union[str, bytes, Image.Image, None]:
+        """Generate depiction of chemical reaction.
+
+        Args:
+            rxn: RDKit reaction
+            size: Image size (width, height)
+            highlight_by_reactant: Highlight atoms by reactant
+            return_pil: Return PIL Image instead of SVG/bytes
+
+        Returns:
+            SVG string, image bytes, PIL Image, or None if error
+        """
         try:
             if rxn is None:
                 return None
 
-            # Create drawing object with larger size for reactions
-            width = self.drawing_options["size"][0] * 2
-            height = self.drawing_options["size"][1]
-            drawer = rdMolDraw2D.MolDraw2DCairo(width, height)
+            # Set up size - wider for reactions
+            if size is None:
+                width = self.drawing_options["size"][0] * 2
+                height = self.drawing_options["size"][1]
+                size = (width, height)
+
+            # Create drawing object
+            if return_pil:
+                drawer = rdMolDraw2D.MolDraw2DCairo(size[0], size[1])
+            else:
+                drawer = rdMolDraw2D.MolDraw2DSVG(size[0], size[1])
 
             # Set drawing options
             opts = drawer.drawOptions()
@@ -241,16 +278,20 @@ class StructureDepiction:
             opts.addBondIndices = self.drawing_options["add_bond_indices"]
             opts.clearBackground = False
 
-            # Draw reaction
+            # Generate 2D coordinates for all molecules
+            for mol in rxn.GetReactants() + rxn.GetProducts():
+                if not mol.GetNumConformers():
+                    rdDepictor.Compute2DCoords(mol)
+
+            # Set up highlighting colors
             colors = None
             if highlight_by_reactant:
                 colors = []
                 for i in range(rxn.GetNumReactantTemplates()):
-                    color = list(self.HIGHLIGHT_COLORS.values())[
-                        i % len(self.HIGHLIGHT_COLORS)
-                    ]
+                    color = list(self.HIGHLIGHT_COLORS.values())[i % len(self.HIGHLIGHT_COLORS)]
                     colors.append(color)
 
+            # Draw reaction
             drawer.DrawReaction(rxn, highlightByReactant=highlight_by_reactant)
             drawer.FinishDrawing()
 
@@ -265,15 +306,107 @@ class StructureDepiction:
             self.logger.error(f"Error depicting reaction: {str(e)}")
             return None
 
+    def depict_conformer(
+        self,
+        mol: Chem.Mol,
+        conf_id: int = -1,
+        size: Optional[Tuple[int, int]] = None,
+        highlight_atoms: Optional[List[int]] = None,
+        highlight_bonds: Optional[List[int]] = None,
+        highlight_colors: Optional[Dict[int, Tuple[float, float, float]]] = None,
+        legend: Optional[str] = None,
+        return_pil: bool = False,
+    ) -> Union[str, bytes, Image.Image, None]:
+        """Generate depiction of 3D conformer.
+
+        Args:
+            mol: RDKit molecule
+            conf_id: Conformer ID (-1 for current)
+            size: Image size (width, height)
+            highlight_atoms: List of atom indices to highlight
+            highlight_bonds: List of bond indices to highlight
+            highlight_colors: Dict mapping indices to RGB colors
+            legend: Optional legend text
+            return_pil: Return PIL Image instead of SVG/bytes
+
+        Returns:
+            SVG string, image bytes, PIL Image, or None if error
+        """
+        try:
+            if mol is None:
+                return None
+
+            # Check conformer exists
+            if not mol.GetNumConformers():
+                return None
+
+            # Set up size
+            size = size or self.drawing_options["size"]
+
+            # Create drawing object
+            if return_pil:
+                drawer = rdMolDraw2D.MolDraw2DCairo(size[0], size[1])
+            else:
+                drawer = rdMolDraw2D.MolDraw2DSVG(size[0], size[1])
+
+            # Set drawing options
+            opts = drawer.drawOptions()
+            opts.legendFontSize = self.drawing_options["legend_font_size"]
+            opts.atomLabelFontSize = self.drawing_options["atom_label_font_size"]
+            opts.bondLineWidth = self.drawing_options["bond_line_width"]
+            opts.addAtomIndices = self.drawing_options["add_atom_indices"]
+            opts.addBondIndices = self.drawing_options["add_bond_indices"]
+            opts.clearBackground = False
+
+            # Set up highlighting
+            highlight_atoms = highlight_atoms or []
+            highlight_bonds = highlight_bonds or []
+            colors = {}
+            if highlight_colors:
+                for idx, color in highlight_colors.items():
+                    colors[idx] = color
+
+            # Draw conformer
+            drawer.DrawMolecule(
+                mol,
+                confId=conf_id,
+                highlightAtoms=highlight_atoms,
+                highlightBonds=highlight_bonds,
+                highlightAtomColors=colors,
+            )
+            drawer.FinishDrawing()
+
+            # Get image data
+            if return_pil:
+                img_data = drawer.GetDrawingText()
+                return Image.open(io.BytesIO(img_data))
+            else:
+                return drawer.GetDrawingText()
+
+        except Exception as e:
+            self.logger.error(f"Error depicting conformer: {str(e)}")
+            return None
+
     def depict_grid(
         self,
         mols: List[Chem.Mol],
         legends: Optional[List[str]] = None,
         mols_per_row: int = 3,
-        sub_img_size: Tuple[int, int] = (200, 200),
+        sub_img_size: Optional[Tuple[int, int]] = None,
         return_pil: bool = False,
-    ) -> Union[bytes, Image.Image]:
-        """Generate grid depiction of multiple molecules."""
+    ) -> Union[bytes, Image.Image, None]:
+        """Generate grid depiction of multiple molecules.
+
+        Args:
+            mols: List of molecules
+            legends: Optional list of legends
+            mols_per_row: Number of molecules per row
+            sub_img_size: Size of each molecule image
+            return_pil: Return PIL Image instead of bytes
+
+        Returns:
+            Image bytes, PIL Image, or None if error
+        """
         try:
             if not mols:
                 return None
@@ -291,6 +424,9 @@ class StructureDepiction:
 
             if not valid_mols:
                 return None
+
+            # Set up sub-image size
+            sub_img_size = sub_img_size or (200, 200)
 
             # Create grid image
             img = Draw.MolsToGridImage(
@@ -312,14 +448,13 @@ class StructureDepiction:
         mols: List[Chem.Mol],
         method: str = "tsne",
         return_pil: bool = False,
-    ) -> Union[bytes, Image.Image, Tuple[bytes, np.ndarray]]:
-        """
-        Generate 2D similarity map using ML dimensionality reduction.
+    ) -> Union[bytes, Image.Image, Tuple[bytes, np.ndarray], None]:
+        """Generate 2D similarity map using ML dimensionality reduction.
 
         Args:
             mols: List of molecules
             method: Dimensionality reduction method ('tsne' or 'pca')
-            return_pil: Return PIL Image
+            return_pil: Return PIL Image instead of bytes
 
         Returns:
             Image data and optionally coordinates
@@ -369,7 +504,10 @@ class StructureDepiction:
 
             # Create image
             width, height = self.drawing_options["size"]
-            drawer = rdMolDraw2D.MolDraw2DCairo(width, height)
+            if return_pil:
+                drawer = rdMolDraw2D.MolDraw2DCairo(width, height)
+            else:
+                drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
 
             # Draw molecules at scaled coordinates
             for mol, (x, y) in zip(valid_mols, scaled_coords):
@@ -395,7 +533,16 @@ class StructureDepiction:
         filename: str,
         img_format: str = "png",
     ) -> bool:
-        """Save image data to file."""
+        """Save image data to file.
+
+        Args:
+            image_data: Image data to save
+            filename: Output filename
+            img_format: Image format (e.g., 'png', 'svg')
+
+        Returns:
+            Success status
+        """
         try:
             if image_data is None:
                 return False

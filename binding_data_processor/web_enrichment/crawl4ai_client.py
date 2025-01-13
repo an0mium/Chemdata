@@ -50,7 +50,7 @@ from ..models.psychopharm.types import (
     PatentData,
     CommunityData,
 )
-from ..pipeline.infrastructure.circuit_breaker import CircuitBreaker, CircuitConfig
+from ..pipeline.infrastructure.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from .llm_utils import (
     extract_chemical_info,
     analyze_patent_text,
@@ -125,7 +125,7 @@ class Crawl4AIClient(WebClient):
         cache_ttl: int = 3600,
         browser_config: Optional[Dict[str, Any]] = None,
         crawler_config: Optional[Dict[str, Any]] = None,
-        circuit_config: Optional[CircuitConfig] = None,
+        circuit_config: Optional[CircuitBreakerConfig] = None,
         logger: Optional[logging.Logger] = None,
         chunking_config: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
@@ -215,19 +215,22 @@ class Crawl4AIClient(WebClient):
         )
 
         # Circuit breakers
-        self.circuit_config = circuit_config or CircuitConfig()
+        self.circuit_config = circuit_config or CircuitBreakerConfig(
+            failure_threshold=5,
+            reset_timeout=300,
+        )
         self.research_breaker = CircuitBreaker(
-            "research_scraper",
+            name="research_scraper",
             config=self.circuit_config,
             logger=self.logger,
         )
         self.patent_breaker = CircuitBreaker(
-            "patent_scraper",
+            name="patent_scraper",
             config=self.circuit_config,
             logger=self.logger,
         )
         self.community_breaker = CircuitBreaker(
-            "community_scraper",
+            name="community_scraper",
             config=self.circuit_config,
             logger=self.logger,
         )

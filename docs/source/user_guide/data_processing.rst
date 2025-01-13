@@ -96,6 +96,85 @@ Loading data from PubChem:
         max_compounds=1000,
     )
 
+Document Processing
+----------------
+
+The document processing system allows you to upload and process PDF documents to extract compound information. The system supports both single file uploads and batch processing with progress tracking.
+
+Single File Upload
+~~~~~~~~~~~~~~~~
+
+To upload and process a single PDF file:
+
+.. code-block:: python
+
+    import requests
+
+    # Upload single file
+    files = {'files': ('document.pdf', open('document.pdf', 'rb'))}
+    response = requests.post('http://localhost:8000/documents/upload', files=files)
+    
+    # Check result
+    result = response.json()[0]
+    print(f"Status: {result['status']}")
+    print(f"Compounds found: {result['compounds_found']}")
+
+Batch Upload
+~~~~~~~~~~
+
+For processing multiple files in a batch:
+
+.. code-block:: python
+
+    import requests
+    import time
+    from uuid import UUID
+
+    # Upload multiple files
+    files = [
+        ('files', ('doc1.pdf', open('doc1.pdf', 'rb'))),
+        ('files', ('doc2.pdf', open('doc2.pdf', 'rb'))),
+        ('files', ('doc3.pdf', open('doc3.pdf', 'rb')))
+    ]
+    response = requests.post('http://localhost:8000/documents/batch-upload', files=files)
+    batch_id = UUID(response.json()['batch_id'])
+
+    # Track progress
+    while True:
+        status = requests.get(f'http://localhost:8000/documents/batch-status/{batch_id}').json()
+        print(f"Progress: {status['processed_files']}/{status['total_files']}")
+        
+        if status['status'] in ['completed', 'failed']:
+            break
+            
+        time.sleep(1)  # Poll every second
+
+    # Check results
+    for filename, file_status in status['files'].items():
+        print(f"{filename}: {file_status['status']}")
+        if file_status['compounds_found']:
+            print(f"Found {file_status['compounds_found']} compounds")
+
+Directory Monitoring
+~~~~~~~~~~~~~~~~~
+
+To monitor a directory for new PDF files:
+
+.. code-block:: python
+
+    import requests
+
+    # Configure directory monitoring
+    config = {
+        'path': '/path/to/documents',
+        'patterns': ['*.pdf'],
+        'recursive': True
+    }
+    response = requests.post('http://localhost:8000/documents/monitor', json=config)
+
+    # Stop monitoring when done
+    requests.delete('/documents/monitor', params={'path': '/path/to/documents'})
+
 Structure Processing
 -----------------
 
@@ -149,30 +228,6 @@ Calculating molecular properties:
     # Calculate properties
     for compound in compounds:
         calculator.calculate_properties(compound)
-
-Similarity Search
-~~~~~~~~~~~~~~
-
-Finding similar compounds:
-
-.. code-block:: python
-
-    from binding_data_processor.processors.structure.similarity import (
-        SimilaritySearcher,
-        SearchConfig,
-    )
-
-    # Configure searcher
-    searcher = SimilaritySearcher(
-        config=SearchConfig(
-            similarity_threshold=0.7,
-            max_results=100,
-        )
-    )
-
-    # Search similar compounds
-    query = compounds[0]
-    similar = searcher.find_similar(query, compounds)
 
 Web Enrichment
 ------------
@@ -331,70 +386,70 @@ Creating a custom pipeline:
     # Process compounds
     compounds = pipeline.process(compounds)
 
-Batch Processing
-~~~~~~~~~~~~~
-
-Processing compounds in batches:
-
-.. code-block:: python
-
-    from binding_data_processor.pipeline import BatchProcessor
-
-    # Configure processor
-    processor = BatchProcessor(
-        batch_size=100,
-        num_workers=4,
-    )
-
-    # Process batches
-    for batch in processor.process_batches(compounds):
-        # Handle batch results
-        pass
-
 Error Handling
 ~~~~~~~~~~~
 
-Handling processing errors:
+The system provides detailed error information:
+
+- For single file uploads, check the ``status`` and ``error_message`` fields in the response
+- For batch uploads, check the overall batch status and individual file statuses
+- For directory monitoring, check the response status and message
+
+Example error handling:
 
 .. code-block:: python
 
-    from binding_data_processor.pipeline import (
-        ErrorHandler,
-        ProcessingError,
-    )
+    import requests
 
-    # Configure handler
-    handler = ErrorHandler(
-        retry_count=3,
-        ignore_errors=False,
-    )
-
-    # Process with error handling
     try:
-        compounds = pipeline.process_compounds(
-            input_file="bindingdb.tsv",
-            error_handler=handler,
-        )
-    except ProcessingError as e:
-        print(f"Processing failed: {e}")
+        response = requests.post('/documents/upload', files={'files': ('doc.pdf', open('doc.pdf', 'rb'))})
+        result = response.json()[0]
+        
+        if result['status'] == 'failed':
+            print(f"Processing failed: {result['error_message']}")
+        elif 'error_message' in result:
+            print(f"Warning: {result['error_message']}")
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Upload failed: {str(e)}")
 
-Checkpointing
-~~~~~~~~~~~
+Best Practices
+------------
 
-Using checkpoints:
+1. Use batch processing for multiple files to improve performance
+2. Monitor batch progress to track processing status
+3. Handle errors appropriately at both file and batch levels
+4. Use directory monitoring for automated processing
+5. Clean up resources (close files, stop monitoring) when done
+6. Use checkpoints for long-running processes
+7. Implement proper error handling and validation
+8. Configure appropriate logging levels
+9. Use appropriate data formats for export
+10. Follow memory management guidelines
 
-.. code-block:: python
+Configuration
+-----------
 
-    from binding_data_processor.pipeline import CheckpointManager
+The processing system can be configured through environment variables:
 
-    # Configure checkpoints
-    checkpoints = CheckpointManager(
-        checkpoint_dir="checkpoints/",
-        save_frequency=1000,
-    )
+- ``STORAGE_DIR``: Base directory for storing documents (default: "data/documents")
+- ``MAX_UPLOAD_SIZE``: Maximum file size in bytes (default: 10MB)
+- ``SUPPORTED_FORMATS``: List of supported file formats (default: ["pdf"])
+- ``PROCESSING_THREADS``: Number of processing threads (default: 4)
+- ``CACHE_DIR``: Directory for caching results (default: "cache/")
+- ``LOG_LEVEL``: Logging level (default: "INFO")
+- ``BATCH_SIZE``: Processing batch size (default: 1000)
+- ``MAX_RETRIES``: Maximum retry attempts (default: 3)
 
-    # Process with checkpoints
-    compounds = pipeline.process_compounds(
-        input_file="bindingdb.tsv",
-        checkpoint_manager=checkpoints,
-    )
+Example configuration:
+
+.. code-block:: bash
+
+    export STORAGE_DIR=/path/to/storage
+    export MAX_UPLOAD_SIZE=20971520  # 20MB
+    export SUPPORTED_FORMATS='["pdf", "PDF"]'
+    export PROCESSING_THREADS=8
+    export CACHE_DIR=/path/to/cache
+    export LOG_LEVEL=DEBUG
+    export BATCH_SIZE=500
+    export MAX_RETRIES=5

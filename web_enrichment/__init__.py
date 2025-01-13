@@ -11,8 +11,8 @@ This module provides functionality for:
 from typing import Dict, Any, List, Optional
 import os
 
-from logger import LogManager
-from .http_client import HttpClient
+from binding_data_processor.logger import LogManager
+from .http_client import HTTPClient
 from .name_utils import extract_identifiers, clean_name
 from .data_sources import (
     PubChemClient,
@@ -60,7 +60,7 @@ class WebEnrichment:
     def __init__(self):
         """Initialize web enrichment processor."""
         # Initialize HTTP client
-        self.http = HttpClient()
+        self.http = HTTPClient()
 
         # Initialize data source clients
         self.pubchem = PubChemClient(self.http)
@@ -70,9 +70,7 @@ class WebEnrichment:
         self.web_search = WebSearchClient(self.http)
         self.swiss = SwissClient(self.http)
 
-    async def use_mcp_tool(
-        self, server_name: str, tool_name: str, arguments: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def use_mcp_tool(self, server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Use an MCP tool."""
         from cline_utils import use_mcp_tool
 
@@ -94,9 +92,7 @@ class WebEnrichment:
         """Get compound data from PubChem."""
         try:
             logger.info("Fetching PubChem data...")
-            data = self.pubchem.get_compound_data(
-                cas=cas, smiles=smiles, inchi=inchi, include_bioassays=True
-            )
+            data = self.pubchem.get_compound_data(cas=cas, smiles=smiles, inchi=inchi, include_bioassays=True)
             if data:
                 logger.info("Successfully retrieved PubChem data")
                 return data
@@ -129,9 +125,7 @@ class WebEnrichment:
         result = {"urls": {}, "extracted_data": {}}
 
         # Extract identifiers
-        clean_name_str, chembl_id, cas_number, patent_id = extract_identifiers(
-            compound_name
-        )
+        clean_name_str, chembl_id, cas_number, patent_id = extract_identifiers(compound_name)
         compound_data = {
             "name": clean_name_str,
             "cas": cas_number,
@@ -144,9 +138,7 @@ class WebEnrichment:
             result["urls"]["chembl_url"] = self.chembl.get_compound_url(chembl_id)
             chembl_data = self.chembl.get_compound_data(chembl_id)
             if chembl_data and llm_api_key:
-                result["extracted_data"]["chembl"] = analyze_content_with_llm(
-                    str(chembl_data), compound_data, llm_api_key
-                )
+                result["extracted_data"]["chembl"] = analyze_content_with_llm(str(chembl_data), compound_data, llm_api_key)
 
         # Get community source URLs and data
         community_urls = self.community.get_urls(clean_name_str, cas_number)
@@ -155,9 +147,7 @@ class WebEnrichment:
             for source, url in community_urls.items():
                 content = self.community.get_content(url)
                 if content:
-                    result["extracted_data"][source] = analyze_content_with_llm(
-                        content, compound_data, llm_api_key
-                    )
+                    result["extracted_data"][source] = analyze_content_with_llm(content, compound_data, llm_api_key)
 
         # Get PubChem data
         pubchem_data = self.pubchem.get_compound_data(
@@ -168,9 +158,7 @@ class WebEnrichment:
         if pubchem_data:
             result["urls"]["pubchem_url"] = pubchem_data["url"]
             if llm_api_key:
-                result["extracted_data"]["pubchem"] = analyze_content_with_llm(
-                    str(pubchem_data["data"]), compound_data, llm_api_key
-                )
+                result["extracted_data"]["pubchem"] = analyze_content_with_llm(str(pubchem_data["data"]), compound_data, llm_api_key)
 
         # Search patents if requested
         if search_patents and llm_api_key:
@@ -183,9 +171,7 @@ class WebEnrichment:
             patent_query = " OR ".join(f'"{term}"' for term in patent_terms)
 
             # Search patents
-            patent_results = self.web_search.search_patents(
-                patent_query, llm_api_key, compound_data
-            )
+            patent_results = self.web_search.search_patents(patent_query, llm_api_key, compound_data)
 
             # Add patent results
             if patent_results:
@@ -242,9 +228,7 @@ class WebEnrichment:
             List of dictionaries containing name information
         """
         names = []
-        clean_name_str, extracted_chembl_id, cas_number, patent_id = (
-            extract_identifiers(compound_name)
-        )
+        clean_name_str, extracted_chembl_id, cas_number, patent_id = extract_identifiers(compound_name)
         chembl_id = chembl_id or extracted_chembl_id
 
         # Get ChEMBL names
@@ -252,9 +236,7 @@ class WebEnrichment:
             names.extend(self.chembl.get_compound_names(chembl_id))
 
         # Get PubChem names
-        pubchem_data = self.pubchem.get_compound_data(
-            cas=cas_number, smiles=smiles, inchi=inchi
-        )
+        pubchem_data = self.pubchem.get_compound_data(cas=cas_number, smiles=smiles, inchi=inchi)
         if pubchem_data:
             names.extend(self.pubchem.get_compound_names(pubchem_data["cid"]))
 
@@ -331,9 +313,7 @@ class WebEnrichment:
 
         return merged
 
-    def get_pharmacology(
-        self, compound_name: str, smiles: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def get_pharmacology(self, compound_name: str, smiles: Optional[str] = None) -> Dict[str, Any]:
         """
         Get pharmacological information from various sources.
 
@@ -362,12 +342,7 @@ class WebEnrichment:
             # Get target predictions
             target_data = self.swiss.get_target_predictions(smiles)
             if target_data:
-                info["primary_targets"].extend(
-                    [
-                        f"{pred['target']} (probability: {pred['probability']:.2f})"
-                        for pred in target_data["predictions"][:5]  # Top 5 predictions
-                    ]
-                )
+                info["primary_targets"].extend([f"{pred['target']} (probability: {pred['probability']:.2f})" for pred in target_data["predictions"][:5]])  # Top 5 predictions
                 info["sources"].append("SwissTargetPrediction")
 
             # Get ADME properties
@@ -376,9 +351,7 @@ class WebEnrichment:
                 # Add pharmacokinetics data
                 pk_info = []
                 if adme_data["absorption"]["gi_absorption"]:
-                    pk_info.append(
-                        f"GI absorption: {adme_data['absorption']['gi_absorption']}"
-                    )
+                    pk_info.append(f"GI absorption: {adme_data['absorption']['gi_absorption']}")
                 if adme_data["absorption"]["bbb_permeant"]:
                     pk_info.append("BBB permeant")
                 if adme_data["absorption"]["pgp_substrate"]:
@@ -386,9 +359,7 @@ class WebEnrichment:
 
                 # Add metabolism data
                 cyp_info = []
-                for cyp, is_inhibitor in adme_data["metabolism"][
-                    "cyp_inhibition"
-                ].items():
+                for cyp, is_inhibitor in adme_data["metabolism"]["cyp_inhibition"].items():
                     if is_inhibitor:
                         cyp_info.append(f"{cyp.upper()} inhibitor")
 
@@ -400,14 +371,9 @@ class WebEnrichment:
                 info["sources"].append("SwissADME")
 
             # Get similar compounds
-            similar_data = self.swiss.search_similar_compounds(
-                smiles, similarity_threshold=0.7, max_results=5
-            )
+            similar_data = self.swiss.search_similar_compounds(smiles, similarity_threshold=0.7, max_results=5)
             if similar_data:
-                info["similar_compounds"] = [
-                    f"{cmpd['name']} (similarity: {cmpd['similarity']:.2f})"
-                    for cmpd in similar_data["similar_compounds"]
-                ]
+                info["similar_compounds"] = [f"{cmpd['name']} (similarity: {cmpd['similarity']:.2f})" for cmpd in similar_data["similar_compounds"]]
                 info["sources"].append("SwissSimilarity")
 
         # Try ChEMBL first if available
@@ -442,9 +408,7 @@ class WebEnrichment:
 
         return info
 
-    def fill_empty_fields(
-        self, tsv_path: str, output_path: str, llm_api_key: str
-    ) -> None:
+    def fill_empty_fields(self, tsv_path: str, output_path: str, llm_api_key: str) -> None:
         """
         Fill empty fields in TSV file using LLM analysis of reference URLs.
 
@@ -477,10 +441,7 @@ class WebEnrichment:
                         for source, extracted in result["extracted_data"].items():
                             for field, value in extracted.items():
                                 # Only fill if current value is empty
-                                if (
-                                    field in compound_dict
-                                    and not compound_dict[field].strip()
-                                ):
+                                if field in compound_dict and not compound_dict[field].strip():
                                     compound_dict[field] = value
 
                 enriched_data.append(compound_dict)

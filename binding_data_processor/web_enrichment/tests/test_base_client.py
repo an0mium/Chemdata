@@ -9,7 +9,7 @@ import requests
 from ..clients.base import WebClient, WebClientError, ValidationError
 from ..validation.schema import DataSource, ValidationLevel
 from ..validation.data import ValidationConfig
-from ...pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ...pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 
 
 class TestClient(WebClient):
@@ -36,7 +36,7 @@ def client():
         max_retries=1,
         timeout=1,
         cache_ttl=60,
-        circuit_config=CircuitConfig(
+        circuit_config=CircuitBreakerConfig(
             failure_threshold=3,
             recovery_timeout=60,
         ),

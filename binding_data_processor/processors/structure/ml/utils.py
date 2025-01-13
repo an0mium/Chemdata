@@ -10,7 +10,7 @@ This module provides:
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union, Any
 
 import numpy as np
 import pandas as pd
@@ -22,8 +22,8 @@ from rdkit.Chem import (
     Descriptors,
     Fragments,
     MACCSkeys,
-    rdDecomposition,
     rdMolDescriptors,
+    rdRGroupDecomposition,
 )
 from sklearn.metrics import (
     accuracy_score,
@@ -35,22 +35,205 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
+from sklearn.preprocessing import StandardScaler
 from torch_geometric.data import Batch, Data
 from torch_geometric.nn import global_add_pool, global_max_pool, global_mean_pool
 
 from ....models.core import CompoundData
 from ..descriptors import DescriptorCalculator
 from ..pharmacophore import PharmacophoreGenerator
-from ..similarity import MolecularSimilarity
-from .activity import ActivityPredictor
+from ..similarity import SimilarityProcessor
+from .core_utils import mol_to_graph, compute_fingerprints
+
+
+class DataPreprocessor:
+    """Data preprocessing utilities."""
+
+    def __init__(self):
+        """Initialize preprocessor."""
+        self.logger = logging.getLogger(__name__)
+        self.scaler = StandardScaler()
+
+    def normalize(self, data: np.ndarray, fit: bool = True) -> np.ndarray:
+        """Normalize data using StandardScaler.
+
+        Args:
+            data: Input data array
+            fit: Whether to fit scaler on data
+
+        Returns:
+            Normalized data array
+        """
+        if fit:
+            return self.scaler.fit_transform(data)
+        return self.scaler.transform(data)
+
+    def split_data(self, X: np.ndarray, y: np.ndarray, test_size: float = 0.2, random_state: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Split data into train and test sets.
+
+        Args:
+            X: Feature matrix
+            y: Target values
+            test_size: Fraction of data to use for testing
+            random_state: Random seed
+
+        Returns:
+            X_train, X_test, y_train, y_test arrays
+        """
+        from sklearn.model_selection import train_test_split
+
+        return train_test_split(X, y, test_size=test_size, random_state=random_state)
+
+
+class FeatureExtractor:
+    """Feature extraction utilities."""
+
+    def __init__(self):
+        """Initialize extractor."""
+        self.logger = logging.getLogger(__name__)
+        self.featurizer = MolecularFeaturizer()
+
+    def extract_features(
+        self,
+        mols: List[Chem.Mol],
+        feature_types: Optional[List[str]] = None,
+    ) -> Dict[str, np.ndarray]:
+        """Extract features from molecules.
+
+        Args:
+            mols: List of RDKit molecules
+            feature_types: Types of features to extract
+
+        Returns:
+            Dictionary of feature arrays
+        """
+        features = {}
+        for mol in mols:
+            mol_features = self.featurizer.generate_features(mol, feature_types=feature_types)
+            for k, v in mol_features.items():
+                if k not in features:
+                    features[k] = []
+                features[k].append(v)
+
+        # Convert lists to arrays
+        for k in features:
+            features[k] = np.array(features[k])
+
+        return features
+
+
+class ModelEvaluator:
+    """Model evaluation utilities."""
+
+    def __init__(self):
+        """Initialize evaluator."""
+        self.logger = logging.getLogger(__name__)
+
+    def evaluate_classifier(
+        self,
+        y_true: np.ndarray,
+        y_pred: np.ndarray,
+        y_prob: Optional[np.ndarray] = None,
+    ) -> Dict[str, float]:
+        """Evaluate classifier performance.
+
+        Args:
+            y_true: True labels
+            y_pred: Predicted labels
+            y_prob: Predicted probabilities
+
+        Returns:
+            Dictionary of metrics
+        """
+        metrics = {
+            "accuracy": accuracy_score(y_true, y_pred),
+            "precision": precision_score(y_true, y_pred, average="weighted"),
+            "recall": recall_score(y_true, y_pred, average="weighted"),
+            "f1": f1_score(y_true, y_pred, average="weighted"),
+        }
+
+        if y_prob is not None:
+            metrics["roc_auc"] = roc_auc_score(y_true, y_prob, multi_class="ovr")
+
+        return metrics
+
+    def evaluate_regressor(
+        self,
+        y_true: np.ndarray,
+        y_pred: np.ndarray,
+    ) -> Dict[str, float]:
+        """Evaluate regressor performance.
+
+        Args:
+            y_true: True values
+            y_pred: Predicted values
+
+        Returns:
+            Dictionary of metrics
+        """
+        return {
+            "mae": mean_absolute_error(y_true, y_pred),
+            "mse": mean_squared_error(y_true, y_pred),
+            "rmse": mean_squared_error(y_true, y_pred, squared=False),
+            "r2": r2_score(y_true, y_pred),
+        }
+
+
+class UncertaintyEstimator:
+    """Uncertainty estimation utilities."""
+
+    def __init__(self):
+        """Initialize estimator."""
+        self.logger = logging.getLogger(__name__)
+
+    def monte_carlo_dropout(
+        self,
+        model: nn.Module,
+        X: torch.Tensor,
+        n_samples: int = 100,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Estimate uncertainty using MC dropout.
+
+        Args:
+            model: PyTorch model with dropout
+            X: Input tensor
+            n_samples: Number of forward passes
+
+        Returns:
+            Mean and std of predictions
+        """
+        model.train()  # Enable dropout
+
+        preds = []
+        for _ in range(n_samples):
+            with torch.no_grad():
+                pred = model(X)
+                preds.append(pred.cpu().numpy())
+
+        preds = np.stack(preds)
+        return np.mean(preds, axis=0), np.std(preds, axis=0)
+
+    def ensemble_uncertainty(
+        self,
+        predictions: List[np.ndarray],
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Estimate uncertainty from ensemble predictions.
+
+        Args:
+            predictions: List of predictions from ensemble models
+
+        Returns:
+            Mean and std of predictions
+        """
+        predictions = np.stack(predictions)
+        return np.mean(predictions, axis=0), np.std(predictions, axis=0)
 
 
 class MolecularFeaturizer:
     """Molecular feature extraction."""
 
     def __init__(self, model_dir: Optional[Union[str, Path]] = None):
-        """
-        Initialize featurizer.
+        """Initialize featurizer.
 
         Args:
             model_dir: Optional directory for model checkpoints
@@ -59,8 +242,7 @@ class MolecularFeaturizer:
         self.model_dir = Path(model_dir) if model_dir else None
         self.descriptor_calculator = DescriptorCalculator()
         self.pharmacophore_generator = PharmacophoreGenerator()
-        self.similarity_calculator = MolecularSimilarity()
-        self.activity_predictor = ActivityPredictor()
+        self.similarity_calculator = SimilarityProcessor()
 
         # Load structural alerts and SMARTS patterns
         self.structural_alerts = self._load_structural_alerts()
@@ -75,8 +257,7 @@ class MolecularFeaturizer:
         feature_types: Optional[List[str]] = None,
         batch_size: Optional[int] = None,
     ) -> Dict[str, Union[np.ndarray, Data, CompoundData]]:
-        """
-        Generate comprehensive molecular features.
+        """Generate comprehensive molecular features.
 
         Args:
             mol: RDKit molecule
@@ -99,19 +280,10 @@ class MolecularFeaturizer:
             features.update(self._generate_decomposition_and_fingerprints(mol, feature_types))
 
             # Generate pharmacophore and graph features
-            features.update(
-                self._generate_pharmacophore_and_graph(mol, feature_types, batch_size)
-            )
+            features.update(self._generate_pharmacophore_and_graph(mol, feature_types, batch_size))
 
             # Generate 3D and structural features
-            features.update(
-                self._generate_3d_and_structure(mol, include_3d, feature_types)
-            )
-
-            # Generate activity predictions
-            features["predicted_activities"] = (
-                self.activity_predictor.predict_activities(mol)
-            )
+            features.update(self._generate_3d_and_structure(mol, include_3d, feature_types))
 
             # Create CompoundData object
             features["compound"] = self._create_compound_data(mol)
@@ -122,9 +294,7 @@ class MolecularFeaturizer:
             self.logger.error(f"Error generating features: {str(e)}")
             return features
 
-    def _generate_descriptors_and_fragments(
-        self, mol: Chem.Mol, feature_types: Optional[List[str]] = None
-    ) -> Dict:
+    def _generate_descriptors_and_fragments(self, mol: Chem.Mol, feature_types: Optional[List[str]] = None) -> Dict:
         """Generate descriptors and fragment features."""
         features = {}
 
@@ -138,9 +308,7 @@ class MolecularFeaturizer:
 
         return features
 
-    def _generate_decomposition_and_fingerprints(
-        self, mol: Chem.Mol, feature_types: Optional[List[str]] = None
-    ) -> Dict:
+    def _generate_decomposition_and_fingerprints(self, mol: Chem.Mol, feature_types: Optional[List[str]] = None) -> Dict:
         """Generate decomposition and fingerprint features."""
         features = {}
 
@@ -150,7 +318,7 @@ class MolecularFeaturizer:
 
         # Generate fingerprints
         if feature_types is None or "fingerprints" in feature_types:
-            features.update(self._generate_fingerprints(mol))
+            features.update({"fingerprints": compute_fingerprints(mol)})
 
         return features
 
@@ -165,9 +333,7 @@ class MolecularFeaturizer:
 
         # Generate pharmacophore features
         if feature_types is None or "pharmacophore" in feature_types:
-            features["pharmacophore"] = (
-                self.pharmacophore_generator.generate_features(mol)
-            )
+            features["pharmacophore"] = self.pharmacophore_generator.generate_features(mol)
 
         # Generate graph features
         if feature_types is None or "graph" in feature_types:
@@ -193,19 +359,20 @@ class MolecularFeaturizer:
 
         return features
 
-
     def _generate_descriptors(self, mol: Chem.Mol) -> Dict:
         """Generate molecular descriptors."""
         descriptors = self.descriptor_calculator.calculate(mol)
-        descriptors.update({
-            "num_rings": rdMolDescriptors.CalcNumRings(mol),
-            "num_aromatic_rings": rdMolDescriptors.CalcNumAromaticRings(mol),
-            "num_aliphatic_rings": rdMolDescriptors.CalcNumAliphaticRings(mol),
-            "num_saturated_rings": rdMolDescriptors.CalcNumSaturatedRings(mol),
-            "num_heterocycles": rdMolDescriptors.CalcNumHeterocycles(mol),
-            "num_spiro_atoms": rdMolDescriptors.CalcNumSpiroAtoms(mol),
-            "num_bridgeheads": rdMolDescriptors.CalcNumBridgeheadAtoms(mol),
-        })
+        descriptors.update(
+            {
+                "num_rings": rdMolDescriptors.CalcNumRings(mol),
+                "num_aromatic_rings": rdMolDescriptors.CalcNumAromaticRings(mol),
+                "num_aliphatic_rings": rdMolDescriptors.CalcNumAliphaticRings(mol),
+                "num_saturated_rings": rdMolDescriptors.CalcNumSaturatedRings(mol),
+                "num_heterocycles": rdMolDescriptors.CalcNumHeterocycles(mol),
+                "num_spiro_atoms": rdMolDescriptors.CalcNumSpiroAtoms(mol),
+                "num_bridgeheads": rdMolDescriptors.CalcNumBridgeheadAtoms(mol),
+            }
+        )
         return {"descriptors": descriptors}
 
     def _generate_fragment_features(self, mol: Chem.Mol) -> Dict:
@@ -224,21 +391,9 @@ class MolecularFeaturizer:
             }
         }
 
-    def _generate_fingerprints(self, mol: Chem.Mol) -> Dict:
-        """Generate molecular fingerprints."""
-        return {
-            "morgan": self._generate_morgan_fingerprint(mol),
-            "maccs": self._generate_maccs_fingerprint(mol),
-            "rdkit": self._generate_rdkit_fingerprint(mol),
-            "pattern": self._generate_pattern_fingerprint(mol),
-            "layered": self._generate_layered_fingerprint(mol),
-        }
-
-    def _generate_graph_data(
-        self, mol: Chem.Mol, batch_size: Optional[int] = None
-    ) -> Dict:
+    def _generate_graph_data(self, mol: Chem.Mol, batch_size: Optional[int] = None) -> Dict:
         """Generate graph-based features."""
-        graph_data = self._generate_graph_features(mol)
+        graph_data = mol_to_graph(mol)
         features = {"graph": graph_data}
 
         if batch_size:
@@ -274,166 +429,46 @@ class MolecularFeaturizer:
         compound.hba = rdMolDescriptors.CalcNumHBA(mol)
         compound.rotatable_bonds = rdMolDescriptors.CalcNumRotatableBonds(mol)
         return compound
+
     def _analyze_decomposition(self, mol: Chem.Mol) -> Dict:
         """Analyze molecule decomposition."""
         decomp = {}
-        
-        # Get Murcko scaffold
-        scaffold = rdDecomposition.GetScaffoldForMol(mol)
-        decomp["scaffold_smiles"] = Chem.MolToSmiles(scaffold) if scaffold else ""
-        
-        # Get framework
-        framework = rdDecomposition.GetFrameworkForMol(mol)
-        decomp["framework_smiles"] = Chem.MolToSmiles(framework) if framework else ""
-        
-        # Get ring systems
-        ring_systems = rdDecomposition.GetRingSystems(mol)
-        decomp["ring_systems"] = [
-            Chem.MolToSmiles(Chem.MolFromSmiles(smiles))
-            for smiles in ring_systems
-        ]
-    def _generate_morgan_fingerprint(
-        self, mol: Chem.Mol, radius: int = 3, nbits: int = 2048
-    ) -> np.ndarray:
-        """Generate Morgan fingerprint with chirality."""
-        return np.array(
-            list(
-                AllChem.GetMorganFingerprintAsBitVect(
-                    mol,
-                    radius,
-                    nBits=nbits,
-                    useChirality=True,
-                    useFeatures=True,
-                )
-            )
-        )
 
-    def _generate_maccs_fingerprint(self, mol: Chem.Mol) -> np.ndarray:
-        """Generate MACCS keys fingerprint."""
-        return np.array(list(MACCSkeys.GenMACCSKeys(mol)))
+        try:
+            # Get Murcko scaffold
+            scaffold = AllChem.MurckoScaffoldSmiles(mol=mol, includeChirality=True)
+            decomp["scaffold_smiles"] = scaffold
 
-    def _generate_rdkit_fingerprint(
-        self, mol: Chem.Mol, nbits: int = 2048
-    ) -> np.ndarray:
-        """Generate RDKit topological fingerprint."""
-        return np.array(
-            list(
-                Chem.RDKFingerprint(
-                    mol,
-                    fpSize=nbits,
-                    minPath=1,
-                    maxPath=7,
-                    useHs=True,
-                )
-            )
-        )
+            # Get largest ring system
+            ring_info = mol.GetRingInfo()
+            if ring_info.NumRings() > 0:
+                # Get atoms in rings
+                ring_atoms = set()
+                for ring in ring_info.AtomRings():
+                    ring_atoms.update(ring)
 
-    def _generate_pattern_fingerprint(
-        self, mol: Chem.Mol, nbits: int = 2048
-    ) -> np.ndarray:
-        """Generate pattern fingerprint."""
-        return np.array(
-            list(
-                Chem.PatternFingerprint(
-                    mol,
-                    fpSize=nbits,
-                    tautomerFingerprints=True,
-                )
-            )
-        )
+                # Create substructure from ring atoms
+                ring_mol = Chem.PathToSubmol(mol, list(ring_atoms))
+                if ring_mol:
+                    decomp["largest_ring_system"] = Chem.MolToSmiles(ring_mol)
 
-    def _generate_layered_fingerprint(
-        self, mol: Chem.Mol, nbits: int = 2048
-    ) -> np.ndarray:
-        """Generate layered fingerprint."""
-        return np.array(
-            list(
-                Chem.LayeredFingerprint(
-                    mol,
-                    fpSize=nbits,
-                    layerFlags=0xFFFFFFFF,
-                )
-            )
-        )
+            # Identify R-groups using RGroupDecomposition
+            params = rdRGroupDecomposition.RGroupDecompositionParameters()
+            params.removeHydrogensPostMatch = True
 
-    def _generate_graph_features(self, mol: Chem.Mol) -> Data:
-        """Generate molecular graph features."""
-        # Node features
-        atomic_nums = []
-        aromatic = []
-        sp = []
-        sp2 = []
-        sp3 = []
-        num_hs = []
-        formal_charge = []
-        radical_electrons = []
-        in_ring = []
-        chirality = []
+            # Use scaffold as core pattern
+            core = Chem.MolFromSmiles(scaffold)
+            if core:
+                decomp_obj = rdRGroupDecomposition.RGroupDecomposition(core, params)
+                decomp_obj.Add(mol)
+                if decomp_obj.Process():
+                    rgroups = decomp_obj.GetRGroupsAsColumns(asSmiles=True)[0]
+                    decomp["rgroups"] = {k: v for k, v in rgroups.items() if k != "Core"}
 
-        for atom in mol.GetAtoms():
-            atomic_nums.append(atom.GetAtomicNum())
-            aromatic.append(1 if atom.GetIsAromatic() else 0)
-            hybridization = atom.GetHybridization()
-            sp.append(1 if hybridization == Chem.HybridizationType.SP else 0)
-            sp2.append(1 if hybridization == Chem.HybridizationType.SP2 else 0)
-            sp3.append(1 if hybridization == Chem.HybridizationType.SP3 else 0)
-            num_hs.append(atom.GetTotalNumHs())
-            formal_charge.append(atom.GetFormalCharge())
-            radical_electrons.append(atom.GetNumRadicalElectrons())
-            in_ring.append(1 if atom.IsInRing() else 0)
-            if atom.HasProp("_CIPCode"):
-                chirality.append(1 if atom.GetProp("_CIPCode") == "R" else -1)
-            else:
-                chirality.append(0)
+        except Exception as e:
+            self.logger.error(f"Error in decomposition analysis: {str(e)}")
 
-        x = torch.tensor(
-            [
-                atomic_nums,
-                aromatic,
-                sp,
-                sp2,
-                sp3,
-                num_hs,
-                formal_charge,
-                radical_electrons,
-                in_ring,
-                chirality,
-            ],
-            dtype=torch.float,
-        ).t()
-
-        # Edge features
-        edge_indices = []
-        edge_attrs = []
-
-        for bond in mol.GetBonds():
-            i = bond.GetBeginAtomIdx()
-            j = bond.GetEndAtomIdx()
-
-            edge_indices += [[i, j], [j, i]]
-
-            # Bond features
-            bond_type = bond.GetBondType()
-            bond_conjugated = bond.GetIsConjugated()
-            bond_in_ring = bond.IsInRing()
-            bond_stereo = bond.GetStereo()
-
-            edge_attr = [
-                int(bond_type == Chem.BondType.SINGLE),
-                int(bond_type == Chem.BondType.DOUBLE),
-                int(bond_type == Chem.BondType.TRIPLE),
-                int(bond_type == Chem.BondType.AROMATIC),
-                int(bond_conjugated),
-                int(bond_in_ring),
-                int(bond_stereo > Chem.BondStereo.STEREONONE),
-            ]
-
-            edge_attrs += [edge_attr, edge_attr]
-
-        edge_index = torch.tensor(edge_indices, dtype=torch.long).t()
-        edge_attr = torch.tensor(edge_attrs, dtype=torch.float)
-
-        return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+        return decomp
 
     def _generate_3d_features(self, mol: Chem.Mol) -> Dict[str, np.ndarray]:
         """Generate 3D molecular features."""
@@ -448,9 +483,7 @@ class MolecularFeaturizer:
 
             # Calculate 3D descriptors
             features["radius_of_gyration"] = rdMolDescriptors.CalcRadiusOfGyration(mol)
-            features["inertial_shape_factor"] = (
-                rdMolDescriptors.CalcInertialShapeFactor(mol)
-            )
+            features["inertial_shape_factor"] = rdMolDescriptors.CalcInertialShapeFactor(mol)
             features["npr1"] = rdMolDescriptors.CalcNPR1(mol)
             features["npr2"] = rdMolDescriptors.CalcNPR2(mol)
             features["pmi1"] = rdMolDescriptors.CalcPMI1(mol)
@@ -585,266 +618,3 @@ class MolecularFeaturizer:
             "ergoline": "CN1C[C@@H](C=C2[C@H]1Cc1c[nH]c3cccc2c13)C",
             "lysergamide": "CN1C[C@@H](C=C2[C@H]1Cc1c[nH]c3cccc2c13)C(=O)N",
         }
-
-
-class DataPreprocessor:
-    """Data preprocessing utilities."""
-
-    def __init__(self):
-        """Initialize preprocessor."""
-        self.logger = logging.getLogger(__name__)
-
-    def normalize_features(
-        self,
-        features: np.ndarray,
-        method: str = "standard",
-        params: Optional[Dict] = None,
-    ) -> Tuple[np.ndarray, Dict]:
-        """
-        Normalize feature values.
-
-        Args:
-            features: Feature array
-            method: Normalization method (standard/minmax/robust)
-            params: Optional normalization parameters
-
-        Returns:
-            Normalized features and parameters
-        """
-        try:
-            if method == "standard":
-                if params is None:
-                    mean = np.mean(features, axis=0)
-                    std = np.std(features, axis=0)
-                    params = {"mean": mean, "std": std}
-                features = (features - params["mean"]) / (params["std"] + 1e-8)
-
-            elif method == "minmax":
-                if params is None:
-                    min_val = np.min(features, axis=0)
-                    max_val = np.max(features, axis=0)
-                    params = {"min": min_val, "max": max_val}
-                features = (features - params["min"]) / (
-                    params["max"] - params["min"] + 1e-8
-                )
-
-            elif method == "robust":
-                if params is None:
-                    q1 = np.percentile(features, 25, axis=0)
-                    q3 = np.percentile(features, 75, axis=0)
-                    iqr = q3 - q1
-                    params = {"q1": q1, "q3": q3, "iqr": iqr}
-                features = (features - params["q1"]) / (params["iqr"] + 1e-8)
-
-            return features, params
-
-        except Exception as e:
-            self.logger.error(f"Error normalizing features: {str(e)}")
-            return features, {}
-
-    def handle_missing_values(
-        self,
-        features: np.ndarray,
-        strategy: str = "mean",
-        fill_value: Optional[float] = None,
-    ) -> Tuple[np.ndarray, Dict]:
-        """
-        Handle missing values in features.
-
-        Args:
-            features: Feature array
-            strategy: Handling strategy (mean/median/constant)
-            fill_value: Value for constant strategy
-
-        Returns:
-            Processed features and parameters
-        """
-        try:
-            mask = np.isnan(features)
-            params = {}
-
-            if strategy == "mean":
-                params["fill_values"] = np.nanmean(features, axis=0)
-            elif strategy == "median":
-                params["fill_values"] = np.nanmedian(features, axis=0)
-            elif strategy == "constant":
-                params["fill_values"] = (
-                    np.full(features.shape[1], fill_value)
-                    if fill_value is not None
-                    else np.zeros(features.shape[1])
-                )
-
-            features = features.copy()
-            for i in range(features.shape[1]):
-                features[mask[:, i], i] = params["fill_values"][i]
-
-            return features, params
-
-        except Exception as e:
-            self.logger.error(f"Error handling missing values: {str(e)}")
-            return features, {}
-
-
-class ModelEvaluator:
-    """Model evaluation utilities."""
-
-    def __init__(self):
-        """Initialize evaluator."""
-        self.logger = logging.getLogger(__name__)
-
-    def compute_metrics(
-        self,
-        y_true: np.ndarray,
-        y_pred: np.ndarray,
-        task_type: str = "regression",
-    ) -> Dict[str, float]:
-        """
-        Compute evaluation metrics.
-
-        Args:
-            y_true: True values
-            y_pred: Predicted values
-            task_type: Task type (regression/classification)
-
-        Returns:
-            Dictionary of metrics
-        """
-        try:
-            metrics = {}
-
-            if task_type == "regression":
-                metrics["mse"] = float(mean_squared_error(y_true, y_pred))
-                metrics["rmse"] = float(np.sqrt(metrics["mse"]))
-                metrics["mae"] = float(mean_absolute_error(y_true, y_pred))
-                metrics["r2"] = float(r2_score(y_true, y_pred))
-                metrics["pearson"] = float(
-                    np.corrcoef(y_true.flatten(), y_pred.flatten())[0, 1]
-                )
-                metrics["spearman"] = float(
-                    pd.Series(y_true.flatten()).corr(
-                        pd.Series(y_pred.flatten()), method="spearman"
-                    )
-                )
-            else:
-                y_pred_class = (y_pred > 0.5).astype(int)
-                metrics["accuracy"] = float(accuracy_score(y_true, y_pred_class))
-                metrics["precision"] = float(precision_score(y_true, y_pred_class))
-                metrics["recall"] = float(recall_score(y_true, y_pred_class))
-                metrics["f1"] = float(f1_score(y_true, y_pred_class))
-                try:
-                    metrics["auc"] = float(roc_auc_score(y_true, y_pred))
-                except (ValueError, TypeError) as e:
-                    self.logger.warning(f"Could not compute AUC: {str(e)}")
-                    metrics["auc"] = 0.0
-
-            return metrics
-
-        except Exception as e:
-            self.logger.error(f"Error computing metrics: {str(e)}")
-            return {}
-
-
-class UncertaintyEstimator:
-    """Model uncertainty estimation."""
-
-    def __init__(self):
-        """Initialize estimator."""
-        self.logger = logging.getLogger(__name__)
-
-    def estimate(
-        self,
-        model: nn.Module,
-        inputs: torch.Tensor,
-        num_samples: int = 10,
-        method: str = "dropout",
-    ) -> np.ndarray:
-        """
-        Estimate prediction uncertainty.
-
-        Args:
-            model: PyTorch model
-            inputs: Input tensor
-            num_samples: Number of Monte Carlo samples
-            method: Uncertainty method (dropout/ensemble/bootstrap)
-
-        Returns:
-            Uncertainty estimates
-        """
-        try:
-            if method == "dropout":
-                return self._dropout_uncertainty(model, inputs, num_samples)
-            elif method == "ensemble":
-                return self._ensemble_uncertainty(model, inputs, num_samples)
-            elif method == "bootstrap":
-                return self._bootstrap_uncertainty(model, inputs, num_samples)
-            else:
-                raise ValueError(f"Unknown uncertainty method: {method}")
-
-        except Exception as e:
-            self.logger.error(f"Error estimating uncertainty: {str(e)}")
-            return np.zeros(inputs.shape[0])
-
-    def _dropout_uncertainty(
-        self,
-        model: nn.Module,
-        inputs: torch.Tensor,
-        num_samples: int,
-    ) -> np.ndarray:
-        """Estimate uncertainty using MC dropout."""
-        model.train()  # Enable dropout
-        predictions = []
-
-        with torch.no_grad():
-            for _ in range(num_samples):
-                outputs = model(inputs)
-                predictions.append(outputs.cpu().numpy())
-
-        predictions = np.stack(predictions)
-        return np.std(predictions, axis=0)
-
-    def _ensemble_uncertainty(
-        self,
-        model: nn.Module,
-        inputs: torch.Tensor,
-        num_samples: int,
-    ) -> np.ndarray:
-        """Estimate uncertainty using deep ensembles."""
-        predictions = []
-
-        with torch.no_grad():
-            for _ in range(num_samples):
-                # Add random noise to model parameters
-                for param in model.parameters():
-                    noise = torch.randn_like(param) * 0.1
-                    param.data += noise
-
-                outputs = model(inputs)
-                predictions.append(outputs.cpu().numpy())
-
-                # Restore original parameters
-                for param in model.parameters():
-                    param.data -= noise
-
-        predictions = np.stack(predictions)
-        return np.std(predictions, axis=0)
-
-    def _bootstrap_uncertainty(
-        self,
-        model: nn.Module,
-        inputs: torch.Tensor,
-        num_samples: int,
-    ) -> np.ndarray:
-        """Estimate uncertainty using bootstrapping."""
-        predictions = []
-        batch_size = inputs.shape[0]
-
-        with torch.no_grad():
-            for _ in range(num_samples):
-                # Sample with replacement
-                indices = np.random.choice(batch_size, size=batch_size, replace=True)
-                batch = inputs[indices]
-                outputs = model(batch)
-                predictions.append(outputs.cpu().numpy())
-
-        predictions = np.stack(predictions)
-        return np.std(predictions, axis=0)

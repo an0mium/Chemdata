@@ -1,4 +1,4 @@
-"""Prediction utilities for nootropic effects."""
+"""Nootropic activity prediction module."""
 
 import logging
 from typing import Dict, List, Tuple
@@ -9,7 +9,9 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingRegressor
 
 from .....models.core import CompoundData
 from .....models.psychopharm import NootropicMechanism
-from ...base import PredictionResult
+from ..types import PredictionResult
+from .features import extract_nootropic_features
+from .....models.core import CompoundData
 
 
 def predict_mechanism(
@@ -19,10 +21,21 @@ def predict_mechanism(
     scalers: Dict[str, object],
     logger: logging.Logger,
 ) -> Tuple[str, float]:
-    """Predict mechanism of action."""
+    """Predict mechanism of action.
+
+    Args:
+        model: Trained mechanism prediction model
+        features: Dictionary of extracted features
+        feature_types: Types of features to use
+        scalers: Feature scalers for each prediction type
+        logger: Logger instance
+
+    Returns:
+        Tuple of (predicted mechanism, confidence score)
+    """
     # Combine and scale features
     X = np.hstack([features[ft] for ft in feature_types])
-    X_scaled = scalers["mechanism"].transform(X)
+    X_scaled = scalers["mechanism"].transform(X.reshape(1, -1))
 
     # Get class probabilities
     probs = model.predict_proba(X_scaled)[0]
@@ -41,10 +54,21 @@ def predict_effect(
     scalers: Dict[str, object],
     effect: str,
 ) -> Tuple[float, float]:
-    """Predict cognitive effect score."""
+    """Predict cognitive effect score.
+
+    Args:
+        model: Trained effect prediction model
+        features: Dictionary of extracted features
+        feature_types: Types of features to use
+        scalers: Feature scalers for each prediction type
+        effect: Name of effect to predict
+
+    Returns:
+        Tuple of (predicted score, confidence score)
+    """
     # Combine and scale features
     X = np.hstack([features[ft] for ft in feature_types])
-    X_scaled = scalers[f"effect_{effect}"].transform(X)
+    X_scaled = scalers[f"effect_{effect}"].transform(X.reshape(1, -1))
 
     # Get prediction and confidence
     score = model.predict(X_scaled)[0]
@@ -60,10 +84,21 @@ def predict_side_effect(
     scalers: Dict[str, object],
     effect: str,
 ) -> Tuple[float, float]:
-    """Predict side effect risk score."""
+    """Predict side effect risk score.
+
+    Args:
+        model: Trained side effect prediction model
+        features: Dictionary of extracted features
+        feature_types: Types of features to use
+        scalers: Feature scalers for each prediction type
+        effect: Name of side effect to predict
+
+    Returns:
+        Tuple of (predicted risk score, confidence score)
+    """
     # Combine and scale features
     X = np.hstack([features[ft] for ft in feature_types])
-    X_scaled = scalers[f"side_effect_{effect}"].transform(X)
+    X_scaled = scalers[f"side_effect_{effect}"].transform(X.reshape(1, -1))
 
     # Get prediction and confidence
     risk = model.predict(X_scaled)[0]
@@ -80,15 +115,36 @@ def predict_all_effects(
     scalers: Dict[str, object],
     logger: logging.Logger,
 ) -> Tuple[Dict, pd.DataFrame]:
-    """Predict all cognitive effects for a compound."""
+    """Predict all cognitive effects for a compound.
+
+    Args:
+        compound: Compound to predict effects for
+        models: Dictionary of trained models
+        cognitive_domains: Dictionary mapping domains to effects
+        feature_types: Types of features to use
+        scalers: Feature scalers for each prediction type
+        logger: Logger instance
+
+    Returns:
+        Tuple of:
+        - Dictionary mapping domains to effect predictions
+        - DataFrame containing prediction history records
+    """
     effect_predictions = {}
     history_records = []
 
-    # Extract features
-    features = {}
-    for feature_type in feature_types:
-        features[feature_type] = extract_features(compound, feature_type)
-        logger.debug(f"Extracted {feature_type} features: shape={features[feature_type].shape}")
+    # Extract features using enhanced feature extraction
+    try:
+        features = extract_nootropic_features(
+            compound=compound,
+            feature_types=feature_types,
+            models=models,
+        )
+        for ft, feat in features.items():
+            logger.debug(f"Extracted {ft} features: shape={feat.shape}")
+    except Exception as e:
+        logger.error(f"Error extracting features: {str(e)}")
+        return {}, pd.DataFrame()
 
     # Predict mechanism
     mechanism, mechanism_confidence = predict_mechanism(
@@ -153,14 +209,36 @@ def predict_all_side_effects(
     mechanism_confidence: float,
     logger: logging.Logger,
 ) -> Tuple[Dict, pd.DataFrame]:
-    """Predict all side effects for a compound."""
+    """Predict all side effects for a compound.
+
+    Args:
+        compound: Compound to predict side effects for
+        models: Dictionary of trained models
+        side_effects: Dictionary mapping categories to side effects
+        feature_types: Types of features to use
+        scalers: Feature scalers for each prediction type
+        mechanism: Predicted mechanism of action
+        mechanism_confidence: Confidence in mechanism prediction
+        logger: Logger instance
+
+    Returns:
+        Tuple of:
+        - Dictionary mapping categories to side effect predictions
+        - DataFrame containing prediction history records
+    """
     side_effect_predictions = {}
     history_records = []
 
-    # Extract features
-    features = {}
-    for feature_type in feature_types:
-        features[feature_type] = extract_features(compound, feature_type)
+    # Extract features using enhanced feature extraction
+    try:
+        features = extract_nootropic_features(
+            compound=compound,
+            feature_types=feature_types,
+            models=models,
+        )
+    except Exception as e:
+        logger.error(f"Error extracting features: {str(e)}")
+        return {}, pd.DataFrame()
 
     # Predict side effects
     for category, effects in side_effects.items():
@@ -221,15 +299,13 @@ def predict_bbb(compound: CompoundData, logger: logging.Logger) -> PredictionRes
     from ...bbb import BBBPredictorEnhanced
 
     # Initialize BBB predictor with web enrichment
-    bbb_predictor = BBBPredictorEnhanced(model_dir="models/bbb", cache_dir="cache/bbb", logger=logger)
+    bbb_predictor = BBBPredictorEnhanced(
+        model_dir="models/bbb",
+        cache_dir="cache/bbb",
+        logger=logger,
+    )
 
     # Get BBB prediction with supporting data
     result = bbb_predictor.predict(compound)
 
     return result
-
-
-def extract_features(compound: CompoundData, feature_type: str) -> np.ndarray:
-    """Extract features from compound."""
-    # This is a placeholder - actual implementation would be in the base class
-    pass

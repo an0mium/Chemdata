@@ -28,12 +28,13 @@ of chemical compounds, including:
    - Safety concerns
 """
 
-from .base import ToxicityPredictorBase
+from .base import ToxicityPredictorBase as ToxicityPredictor
 from .features import (
     extract_fingerprints,
     extract_descriptors,
-    extract_enhanced_features,
+    extract_features,
     extract_all_features,
+    extract_enhanced_features,
 )
 from .model_loading import (
     load_models,
@@ -42,28 +43,27 @@ from .model_loading import (
 )
 from .prediction import (
     predict_mechanism,
-    predict_effect,
-    predict_side_effect,
+    predict_organ_effects,
+    predict_safety_concerns,
     predict_all_effects,
-    predict_all_side_effects,
 )
 
 __all__ = [
     # Base predictor
-    "ToxicityPredictorBase",
+    "ToxicityPredictor",
     # Feature extraction
     "extract_fingerprints",
     "extract_descriptors",
-    "extract_enhanced_features",
+    "extract_features",
     "extract_all_features",
+    "extract_enhanced_features",
     # Model management
     "load_models",
     "initialize_models",
     "initialize_scalers",
     # Prediction functions
     "predict_mechanism",
-    "predict_effect",
-    "predict_side_effect",
+    "predict_organ_effects",
+    "predict_safety_concerns",
     "predict_all_effects",
-    "predict_all_side_effects",
 ]

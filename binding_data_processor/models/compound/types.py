@@ -24,12 +24,13 @@ Data Structures:
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Set, Union, Any, Tuple
+from typing import Dict, List, Optional, Set, Union, Any, Tuple, Protocol
 import numpy as np
 
 
 class CompoundType(Enum):
     """Types of chemical compounds."""
+
     NEUROTRANSMITTER = "neurotransmitter"
     PSYCHOACTIVE = "psychoactive"
     RESEARCH_CHEMICAL = "research_chemical"
@@ -41,6 +42,7 @@ class CompoundType(Enum):
 
 class LegalStatus(Enum):
     """Legal status classifications."""
+
     LEGAL = "legal"
     CONTROLLED = "controlled"
     ILLEGAL = "illegal"
@@ -52,6 +54,7 @@ class LegalStatus(Enum):
 
 class PsychoactiveClass(Enum):
     """Classification of psychoactive effects."""
+
     PSYCHEDELIC = "psychedelic"
     EMPATHOGEN = "empathogen"
     STIMULANT = "stimulant"
@@ -68,6 +71,7 @@ class PsychoactiveClass(Enum):
 
 class NootropicMechanism(Enum):
     """Mechanisms of nootropic activity."""
+
     CHOLINERGIC = "cholinergic"
     GLUTAMATERGIC = "glutamatergic"
     DOPAMINERGIC = "dopaminergic"
@@ -84,6 +88,7 @@ class NootropicMechanism(Enum):
 
 class BBBPermeability(Enum):
     """Blood-brain barrier permeability classification."""
+
     HIGH = "high"
     MODERATE = "moderate"
     LOW = "low"
@@ -93,6 +98,7 @@ class BBBPermeability(Enum):
 
 class BindingType(Enum):
     """Types of binding interactions."""
+
     AGONIST = "agonist"
     ANTAGONIST = "antagonist"
     PARTIAL_AGONIST = "partial_agonist"
@@ -101,8 +107,76 @@ class BindingType(Enum):
     UNKNOWN = "unknown"
 
 
+class MechanismType(Enum):
+    """Types of binding mechanisms."""
+
+    AGONIST = "agonist"
+    ANTAGONIST = "antagonist"
+    PARTIAL_AGONIST = "partial_agonist"
+    INVERSE_AGONIST = "inverse_agonist"
+    ALLOSTERIC = "allosteric"
+    UNKNOWN = "unknown"
+
+
+class SelectivityType(Enum):
+    """Types of target selectivity."""
+
+    HIGH = "high"
+    MODERATE = "moderate"
+    LOW = "low"
+    UNKNOWN = "unknown"
+
+
+class AbusePotential(Enum):
+    """Classification of abuse potential."""
+
+    NONE = "none"
+    LOW = "low"
+    MODERATE = "moderate"
+    HIGH = "high"
+    SEVERE = "severe"
+    UNKNOWN = "unknown"
+
+
+class TolerancePattern(Enum):
+    """Classification of tolerance development patterns."""
+
+    NONE = "none"
+    ACUTE = "acute"
+    CHRONIC = "chronic"
+    BEHAVIORAL = "behavioral"
+    MIXED = "mixed"
+    UNKNOWN = "unknown"
+
+
+class WithdrawalSeverity(Enum):
+    """Classification of withdrawal severity."""
+
+    NONE = "none"
+    MILD = "mild"
+    MODERATE = "moderate"
+    SEVERE = "severe"
+    LIFE_THREATENING = "life_threatening"
+    UNKNOWN = "unknown"
+
+
+class ToxicityClass(Enum):
+    """Classification of toxicity mechanisms."""
+
+    OXIDATIVE_STRESS = "oxidative_stress"
+    MITOCHONDRIAL_TOXICITY = "mitochondrial_toxicity"
+    DNA_DAMAGE = "dna_damage"
+    PROTEIN_ADDUCTS = "protein_adducts"
+    LIPID_PEROXIDATION = "lipid_peroxidation"
+    MEMBRANE_DISRUPTION = "membrane_disruption"
+    ENZYME_INHIBITION = "enzyme_inhibition"
+    RECEPTOR_OVERSTIMULATION = "receptor_overstimulation"
+    UNKNOWN = "unknown"
+
+
 class ActivityType(Enum):
     """Types of pharmacological activity."""
+
     STIMULANT = "stimulant"
     DEPRESSANT = "depressant"
     PSYCHEDELIC = "psychedelic"
@@ -113,6 +187,7 @@ class ActivityType(Enum):
 
 class RiskLevel(Enum):
     """Risk level classifications."""
+
     NONE = "none"
     LOW = "low"
     MODERATE = "moderate"
@@ -121,9 +196,82 @@ class RiskLevel(Enum):
     UNKNOWN = "unknown"
 
 
+class PropertyType(Enum):
+    """Types of compound properties."""
+
+    PHYSICOCHEMICAL = "physicochemical"
+    STRUCTURAL = "structural"
+    ELECTRONIC = "electronic"
+    TOPOLOGICAL = "topological"
+    GEOMETRIC = "geometric"
+    QUANTUM = "quantum"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def get_type(cls, property_name: str) -> "PropertyType":
+        """Get property type from property name."""
+        mapping = {
+            "molecular_weight": cls.PHYSICOCHEMICAL,
+            "logp": cls.PHYSICOCHEMICAL,
+            "hbd": cls.PHYSICOCHEMICAL,
+            "hba": cls.PHYSICOCHEMICAL,
+            "tpsa": cls.PHYSICOCHEMICAL,
+            "rotatable_bonds": cls.STRUCTURAL,
+            "charge": cls.ELECTRONIC,
+            "stereocenter_count": cls.STRUCTURAL,
+            "ring_count": cls.STRUCTURAL,
+            "atom_count": cls.STRUCTURAL,
+        }
+        return mapping.get(property_name, cls.UNKNOWN)
+
+
+class DrugLikenessType(Enum):
+    """Types of drug-likeness rules."""
+
+    LIPINSKI = "lipinski"
+    VEBER = "veber"
+    GHOSE = "ghose"
+    MUEGGE = "muegge"
+    EGAN = "egan"
+    QED = "qed"
+    CUSTOM = "custom"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def get_type(cls, rule_name: str) -> "DrugLikenessType":
+        """Get drug-likeness type from rule name."""
+        mapping = {
+            "ro5": cls.LIPINSKI,
+            "lipinski": cls.LIPINSKI,
+            "veber": cls.VEBER,
+            "ghose": cls.GHOSE,
+            "muegge": cls.MUEGGE,
+            "egan": cls.EGAN,
+            "qed": cls.QED,
+        }
+        return mapping.get(rule_name.lower(), cls.UNKNOWN)
+
+
+class ADMEType(Enum):
+    """Types of ADME properties."""
+
+    ABSORPTION = "absorption"
+    DISTRIBUTION = "distribution"
+    METABOLISM = "metabolism"
+    EXCRETION = "excretion"
+    BIOAVAILABILITY = "bioavailability"
+    PERMEABILITY = "permeability"
+    CLEARANCE = "clearance"
+    HALF_LIFE = "half_life"
+    PLASMA_BINDING = "plasma_binding"
+    VOLUME_DISTRIBUTION = "volume_distribution"
+    UNKNOWN = "unknown"
+
+
 @dataclass
 class TargetData:
     """Structured data for a single target interaction."""
+
     common_name: str = "N/A"
     protein_name: str = "N/A"
     gene_name: str = "N/A"
@@ -138,6 +286,15 @@ class TargetData:
     reference_dois: Set[str] = field(default_factory=set)
     assay_details: Dict = field(default_factory=dict)
     experimental_conditions: Dict = field(default_factory=dict)
+
+
+class CompoundData(Protocol):
+    """Protocol defining the interface for compound data."""
+
+    smiles: str
+    name: str
+    primary_activity: Optional[float]
+    reference_compounds: List["CompoundData"]
 
 
 # Value Types

@@ -40,7 +40,7 @@ check_python() {
     fi
     
     version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
-    required="3.8"
+    required="3.12"
     
     if (( $(echo "$version < $required" | bc -l) )); then
         echo -e "${RED}Python $required or higher required (found $version)${NC}"
@@ -133,17 +133,167 @@ install_system_deps() {
     fi
     
     # Install PyTorch
+    echo -e "${BLUE}Installing PyTorch...${NC}"
+    
+    # Function to get PyTorch wheel URL based on Python version and platform
+    get_pytorch_wheel_url() {
+        local py_version=$1
+        local platform=$2
+        local cuda_version=$3
+        local is_cpu=$4
+        
+        # Get latest nightly build date
+        local date=$(date +%Y%m%d)
+        
+        # Convert Python version to format used in wheel names (e.g., 3.12 -> cp312)
+        local py_tag="cp${py_version/./}"
+        
+        if [[ "$platform" == "darwin"* ]]; then
+            echo "https://download.pytorch.org/whl/nightly/cpu/torch-2.3.0.dev${date}-${py_tag}-none-macosx_11_0_arm64.whl"
+        else
+            if [[ "$is_cpu" == "true" ]]; then
+                echo "https://download.pytorch.org/whl/nightly/cpu/torch-2.3.0.dev${date}-${py_tag}-none-linux_x86_64.whl"
+            else
+                echo "https://download.pytorch.org/whl/nightly/cu${cuda_version//.}/torch-2.3.0.dev${date}-${py_tag}-none-linux_x86_64.whl"
+            fi
+        fi
+    }
+    
+    # Try installing PyTorch
+    py_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+    
     if [[ "$CPU_ONLY" == "true" ]]; then
         echo -e "${BLUE}Installing PyTorch (CPU only)...${NC}"
-        uv pip install torch torchvision torchaudio
+        
+        # First try installing from PyPI
+        if ! uv pip install torch torchvision torchaudio; then
+            echo -e "${YELLOW}Standard wheels not available, trying nightly build...${NC}"
+            
+            # Try downloading and installing nightly wheel
+            wheel_url=$(get_pytorch_wheel_url "$py_version" "$OSTYPE" "" "true")
+            if curl --output /dev/null --silent --head --fail "$wheel_url"; then
+                echo -e "${BLUE}Downloading PyTorch wheel from $wheel_url${NC}"
+                curl -L -o torch.whl "$wheel_url"
+                if ! uv pip install torch.whl; then
+                    echo -e "${RED}Failed to install PyTorch wheel${NC}"
+                    rm torch.whl
+                    
+                    echo -e "${YELLOW}Building from source...${NC}"
+                    # Install build dependencies
+                    uv pip install cmake ninja
+                    
+                    # Clone and build PyTorch
+                    git clone --recursive https://github.com/pytorch/pytorch
+                    cd pytorch
+                    export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
+                    export BUILD_TEST=0
+                    python setup.py install
+                    cd ..
+                    rm -rf pytorch
+                else
+                    rm torch.whl
+                fi
+            else
+                echo -e "${YELLOW}Nightly wheel not available, building from source...${NC}"
+                # Same build process as above
+                uv pip install cmake ninja
+                git clone --recursive https://github.com/pytorch/pytorch
+                cd pytorch
+                export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
+                export BUILD_TEST=0
+                python setup.py install
+                cd ..
+                rm -rf pytorch
+            fi
+        fi
+        
+        # Install torchvision and torchaudio
+        echo -e "${BLUE}Installing torchvision and torchaudio...${NC}"
+        uv pip install --pre torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
+        
     else
         echo -e "${BLUE}Installing PyTorch with CUDA $CUDA_VERSION...${NC}"
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS (no CUDA support)
-            uv pip install torch torchvision torchaudio
+            if ! uv pip install torch torchvision torchaudio; then
+                wheel_url=$(get_pytorch_wheel_url "$py_version" "$OSTYPE" "" "true")
+                if curl --output /dev/null --silent --head --fail "$wheel_url"; then
+                    echo -e "${BLUE}Downloading PyTorch wheel from $wheel_url${NC}"
+                    curl -L -o torch.whl "$wheel_url"
+                    if ! uv pip install torch.whl; then
+                        echo -e "${RED}Failed to install PyTorch wheel${NC}"
+                        rm torch.whl
+                        
+                        echo -e "${YELLOW}Building from source...${NC}"
+                        uv pip install cmake ninja
+                        git clone --recursive https://github.com/pytorch/pytorch
+                        cd pytorch
+                        export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
+                        export BUILD_TEST=0
+                        python setup.py install
+                        cd ..
+                        rm -rf pytorch
+                    else
+                        rm torch.whl
+                    fi
+                else
+                    echo -e "${YELLOW}Nightly wheel not available, building from source...${NC}"
+                    uv pip install cmake ninja
+                    git clone --recursive https://github.com/pytorch/pytorch
+                    cd pytorch
+                    export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
+                    export BUILD_TEST=0
+                    python setup.py install
+                    cd ..
+                    rm -rf pytorch
+                fi
+            fi
+            
+            # Install torchvision and torchaudio
+            uv pip install --pre torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
+            
         else
-            # Linux
-            uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu${CUDA_VERSION//.}
+            # Linux with CUDA
+            if ! uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu${CUDA_VERSION//.}; then
+                wheel_url=$(get_pytorch_wheel_url "$py_version" "$OSTYPE" "$CUDA_VERSION" "false")
+                if curl --output /dev/null --silent --head --fail "$wheel_url"; then
+                    echo -e "${BLUE}Downloading PyTorch wheel from $wheel_url${NC}"
+                    curl -L -o torch.whl "$wheel_url"
+                    if ! uv pip install torch.whl; then
+                        echo -e "${RED}Failed to install PyTorch wheel${NC}"
+                        rm torch.whl
+                        
+                        echo -e "${YELLOW}Building from source with CUDA support...${NC}"
+                        uv pip install cmake ninja
+                        git clone --recursive https://github.com/pytorch/pytorch
+                        cd pytorch
+                        export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
+                        export BUILD_TEST=0
+                        export TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0 7.5 8.0 8.6"
+                        export USE_CUDA=1
+                        python setup.py install
+                        cd ..
+                        rm -rf pytorch
+                    else
+                        rm torch.whl
+                    fi
+                else
+                    echo -e "${YELLOW}Nightly wheel not available, building from source with CUDA support...${NC}"
+                    uv pip install cmake ninja
+                    git clone --recursive https://github.com/pytorch/pytorch
+                    cd pytorch
+                    export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
+                    export BUILD_TEST=0
+                    export TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0 7.5 8.0 8.6"
+                    export USE_CUDA=1
+                    python setup.py install
+                    cd ..
+                    rm -rf pytorch
+                fi
+            fi
+            
+            # Install torchvision and torchaudio
+            uv pip install --pre torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu${CUDA_VERSION//.}
         fi
     fi
     

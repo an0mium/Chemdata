@@ -1,7 +1,7 @@
 """Enhanced molecular fingerprint generation with ML integration."""
 
 import logging
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Union
 
 import numpy as np
 from rdkit import Chem, DataStructs
@@ -17,7 +17,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score
 
 from .base import MLProcessor
-from ..descriptors import MolecularDescriptors
+from ..descriptors import DescriptorCalculator as MolecularDescriptors
 
 
 class FingerprintGenerator(MLProcessor):
@@ -70,10 +70,9 @@ class FingerprintGenerator(MLProcessor):
         },
         "pattern": {
             "description": "Substructure pattern fingerprints",
-            "generator": rdMolDescriptors.PatternFingerprint,
+            "generator": rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect,
             "params": {
-                "fpSize": 2048,
-                "tautomerFingerprints": True,
+                "nBits": 2048,
             },
             "ml_importance": 0.5,
         },
@@ -91,19 +90,18 @@ class FingerprintGenerator(MLProcessor):
         },
         "topological_torsion": {
             "description": "Topological torsion fingerprints",
-            "generator": rdMolDescriptors.GetTopologicalTorsionFingerprintAsIntVect,
+            "generator": rdMolDescriptors.GetHashedTopologicalTorsionFingerprintAsBitVect,
             "params": {
-                "targetSize": 4,
+                "nBits": 2048,
                 "includeChirality": True,
             },
             "ml_importance": 0.6,
         },
         "atom_pair": {
             "description": "Atom pair fingerprints",
-            "generator": rdMolDescriptors.GetAtomPairFingerprintAsIntVect,
+            "generator": rdMolDescriptors.GetHashedAtomPairFingerprintAsBitVect,
             "params": {
-                "minLength": 1,
-                "maxLength": 30,
+                "nBits": 2048,
                 "includeChirality": True,
             },
             "ml_importance": 0.55,
@@ -208,19 +206,15 @@ class FingerprintGenerator(MLProcessor):
                                 arr = np.array(list(fp))
                             fp_list.append(arr)
                         except Exception as e:
-                            self.logger.debug(
-                                f"Error generating {fp_type} fingerprint: {str(e)}"
-                            )
-                            size = (
-                                params.get("nBits", 2048) if fp_type != "maccs" else 166
-                            )
+                            self.logger.debug(f"Error generating {fp_type} fingerprint: {str(e)}")
+                            size = params.get("nBits", 2048) if fp_type != "maccs" else 166
                             fp_list.append(np.zeros(size, dtype=np.int8))
                     fingerprints[fp_type] = np.vstack(fp_list)
 
             # Add molecular descriptors if requested
             if include_descriptors and self.descriptor_generator:
                 try:
-                    descriptors = self.descriptor_generator.calculate(mols)
+                    descriptors = self.descriptor_generator.calculate_descriptors(mols)
                     if descriptors is not None:
                         fingerprints["descriptors"] = descriptors
                 except Exception as e:
@@ -279,9 +273,7 @@ class FingerprintGenerator(MLProcessor):
             start = 0
             for fp_type, fp_array in fps.items():
                 size = fp_array.shape[1]
-                self.feature_importance[fp_type] = np.mean(
-                    importance[start : start + size]
-                )
+                self.feature_importance[fp_type] = np.mean(importance[start : start + size])
                 start += size
 
             return score

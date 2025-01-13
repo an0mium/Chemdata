@@ -3,7 +3,7 @@
 This module provides:
 1. PredictionsMixin - Methods for handling various ML predictions:
    - Toxicity predictions
-   - Abuse potential assessment 
+   - Abuse potential assessment
    - Binding affinity predictions
    - Activity predictions
    - Mechanism predictions
@@ -15,23 +15,27 @@ This module provides:
 
 3. Data Classes:
    - PredictionResult - Container for prediction results
+   - MLCompoundData - Compound data with ML prediction capabilities
 """
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
+from rdkit import Chem
+from rdkit.Chem import AllChem, Descriptors
 
 
 @dataclass
 class PredictionResult:
     """Result of a model prediction.
-    
+
     Attributes:
         value: The predicted value
         confidence: Confidence score between 0 and 1
         supporting_data: Additional data supporting the prediction
     """
+
     value: Any
     confidence: float
     supporting_data: Dict = field(default_factory=dict)
@@ -39,7 +43,7 @@ class PredictionResult:
 
 class PredictorBase:
     """Base class for ML predictors.
-    
+
     Attributes:
         model: The underlying ML model
         feature_extractor: Component for extracting features
@@ -56,77 +60,68 @@ class PredictorBase:
 
     def predict(self, compound) -> PredictionResult:
         """Make prediction for compound.
-        
+
         Args:
             compound: CompoundData instance
-            
+
         Returns:
             PredictionResult with prediction value and confidence
         """
         # Get cached features if available
         features = compound.get_cached_features(self.feature_type)
-        
+
         if features is None:
             # Extract features
             features = self.extract_features(compound)
             # Cache for reuse
             compound.cache_features(self.feature_type, features)
-            
+
         # Scale features
         if self.scaler:
             features = self.scaler.transform(features.reshape(1, -1))
-            
+
         # Make prediction
         prediction = self.model.predict(features)[0]
         confidence = self.get_confidence(features)
-        
+
         # Get supporting data
         supporting_data = self.get_supporting_data(compound, features, prediction)
-        
-        return PredictionResult(
-            value=prediction,
-            confidence=confidence,
-            supporting_data=supporting_data
-        )
+
+        return PredictionResult(value=prediction, confidence=confidence, supporting_data=supporting_data)
 
     def extract_features(self, compound) -> np.ndarray:
         """Extract features from compound.
-        
+
         Args:
             compound: CompoundData instance
-            
+
         Returns:
             Feature array
         """
         if self.feature_extractor:
             return self.feature_extractor.extract(compound)
         raise NotImplementedError
-        
+
     def get_confidence(self, features: np.ndarray) -> float:
         """Get confidence score for prediction.
-        
+
         Args:
             features: Feature array
-            
+
         Returns:
             Confidence score between 0 and 1
         """
         # Default implementation returns 0.5
         return 0.5
-        
-    def get_supporting_data(
-        self,
-        compound,
-        features: np.ndarray,
-        prediction: Any
-    ) -> Dict:
+
+    def get_supporting_data(self, compound, features: np.ndarray, prediction: Any) -> Dict:
         """Get supporting data for prediction.
-        
+
         Args:
             compound: CompoundData instance
             features: Feature array
             prediction: Model prediction
-            
+
         Returns:
             Dictionary of supporting data
         """
@@ -135,16 +130,16 @@ class PredictorBase:
 
 class FeatureExtractorBase:
     """Base class for feature extractors.
-    
+
     Provides interface for extracting ML features from compounds.
     """
 
     def extract(self, compound) -> np.ndarray:
         """Extract features from compound.
-        
+
         Args:
             compound: CompoundData instance
-            
+
         Returns:
             Feature array
         """
@@ -153,21 +148,17 @@ class FeatureExtractorBase:
 
 class EnsemblePredictor(PredictorBase):
     """Ensemble of multiple predictors.
-    
+
     Combines predictions from multiple models using configurable methods.
-    
+
     Attributes:
         predictors: List of predictors in ensemble
         weights: Optional weights for each predictor
     """
 
-    def __init__(
-        self,
-        predictors: List[PredictorBase],
-        weights: Optional[List[float]] = None
-    ):
+    def __init__(self, predictors: List[PredictorBase], weights: Optional[List[float]] = None):
         """Initialize ensemble.
-        
+
         Args:
             predictors: List of predictors to ensemble
             weights: Optional weights for each predictor
@@ -180,46 +171,33 @@ class EnsemblePredictor(PredictorBase):
 
     def predict(self, compound) -> PredictionResult:
         """Make ensemble prediction.
-        
+
         Args:
             compound: CompoundData instance
-            
+
         Returns:
             Ensemble prediction result
         """
         # Get individual predictions
-        results = [
-            predictor.predict(compound)
-            for predictor in self.predictors
-        ]
-        
+        results = [predictor.predict(compound) for predictor in self.predictors]
+
         # Combine predictions
         ensemble_value = self._combine_predictions(results)
         ensemble_confidence = self._combine_confidences(results)
-        
+
         # Combine supporting data
-        supporting_data = {
-            f"predictor_{i}": result.supporting_data
-            for i, result in enumerate(results)
-        }
+        supporting_data = {f"predictor_{i}": result.supporting_data for i, result in enumerate(results)}
         supporting_data["ensemble_method"] = self._get_ensemble_method()
         supporting_data["weights"] = self.weights
-        
-        return PredictionResult(
-            value=ensemble_value,
-            confidence=ensemble_confidence,
-            supporting_data=supporting_data
-        )
 
-    def _combine_predictions(
-        self,
-        results: List[PredictionResult]
-    ) -> Any:
+        return PredictionResult(value=ensemble_value, confidence=ensemble_confidence, supporting_data=supporting_data)
+
+    def _combine_predictions(self, results: List[PredictionResult]) -> Any:
         """Combine individual predictions.
-        
+
         Args:
             results: List of prediction results
-            
+
         Returns:
             Combined prediction value
         """
@@ -228,15 +206,12 @@ class EnsemblePredictor(PredictorBase):
             return np.average(values, weights=self.weights)
         return np.mean(values)
 
-    def _combine_confidences(
-        self,
-        results: List[PredictionResult]
-    ) -> float:
+    def _combine_confidences(self, results: List[PredictionResult]) -> float:
         """Combine individual confidence scores.
-        
+
         Args:
             results: List of prediction results
-            
+
         Returns:
             Combined confidence score
         """
@@ -247,16 +222,90 @@ class EnsemblePredictor(PredictorBase):
 
     def _get_ensemble_method(self) -> str:
         """Get description of ensemble method.
-        
+
         Returns:
             String describing ensemble method
         """
         return "weighted_average" if self.weights else "mean"
 
 
+class MLCompound:
+    """Compound class with ML prediction capabilities.
+
+    Provides functionality for:
+    - Calculating molecular descriptors
+    - Generating fingerprints
+    - Making and storing predictions
+    """
+
+    def __init__(self, smiles: str):
+        """Initialize compound from SMILES.
+
+        Args:
+            smiles: SMILES string representation
+
+        Raises:
+            ValueError: If SMILES string is invalid
+        """
+        self.smiles = smiles
+        self.mol = Chem.MolFromSmiles(smiles)
+        if self.mol is None:
+            raise ValueError(f"Invalid SMILES: {smiles}")
+
+        # Calculate basic molecular descriptors
+        self.descriptors = {
+            "MW": Descriptors.ExactMolWt(self.mol),
+            "LogP": Descriptors.MolLogP(self.mol),
+            "TPSA": Descriptors.TPSA(self.mol),
+            "HBA": Descriptors.NumHAcceptors(self.mol),
+            "HBD": Descriptors.NumHDonors(self.mol),
+            "RotBonds": Descriptors.NumRotatableBonds(self.mol),
+        }
+
+        # Initialize predictions dictionary
+        self.predictions = {}
+
+    def calculate_fingerprints(self, radius: int = 2, nBits: int = 2048) -> np.ndarray:
+        """Calculate Morgan fingerprints.
+
+        Args:
+            radius: Fingerprint radius
+            nBits: Number of bits in fingerprint
+
+        Returns:
+            Binary fingerprint array
+        """
+        fp = AllChem.GetMorganFingerprintAsBitVect(self.mol, radius, nBits=nBits)
+        return np.array(fp)
+
+    def predict(self, predictor: PredictorBase) -> PredictionResult:
+        """Make a prediction using the provided predictor.
+
+        Args:
+            predictor: ML predictor instance
+
+        Returns:
+            Prediction result
+        """
+        result = predictor.predict(self)
+        self.predictions[predictor.__class__.__name__] = result
+        return result
+
+    def get_prediction(self, predictor_name: str) -> Optional[PredictionResult]:
+        """Get a stored prediction result.
+
+        Args:
+            predictor_name: Name of predictor class
+
+        Returns:
+            Stored prediction result if available
+        """
+        return self.predictions.get(predictor_name)
+
+
 class PredictionsMixin:
     """Mixin class providing ML prediction methods.
-    
+
     Provides functionality for:
     - Storing predictions
     - Formatting predictions for output
@@ -273,15 +322,17 @@ class PredictionsMixin:
     # Prediction caching
     _prediction_cache: Dict[str, PredictionResult] = field(default_factory=dict)
     _feature_cache: Dict[str, np.ndarray] = field(default_factory=dict)
-    _prediction_history: pd.DataFrame = field(default_factory=lambda: pd.DataFrame(
-        columns=[
-            'predictor_type',
-            'prediction_value',
-            'confidence',
-            'timestamp',
-            'supporting_data',
-        ]
-    ))
+    _prediction_history: pd.DataFrame = field(
+        default_factory=lambda: pd.DataFrame(
+            columns=[
+                "predictor_type",
+                "prediction_value",
+                "confidence",
+                "timestamp",
+                "supporting_data",
+            ]
+        )
+    )
 
     def get_predictions_dict(self) -> Dict:
         """Get dictionary of all ML predictions."""
@@ -393,24 +444,15 @@ class PredictionsMixin:
 
     def _merge_binding_predictions(self, other: "PredictionsMixin") -> None:
         """Merge binding predictions."""
-        self.binding_predictions.extend(
-            pred for pred in other.binding_predictions
-            if pred not in self.binding_predictions
-        )
+        self.binding_predictions.extend(pred for pred in other.binding_predictions if pred not in self.binding_predictions)
 
     def _merge_activity_predictions(self, other: "PredictionsMixin") -> None:
         """Merge activity predictions."""
-        self.activity_predictions.extend(
-            pred for pred in other.activity_predictions
-            if pred not in self.activity_predictions
-        )
+        self.activity_predictions.extend(pred for pred in other.activity_predictions if pred not in self.activity_predictions)
 
     def _merge_mechanism_predictions(self, other: "PredictionsMixin") -> None:
         """Merge mechanism predictions."""
-        self.mechanism_predictions.extend(
-            pred for pred in other.mechanism_predictions
-            if pred not in self.mechanism_predictions
-        )
+        self.mechanism_predictions.extend(pred for pred in other.mechanism_predictions if pred not in self.mechanism_predictions)
 
     def get_cached_prediction(
         self,
@@ -429,9 +471,7 @@ class PredictionsMixin:
     ) -> pd.DataFrame:
         """Get prediction history, optionally filtered by type."""
         if predictor_type:
-            return self._prediction_history[
-                self._prediction_history['predictor_type'] == predictor_type
-            ]
+            return self._prediction_history[self._prediction_history["predictor_type"] == predictor_type]
         return self._prediction_history
 
     def get_cached_features(
@@ -454,6 +494,25 @@ class PredictionsMixin:
         self._feature_cache.clear()
 
 
+@dataclass
+class MLCompoundData(MLCompound, PredictionsMixin):
+    """Compound data with ML prediction capabilities.
+
+    Combines MLCompound's molecular descriptor calculation and fingerprint generation
+    with PredictionsMixin's prediction storage and formatting capabilities.
+    """
+
+    def __init__(self, smiles: str):
+        """Initialize compound with ML capabilities.
+
+        Args:
+            smiles: SMILES string representation
+        """
+        MLCompound.__init__(self, smiles)
+        # PredictionsMixin fields are initialized by dataclass
+
+
 class ValidationError(Exception):
     """Raised when validation fails."""
+
     pass

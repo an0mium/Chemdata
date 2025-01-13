@@ -25,7 +25,7 @@ from transformers import pipeline
 
 from .base_client import BaseWebClient, ValidationError
 from ..models.compound import Compound
-from ..pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ..pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 
 if TYPE_CHECKING:
     from .http_client_enhanced import HTTPClientEnhanced
@@ -52,10 +52,10 @@ class CommunityClientEnhanced(BaseWebClient):
         model_dir: Optional[Path] = None,
         cache_dir: Optional[Path] = None,
         logger: Optional[logging.Logger] = None,
-        circuit_config: Optional[CircuitConfig] = None,
+        circuit_config: Optional[CircuitBreakerConfig] = None,
     ):
         """Initialize community client.
-        
+
         Args:
             http_client: Optional HTTP client to use
             model_dir: Optional directory for ML models
@@ -92,7 +92,7 @@ class CommunityClientEnhanced(BaseWebClient):
         use_cache: bool = True,
     ) -> None:
         """Process list of compounds.
-        
+
         Args:
             compounds: List of compounds to process
             skip_predictions: Whether to skip ML predictions
@@ -107,7 +107,7 @@ class CommunityClientEnhanced(BaseWebClient):
                 )
                 if data:
                     compound.community_data = data
-                    
+
                     # Add references
                     if "references" in data:
                         for ref in data["references"]:
@@ -133,12 +133,12 @@ class CommunityClientEnhanced(BaseWebClient):
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Get data for a single compound.
-        
+
         Args:
             name: Compound name
             cas_number: Optional CAS number
             use_cache: Whether to use cached results
-            
+
         Returns:
             Dictionary of compound data or None if not found
         """
@@ -188,11 +188,11 @@ class CommunityClientEnhanced(BaseWebClient):
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Get data from PsychonautWiki.
-        
+
         Args:
             name: Compound name
             use_cache: Whether to use cached results
-            
+
         Returns:
             Dictionary of PsychonautWiki data or None if not found
         """
@@ -310,11 +310,11 @@ class CommunityClientEnhanced(BaseWebClient):
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Get data from TripSit.
-        
+
         Args:
             name: Compound name
             use_cache: Whether to use cached results
-            
+
         Returns:
             Dictionary of TripSit data or None if not found
         """
@@ -343,11 +343,11 @@ class CommunityClientEnhanced(BaseWebClient):
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Get data from Erowid.
-        
+
         Args:
             name: Compound name
             use_cache: Whether to use cached results
-            
+
         Returns:
             Dictionary of Erowid data or None if not found
         """
@@ -380,9 +380,7 @@ class CommunityClientEnhanced(BaseWebClient):
 
                     # Classify report if model available
                     if self.text_classifier:
-                        classification = self.text_classifier(
-                            report["body_text"][:512]
-                        )[0]
+                        classification = self.text_classifier(report["body_text"][:512])[0]
                         report["classification"] = {
                             "label": classification["label"],
                             "score": classification["score"],
@@ -408,10 +406,10 @@ class CommunityClientEnhanced(BaseWebClient):
 
     def _get_cached_psychonaut_data(self, name: str) -> Optional[Dict[str, Any]]:
         """Get cached PsychonautWiki data.
-        
+
         Args:
             name: Compound name
-            
+
         Returns:
             Dictionary of cached data or None if not found
         """
@@ -432,10 +430,10 @@ class CommunityClientEnhanced(BaseWebClient):
 
     def _get_cached_tripsit_data(self, name: str) -> Optional[Dict[str, Any]]:
         """Get cached TripSit data.
-        
+
         Args:
             name: Compound name
-            
+
         Returns:
             Dictionary of cached data or None if not found
         """
@@ -456,10 +454,10 @@ class CommunityClientEnhanced(BaseWebClient):
 
     def _get_cached_erowid_data(self, name: str) -> Optional[Dict[str, Any]]:
         """Get cached Erowid data.
-        
+
         Args:
             name: Compound name
-            
+
         Returns:
             Dictionary of cached data or None if not found
         """
@@ -484,10 +482,7 @@ class CommunityClientEnhanced(BaseWebClient):
             "processed_compounds": len(self.processed_compounds),
             "failed_compounds": len(self.failed_compounds),
             "success_rate": (
-                len(self.processed_compounds) /
-                (len(self.processed_compounds) + len(self.failed_compounds))
-                if self.processed_compounds or self.failed_compounds
-                else 0
+                len(self.processed_compounds) / (len(self.processed_compounds) + len(self.failed_compounds)) if self.processed_compounds or self.failed_compounds else 0
             ),
             "source_stats": self.source_stats,
         }

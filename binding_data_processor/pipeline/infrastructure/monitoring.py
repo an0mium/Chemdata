@@ -1,22 +1,150 @@
-"""Pipeline monitoring.
+"""Pipeline monitoring and metrics collection.
 
-This module provides the MonitoringManager class that:
-1. Tracks pipeline progress
-2. Monitors performance
-3. Collects metrics
-4. Generates reports
-5. Handles alerts
-6. Manages log rotation
+This module provides:
+1. MonitoringManager for pipeline monitoring
+2. MetricsCollector for detailed metrics tracking
+3. Comprehensive logging and reporting
+4. Performance monitoring
+5. Alert management
+6. Resource tracking
 """
 
 import logging
 import threading
+import time
 from pathlib import Path
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any, List, Union
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import json
 import shutil
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MetricPoint:
+    """A single metric measurement."""
+
+    name: str
+    value: float
+    timestamp: datetime = field(default_factory=datetime.now)
+    tags: Dict[str, str] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class MetricSeries:
+    """A time series of metric measurements."""
+
+    name: str
+    points: List[MetricPoint] = field(default_factory=list)
+    tags: Dict[str, str] = field(default_factory=dict)
+
+
+class MetricsCollector:
+    """Collects and manages detailed metrics."""
+
+    def __init__(self):
+        """Initialize metrics collector."""
+        self.metrics: Dict[str, MetricSeries] = {}
+        self._start_times: Dict[str, float] = {}
+
+    def record_value(
+        self,
+        name: str,
+        value: float,
+        tags: Optional[Dict[str, str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Record a metric value.
+
+        Args:
+            name: Metric name
+            value: Metric value
+            tags: Optional metric tags
+            metadata: Optional metadata
+        """
+        if name not in self.metrics:
+            self.metrics[name] = MetricSeries(name=name)
+
+        point = MetricPoint(
+            name=name,
+            value=value,
+            tags=tags or {},
+            metadata=metadata or {},
+        )
+        self.metrics[name].points.append(point)
+
+    def start_timer(self, name: str) -> None:
+        """Start timing a metric.
+
+        Args:
+            name: Metric name
+        """
+        self._start_times[name] = time.time()
+
+    def stop_timer(
+        self,
+        name: str,
+        tags: Optional[Dict[str, str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> float:
+        """Stop timing a metric and record duration.
+
+        Args:
+            name: Metric name
+            tags: Optional metric tags
+            metadata: Optional metadata
+
+        Returns:
+            Duration in seconds
+
+        Raises:
+            KeyError: If timer was not started
+        """
+        if name not in self._start_times:
+            raise KeyError(f"Timer {name} was not started")
+
+        duration = time.time() - self._start_times[name]
+        self.record_value(
+            name=name,
+            value=duration,
+            tags=tags,
+            metadata=metadata,
+        )
+        del self._start_times[name]
+        return duration
+
+    def get_metric(self, name: str) -> Optional[MetricSeries]:
+        """Get metric series by name.
+
+        Args:
+            name: Metric name
+
+        Returns:
+            MetricSeries if found, None otherwise
+        """
+        return self.metrics.get(name)
+
+    def get_latest(self, name: str) -> Optional[MetricPoint]:
+        """Get latest value for metric.
+
+        Args:
+            name: Metric name
+
+        Returns:
+            Latest MetricPoint if found, None otherwise
+        """
+        series = self.get_metric(name)
+        if series and series.points:
+            return series.points[-1]
+        return None
+
+    def clear(self) -> None:
+        """Clear all metrics."""
+        self.metrics.clear()
+        self._start_times.clear()
 
 
 @dataclass
@@ -127,7 +255,7 @@ class MonitoringStats:
 
 
 class MonitoringManager:
-    """Manager for pipeline monitoring."""
+    """Manager for pipeline monitoring and metrics collection."""
 
     def __init__(
         self,
@@ -151,8 +279,9 @@ class MonitoringManager:
         self.logger = logger or logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(log_level)
 
-        # Initialize stats
+        # Initialize components
         self.stats = MonitoringStats()
+        self.metrics = MetricsCollector()
 
         # Initialize state
         self._lock = threading.Lock()
@@ -340,14 +469,23 @@ class MonitoringManager:
             else:
                 self.stats.completed_operations += operations
 
+            # Record metric
+            self.metrics.record_value(
+                name="pipeline_progress",
+                value=self.stats.completed_operations / max(self.stats.total_operations, 1),
+                tags={"failed": str(failed)},
+            )
+
     def record_latency(
         self,
         latency: float,
+        operation: Optional[str] = None,
     ) -> None:
         """Record operation latency.
 
         Args:
             latency: Operation latency in milliseconds
+            operation: Optional operation name
         """
         with self._lock:
             self.stats.operation_times.append(latency)
@@ -357,6 +495,13 @@ class MonitoringManager:
             )
             self.stats.avg_latency = sum(self.stats.operation_times) / len(self.stats.operation_times)
 
+            # Record metric
+            self.metrics.record_value(
+                name="operation_latency",
+                value=latency,
+                tags={"operation": operation} if operation else {},
+            )
+
             # Check alert threshold
             if self.config.enable_alerts and latency > self.config.alert_thresholds["latency"]:
                 self.logger.warning(f"High latency detected: {latency:.1f}ms")
@@ -365,16 +510,29 @@ class MonitoringManager:
         self,
         error_type: str,
         error: Exception,
+        component: Optional[str] = None,
     ) -> None:
         """Record error occurrence.
 
         Args:
             error_type: Type of error
             error: Exception instance
+            component: Optional component name
         """
         with self._lock:
             self.stats.total_errors += 1
             self.stats.error_types[error_type] = self.stats.error_types.get(error_type, 0) + 1
+
+            # Record metric
+            self.metrics.record_value(
+                name="error_count",
+                value=1,
+                tags={
+                    "error_type": error_type,
+                    "component": component or "unknown",
+                },
+                metadata={"error_message": str(error)},
+            )
 
             # Check alert threshold
             if self.config.enable_alerts:
@@ -396,6 +554,15 @@ class MonitoringManager:
         with self._lock:
             self.stats.component_stats[component] = stats
 
+            # Record metrics for each stat
+            for name, value in stats.items():
+                if isinstance(value, (int, float)):
+                    self.metrics.record_value(
+                        name=f"component_{name}",
+                        value=float(value),
+                        tags={"component": component},
+                    )
+
     def _monitor_pipeline(self) -> None:
         """Monitor pipeline progress."""
         last_progress = 0
@@ -413,10 +580,7 @@ class MonitoringManager:
                     last_progress = now
 
                 # Check performance interval
-                if (
-                    self.config.monitor_performance
-                    and (now - last_performance).seconds >= self.config.performance_interval
-                ):
+                if self.config.monitor_performance and (now - last_performance).seconds >= self.config.performance_interval:
                     self._log_performance()
                     last_performance = now
 
@@ -482,6 +646,7 @@ class MonitoringManager:
             metrics = {
                 "timestamp": datetime.now().isoformat(),
                 "stats": self.stats.to_dict(),
+                "metrics": {name: [p.__dict__ for p in series.points] for name, series in self.metrics.metrics.items()},
             }
 
             # Save metrics
@@ -504,6 +669,7 @@ class MonitoringManager:
                 "timestamp": datetime.now().isoformat(),
                 "duration": self.stats._get_duration(),
                 "stats": self.stats.to_dict(),
+                "metrics": {name: [p.__dict__ for p in series.points] for name, series in self.metrics.metrics.items()},
             }
 
             # Save report
@@ -563,10 +729,31 @@ class MonitoringManager:
         for error_type, count in report["stats"]["metrics"]["errors"]["types"].items():
             lines.append(f"- {error_type}: {count}")
 
-        # Add logging stats
+        # Add metrics summary
         lines.extend(
             [
                 "",
+                "## Metrics",
+                "",
+            ]
+        )
+
+        # Add metric summaries
+        for name, points in report["metrics"].items():
+            if points:
+                latest = points[-1]
+                lines.append(f"### {name}")
+                lines.append("")
+                lines.append(f"Latest value: {latest['value']:.2f}")
+                if latest["tags"]:
+                    lines.append("Tags:")
+                    for tag, value in latest["tags"].items():
+                        lines.append(f"- {tag}: {value}")
+                lines.append("")
+
+        # Add logging stats
+        lines.extend(
+            [
                 "## Logging",
                 "",
                 "- Total entries: " f"{report['stats']['logging']['entries']}",
@@ -587,3 +774,78 @@ class MonitoringManager:
     def _get_timestamp(self) -> str:
         """Get formatted timestamp string."""
         return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Metric collector interface
+    def record_metric(
+        self,
+        name: str,
+        value: Union[int, float],
+        tags: Optional[Dict[str, str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Record a metric value.
+
+        Args:
+            name: Metric name
+            value: Metric value
+            tags: Optional metric tags
+            metadata: Optional metadata
+        """
+        self.metrics.record_value(
+            name=name,
+            value=float(value),
+            tags=tags,
+            metadata=metadata,
+        )
+
+    def start_metric_timer(self, name: str) -> None:
+        """Start timing a metric.
+
+        Args:
+            name: Metric name
+        """
+        self.metrics.start_timer(name)
+
+    def stop_metric_timer(
+        self,
+        name: str,
+        tags: Optional[Dict[str, str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> float:
+        """Stop timing a metric.
+
+        Args:
+            name: Metric name
+            tags: Optional metric tags
+            metadata: Optional metadata
+
+        Returns:
+            Duration in seconds
+        """
+        return self.metrics.stop_timer(name, tags, metadata)
+
+    def get_metric_series(self, name: str) -> Optional[MetricSeries]:
+        """Get metric series by name.
+
+        Args:
+            name: Metric name
+
+        Returns:
+            MetricSeries if found, None otherwise
+        """
+        return self.metrics.get_metric(name)
+
+    def get_latest_metric(self, name: str) -> Optional[MetricPoint]:
+        """Get latest value for metric.
+
+        Args:
+            name: Metric name
+
+        Returns:
+            Latest MetricPoint if found, None otherwise
+        """
+        return self.metrics.get_latest(name)
+
+    def clear_metrics(self) -> None:
+        """Clear all metrics."""
+        self.metrics.clear()

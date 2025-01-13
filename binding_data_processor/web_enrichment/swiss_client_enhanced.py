@@ -25,7 +25,7 @@ from tqdm import tqdm
 
 from .base_client import BaseWebClient
 from ..models.compound import Compound
-from ..pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ..pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 
 if TYPE_CHECKING:
     from .http_client_enhanced import HTTPClientEnhanced
@@ -48,10 +48,10 @@ class SwissClientEnhanced(BaseWebClient):
         model_dir: Optional[Path] = None,
         cache_dir: Optional[Path] = None,
         logger: Optional[logging.Logger] = None,
-        circuit_config: Optional[CircuitConfig] = None,
+        circuit_config: Optional[CircuitBreakerConfig] = None,
     ):
         """Initialize Swiss tools client.
-        
+
         Args:
             http_client: Optional HTTP client to use
             model_dir: Optional directory for ML models
@@ -70,7 +70,7 @@ class SwissClientEnhanced(BaseWebClient):
         use_cache: bool = True,
     ) -> None:
         """Process list of compounds.
-        
+
         Args:
             compounds: List of compounds to process
             skip_predictions: Whether to skip predictions
@@ -110,12 +110,12 @@ class SwissClientEnhanced(BaseWebClient):
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Get Swiss tools data for a compound.
-        
+
         Args:
             name: Compound name
             smiles: SMILES string
             use_cache: Whether to use cached results
-            
+
         Returns:
             Dictionary of Swiss tools data or None if error
         """
@@ -153,12 +153,12 @@ class SwissClientEnhanced(BaseWebClient):
         fallback: Optional[callable] = None,
     ) -> Optional[List[Dict[str, Any]]]:
         """Get target predictions from SwissTargetPrediction.
-        
+
         Args:
             smiles: SMILES string
             use_cache: Whether to use cached results
             fallback: Optional fallback function if service fails
-            
+
         Returns:
             List of target predictions or None if error
         """
@@ -175,14 +175,14 @@ class SwissClientEnhanced(BaseWebClient):
             # Poll for results
             for _ in range(self.MAX_POLLS):
                 time.sleep(self.POLL_INTERVAL)
-                
+
                 response = self.http.get(
                     f"{self.STP_URL}/status/{job_id}",
                     use_cache=use_cache,
                     fallback=fallback,
                 )
                 status = response.json()["status"]
-                
+
                 if status == "completed":
                     results = response.json()["results"]
                     return [
@@ -197,18 +197,14 @@ class SwissClientEnhanced(BaseWebClient):
                         for result in results
                     ]
                 elif status == "failed":
-                    self.logger.error(
-                        f"SwissTargetPrediction failed for {smiles}"
-                    )
+                    self.logger.error(f"SwissTargetPrediction failed for {smiles}")
                     return None
 
             self.logger.error(f"SwissTargetPrediction timeout for {smiles}")
             return None
 
         except Exception as e:
-            self.logger.error(
-                f"Error getting target predictions: {str(e)}"
-            )
+            self.logger.error(f"Error getting target predictions: {str(e)}")
             return None
 
     def _get_adme_properties(
@@ -218,12 +214,12 @@ class SwissClientEnhanced(BaseWebClient):
         fallback: Optional[callable] = None,
     ) -> Optional[Dict[str, Any]]:
         """Get ADME properties from SwissADME.
-        
+
         Args:
             smiles: SMILES string
             use_cache: Whether to use cached results
             fallback: Optional fallback function if service fails
-            
+
         Returns:
             Dictionary of ADME properties or None if error
         """
@@ -240,14 +236,14 @@ class SwissClientEnhanced(BaseWebClient):
             # Poll for results
             for _ in range(self.MAX_POLLS):
                 time.sleep(self.POLL_INTERVAL)
-                
+
                 response = self.http.get(
                     f"{self.ADME_URL}/status/{job_id}",
                     use_cache=use_cache,
                     fallback=fallback,
                 )
                 status = response.json()["status"]
-                
+
                 if status == "completed":
                     results = response.json()["results"]
                     return {
@@ -258,14 +254,12 @@ class SwissClientEnhanced(BaseWebClient):
                         "hba": int(results["HBA"]),
                         "tpsa": float(results["TPSA"]),
                         "rotatable_bonds": int(results["RotBonds"]),
-                        
                         # Drug-likeness
                         "lipinski": results["Lipinski"],
                         "ghose": results["Ghose"],
                         "veber": results["Veber"],
                         "egan": results["Egan"],
                         "muegge": results["Muegge"],
-                        
                         # ADME predictions
                         "gi_absorption": results["GI_absorption"],
                         "bbb_permeant": results["BBB_permeant"],
@@ -277,37 +271,31 @@ class SwissClientEnhanced(BaseWebClient):
                             "2D6": results["CYP2D6_inhibition"],
                             "3A4": results["CYP3A4_inhibition"],
                         },
-                        
                         # Medicinal chemistry
                         "pains": results["PAINS"],
                         "brenk": results["Brenk"],
                         "leadlikeness": results["Leadlikeness"],
                         "synthetic_accessibility": float(results["SA"]),
-                        
                         # Metadata
                         "timestamp": datetime.now().isoformat(),
                     }
                 elif status == "failed":
-                    self.logger.error(
-                        f"SwissADME failed for {smiles}"
-                    )
+                    self.logger.error(f"SwissADME failed for {smiles}")
                     return None
 
             self.logger.error(f"SwissADME timeout for {smiles}")
             return None
 
         except Exception as e:
-            self.logger.error(
-                f"Error getting ADME properties: {str(e)}"
-            )
+            self.logger.error(f"Error getting ADME properties: {str(e)}")
             return None
 
     def _get_cached_targets(self, smiles: str) -> Optional[List[Dict[str, Any]]]:
         """Get cached target predictions.
-        
+
         Args:
             smiles: SMILES string
-            
+
         Returns:
             List of target predictions or None if not cached
         """
@@ -328,10 +316,10 @@ class SwissClientEnhanced(BaseWebClient):
 
     def _get_cached_adme(self, smiles: str) -> Optional[Dict[str, Any]]:
         """Get cached ADME properties.
-        
+
         Args:
             smiles: SMILES string
-            
+
         Returns:
             Dictionary of ADME properties or None if not cached
         """
@@ -356,9 +344,6 @@ class SwissClientEnhanced(BaseWebClient):
             "processed_compounds": len(self.processed_compounds),
             "failed_compounds": len(self.failed_compounds),
             "success_rate": (
-                len(self.processed_compounds) /
-                (len(self.processed_compounds) + len(self.failed_compounds))
-                if self.processed_compounds or self.failed_compounds
-                else 0
+                len(self.processed_compounds) / (len(self.processed_compounds) + len(self.failed_compounds)) if self.processed_compounds or self.failed_compounds else 0
             ),
         }

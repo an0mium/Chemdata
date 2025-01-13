@@ -28,7 +28,7 @@ from tqdm import tqdm
 
 from .base_client import BaseWebClient
 from ..models.compound import Compound
-from ..pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ..pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 
 if TYPE_CHECKING:
     from .http_client_enhanced import HTTPClientEnhanced
@@ -65,10 +65,10 @@ class SocialClientEnhanced(BaseWebClient):
         model_dir: Optional[Path] = None,
         cache_dir: Optional[Path] = None,
         logger: Optional[logging.Logger] = None,
-        circuit_config: Optional[CircuitConfig] = None,
+        circuit_config: Optional[CircuitBreakerConfig] = None,
     ):
         """Initialize social media client.
-        
+
         Args:
             reddit_client_id: Reddit API client ID
             reddit_client_secret: Reddit API client secret
@@ -143,7 +143,7 @@ class SocialClientEnhanced(BaseWebClient):
         use_cache: bool = True,
     ) -> None:
         """Process list of compounds.
-        
+
         Args:
             compounds: List of compounds to process
             skip_predictions: Whether to skip ML predictions
@@ -174,13 +174,13 @@ class SocialClientEnhanced(BaseWebClient):
         days: int = 30,
     ) -> Optional[Dict[str, Any]]:
         """Get social media data for a compound.
-        
+
         Args:
             name: Compound name
             cas_number: Optional CAS number
             use_cache: Whether to use cached results
             days: Number of days to look back
-            
+
         Returns:
             Dictionary of social media data or None if not found
         """
@@ -252,13 +252,13 @@ class SocialClientEnhanced(BaseWebClient):
         fallback: Optional[callable] = None,
     ) -> Optional[Dict[str, Any]]:
         """Get Reddit data for a compound.
-        
+
         Args:
             name: Compound name
             days: Number of days to look back
             use_cache: Whether to use cached results
             fallback: Optional fallback function if service fails
-            
+
         Returns:
             Dictionary of Reddit data or None if not found
         """
@@ -275,17 +275,14 @@ class SocialClientEnhanced(BaseWebClient):
         for subreddit_name in self.SUBREDDITS:
             try:
                 subreddit = self.reddit.subreddit(subreddit_name)
-                
+
                 # Search posts
                 for post in subreddit.search(
                     name,
                     time_filter="month",
                     limit=100,
                 ):
-                    if (
-                        datetime.fromtimestamp(post.created_utc)
-                        > datetime.now() - timedelta(days=days)
-                    ):
+                    if datetime.fromtimestamp(post.created_utc) > datetime.now() - timedelta(days=days):
                         post_data = {
                             "id": post.id,
                             "title": post.title,
@@ -299,9 +296,7 @@ class SocialClientEnhanced(BaseWebClient):
 
                         # Classify text if model available
                         if self.text_classifier and post.selftext:
-                            classification = self.text_classifier(
-                                post.selftext[:512]
-                            )[0]
+                            classification = self.text_classifier(post.selftext[:512])[0]
                             post_data["classification"] = {
                                 "label": classification["label"],
                                 "score": classification["score"],
@@ -311,10 +306,7 @@ class SocialClientEnhanced(BaseWebClient):
                         # Extract novel compounds if model available
                         if self.ner_model and post.selftext:
                             entities = self.ner_model(post.selftext)
-                            compounds = [
-                                e["word"] for e in entities
-                                if e["entity"] == "COMPOUND"
-                            ]
+                            compounds = [e["word"] for e in entities if e["entity"] == "COMPOUND"]
                             post_data["novel_compounds"] = compounds
                             data["novel_mentions"].extend(compounds)
 
@@ -335,9 +327,7 @@ class SocialClientEnhanced(BaseWebClient):
 
                             # Classify comment if model available
                             if self.text_classifier:
-                                classification = self.text_classifier(
-                                    comment.body[:512]
-                                )[0]
+                                classification = self.text_classifier(comment.body[:512])[0]
                                 comment_data["classification"] = {
                                     "label": classification["label"],
                                     "score": classification["score"],
@@ -360,13 +350,13 @@ class SocialClientEnhanced(BaseWebClient):
         fallback: Optional[callable] = None,
     ) -> Optional[Dict[str, Any]]:
         """Get Twitter data for a compound.
-        
+
         Args:
             name: Compound name
             days: Number of days to look back
             use_cache: Whether to use cached results
             fallback: Optional fallback function if service fails
-            
+
         Returns:
             Dictionary of Twitter data or None if not found
         """
@@ -382,7 +372,7 @@ class SocialClientEnhanced(BaseWebClient):
             # Search tweets
             for query in self.TWITTER_QUERIES:
                 search_query = f"{name} {query}"
-                
+
                 tweets = tweepy.Paginator(
                     self.twitter.search_recent_tweets,
                     query=search_query,
@@ -393,10 +383,7 @@ class SocialClientEnhanced(BaseWebClient):
                 ).flatten(limit=1000)
 
                 for tweet in tweets:
-                    if (
-                        tweet.created_at
-                        > datetime.now() - timedelta(days=days)
-                    ):
+                    if tweet.created_at > datetime.now() - timedelta(days=days):
                         tweet_data = {
                             "id": tweet.id,
                             "text": tweet.text,
@@ -408,18 +395,14 @@ class SocialClientEnhanced(BaseWebClient):
 
                         # Extract hashtags
                         if tweet.entities and "hashtags" in tweet.entities:
-                            hashtags = [
-                                h["tag"] for h in tweet.entities["hashtags"]
-                            ]
+                            hashtags = [h["tag"] for h in tweet.entities["hashtags"]]
                             tweet_data["hashtags"] = hashtags
                             for tag in hashtags:
                                 data["hashtags"][tag] += 1
 
                         # Classify tweet if model available
                         if self.text_classifier:
-                            classification = self.text_classifier(
-                                tweet.text[:512]
-                            )[0]
+                            classification = self.text_classifier(tweet.text[:512])[0]
                             tweet_data["classification"] = {
                                 "label": classification["label"],
                                 "score": classification["score"],
@@ -429,10 +412,7 @@ class SocialClientEnhanced(BaseWebClient):
                         # Extract novel compounds if model available
                         if self.ner_model:
                             entities = self.ner_model(tweet.text)
-                            compounds = [
-                                e["word"] for e in entities
-                                if e["entity"] == "COMPOUND"
-                            ]
+                            compounds = [e["word"] for e in entities if e["entity"] == "COMPOUND"]
                             tweet_data["novel_compounds"] = compounds
                             data["novel_mentions"].extend(compounds)
 
@@ -446,10 +426,10 @@ class SocialClientEnhanced(BaseWebClient):
 
     def _get_cached_reddit_data(self, name: str) -> Optional[Dict[str, Any]]:
         """Get cached Reddit data.
-        
+
         Args:
             name: Compound name
-            
+
         Returns:
             Dictionary of cached data or None if not found
         """
@@ -470,10 +450,10 @@ class SocialClientEnhanced(BaseWebClient):
 
     def _get_cached_twitter_data(self, name: str) -> Optional[Dict[str, Any]]:
         """Get cached Twitter data.
-        
+
         Args:
             name: Compound name
-            
+
         Returns:
             Dictionary of cached data or None if not found
         """
@@ -498,10 +478,7 @@ class SocialClientEnhanced(BaseWebClient):
             "processed_compounds": len(self.processed_compounds),
             "failed_compounds": len(self.failed_compounds),
             "success_rate": (
-                len(self.processed_compounds) /
-                (len(self.processed_compounds) + len(self.failed_compounds))
-                if self.processed_compounds or self.failed_compounds
-                else 0
+                len(self.processed_compounds) / (len(self.processed_compounds) + len(self.failed_compounds)) if self.processed_compounds or self.failed_compounds else 0
             ),
             "source_stats": self.source_stats,
         }

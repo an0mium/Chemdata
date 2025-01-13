@@ -18,22 +18,21 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from datetime import datetime, timedelta
-import json
 from collections import Counter
 
 import praw
 import tweepy
 from transformers import pipeline
 
-from ....pipeline.infrastructure.circuit_breaker import CircuitConfig
-from .base import BaseWebClient
+from ....pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
+from ....web_enrichment.clients.base import WebClient
 from ...base.core import Compound
 
 if TYPE_CHECKING:
     from .http import HTTPClient
 
 
-class SocialClient(BaseWebClient):
+class SocialClient(WebClient):
     """Client for social media data sources."""
 
     # Reddit subreddits to monitor
@@ -64,11 +63,11 @@ class SocialClient(BaseWebClient):
         http_client: Optional["HTTPClient"] = None,
         model_dir: Optional[Path] = None,
         cache_dir: Optional[Path] = None,
-        circuit_config: Optional[CircuitConfig] = None,
+        circuit_config: Optional[CircuitBreakerConfig] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize social media client.
-        
+
         Args:
             name: Client name for circuit breaker
             reddit_client_id: Reddit API client ID
@@ -82,9 +81,12 @@ class SocialClient(BaseWebClient):
         """
         super().__init__(
             name=name,
-            http_client=http_client,
-            model_dir=model_dir,
-            cache_dir=cache_dir,
+            base_url="",  # Base URLs are set per-service
+            data_source="social",
+            requests_per_second=1.0,
+            max_retries=3,
+            timeout=30,
+            cache_ttl=3600,
             circuit_config=circuit_config,
             logger=logger,
         )
@@ -157,7 +159,7 @@ class SocialClient(BaseWebClient):
         use_cache: bool = True,
     ) -> None:
         """Process list of compounds.
-        
+
         Args:
             compounds: List of compounds to process
             skip_predictions: Whether to skip ML predictions
@@ -188,13 +190,13 @@ class SocialClient(BaseWebClient):
         days: int = 30,
     ) -> Optional[Dict[str, Any]]:
         """Get social media data for a compound.
-        
+
         Args:
             name: Compound name
             cas_number: Optional CAS number
             use_cache: Whether to use cached results
             days: Number of days to look back
-            
+
         Returns:
             Dictionary of social media data or None if not found
         """
@@ -222,7 +224,6 @@ class SocialClient(BaseWebClient):
                 name,
                 days,
                 use_cache=use_cache,
-                fallback=lambda: self._get_cached_reddit_data(name),
             )
             if reddit_data:
                 data["reddit"].update(reddit_data)
@@ -239,7 +240,6 @@ class SocialClient(BaseWebClient):
                 name,
                 days,
                 use_cache=use_cache,
-                fallback=lambda: self._get_cached_twitter_data(name),
             )
             if twitter_data:
                 data["twitter"].update(twitter_data)
@@ -254,36 +254,32 @@ class SocialClient(BaseWebClient):
 
     def _update_reddit_stats(self, data: Dict[str, Any]) -> None:
         """Update Reddit statistics.
-        
+
         Args:
             data: Reddit data to update stats with
         """
         self.source_stats["reddit"]["success"] += 1
         self.source_stats["reddit"]["posts"] += len(data["posts"])
         self.source_stats["reddit"]["comments"] += len(data["comments"])
-        self.source_stats["reddit"]["novel_mentions"] += len(
-            data.get("novel_mentions", [])
-        )
+        self.source_stats["reddit"]["novel_mentions"] += len(data.get("novel_mentions", []))
 
     def _update_twitter_stats(self, data: Dict[str, Any]) -> None:
         """Update Twitter statistics.
-        
+
         Args:
             data: Twitter data to update stats with
         """
         self.source_stats["twitter"]["success"] += 1
         self.source_stats["twitter"]["tweets"] += len(data["tweets"])
         self.source_stats["twitter"]["users"] += len(data["users"])
-        self.source_stats["twitter"]["novel_mentions"] += len(
-            data.get("novel_mentions", [])
-        )
+        self.source_stats["twitter"]["novel_mentions"] += len(data.get("novel_mentions", []))
 
     def _classify_text(self, text: str) -> Optional[Dict[str, Any]]:
         """Classify text using ML model.
-        
+
         Args:
             text: Text to classify
-            
+
         Returns:
             Classification result or None if no model
         """
@@ -298,10 +294,10 @@ class SocialClient(BaseWebClient):
 
     def _extract_compounds(self, text: str) -> List[str]:
         """Extract compound names from text using NER model.
-        
+
         Args:
             text: Text to extract from
-            
+
         Returns:
             List of extracted compound names
         """
@@ -309,10 +305,7 @@ class SocialClient(BaseWebClient):
             return []
 
         entities = self.ner_model(text)
-        return [
-            e["word"] for e in entities
-            if e["entity"] == "COMPOUND"
-        ]
+        return [e["word"] for e in entities if e["entity"] == "COMPOUND"]
 
     def _process_reddit_post(
         self,
@@ -320,7 +313,7 @@ class SocialClient(BaseWebClient):
         data: Dict[str, Any],
     ) -> None:
         """Process a Reddit post.
-        
+
         Args:
             post: Reddit post to process
             data: Data dictionary to update
@@ -358,7 +351,7 @@ class SocialClient(BaseWebClient):
         data: Dict[str, Any],
     ) -> None:
         """Process a Reddit comment.
-        
+
         Args:
             comment: Reddit comment to process
             data: Data dictionary to update
@@ -386,7 +379,7 @@ class SocialClient(BaseWebClient):
         data: Dict[str, Any],
     ) -> None:
         """Process a tweet.
-        
+
         Args:
             tweet: Tweet to process
             data: Data dictionary to update
@@ -427,16 +420,14 @@ class SocialClient(BaseWebClient):
         name: str,
         days: int = 30,
         use_cache: bool = True,
-        fallback: Optional[callable] = None,
     ) -> Optional[Dict[str, Any]]:
         """Get Reddit data for a compound.
-        
+
         Args:
             name: Compound name
             days: Number of days to look back
             use_cache: Whether to use cached results
-            fallback: Optional fallback function if service fails
-            
+
         Returns:
             Dictionary of Reddit data or None if not found
         """
@@ -457,17 +448,14 @@ class SocialClient(BaseWebClient):
         for subreddit_name in self.SUBREDDITS:
             try:
                 subreddit = self.reddit.subreddit(subreddit_name)
-                
+
                 # Search posts
                 for post in subreddit.search(
                     name,
                     time_filter="month",
                     limit=100,
                 ):
-                    if (
-                        datetime.fromtimestamp(post.created_utc)
-                        > datetime.now() - timedelta(days=days)
-                    ):
+                    if datetime.fromtimestamp(post.created_utc) > datetime.now() - timedelta(days=days):
                         self._process_reddit_post(post, data)
 
                         # Get comments
@@ -476,9 +464,7 @@ class SocialClient(BaseWebClient):
                             self._process_reddit_comment(comment, data)
 
             except Exception as e:
-                self.logger.error(
-                    f"Error searching subreddit {subreddit_name}: {str(e)}"
-                )
+                self.logger.error(f"Error searching subreddit {subreddit_name}: {str(e)}")
                 continue
 
         return data if data["posts"] else None
@@ -488,16 +474,14 @@ class SocialClient(BaseWebClient):
         name: str,
         days: int = 30,
         use_cache: bool = True,
-        fallback: Optional[callable] = None,
     ) -> Optional[Dict[str, Any]]:
         """Get Twitter data for a compound.
-        
+
         Args:
             name: Compound name
             days: Number of days to look back
             use_cache: Whether to use cached results
-            fallback: Optional fallback function if service fails
-            
+
         Returns:
             Dictionary of Twitter data or None if not found
         """
@@ -517,7 +501,7 @@ class SocialClient(BaseWebClient):
             # Search tweets
             for query in self.TWITTER_QUERIES:
                 search_query = f"{name} {query}"
-                
+
                 tweets = tweepy.Paginator(
                     self.twitter.search_recent_tweets,
                     query=search_query,
@@ -528,10 +512,7 @@ class SocialClient(BaseWebClient):
                 ).flatten(limit=1000)
 
                 for tweet in tweets:
-                    if (
-                        tweet.created_at
-                        > datetime.now() - timedelta(days=days)
-                    ):
+                    if tweet.created_at > datetime.now() - timedelta(days=days):
                         self._process_tweet(tweet, data)
 
         except Exception as e:
@@ -539,66 +520,17 @@ class SocialClient(BaseWebClient):
 
         return data if data["tweets"] else None
 
-    def _get_cached_reddit_data(self, name: str) -> Optional[Dict[str, Any]]:
-        """Get cached Reddit data.
-        
-        Args:
-            name: Compound name
-            
-        Returns:
-            Dictionary of cached data or None if not found
-        """
-        if not self.cache_dir:
-            return None
-
-        try:
-            cache_file = self.cache_dir / f"reddit_{name}.json"
-            if not cache_file.exists():
-                return None
-
-            with cache_file.open() as f:
-                return json.load(f)
-
-        except Exception as e:
-            self.logger.error(f"Error reading cached Reddit data: {str(e)}")
-            return None
-
-    def _get_cached_twitter_data(self, name: str) -> Optional[Dict[str, Any]]:
-        """Get cached Twitter data.
-        
-        Args:
-            name: Compound name
-            
-        Returns:
-            Dictionary of cached data or None if not found
-        """
-        if not self.cache_dir:
-            return None
-
-        try:
-            cache_file = self.cache_dir / f"twitter_{name}.json"
-            if not cache_file.exists():
-                return None
-
-            with cache_file.open() as f:
-                return json.load(f)
-
-        except Exception as e:
-            self.logger.error(f"Error reading cached Twitter data: {str(e)}")
-            return None
-
     def get_metrics(self) -> Dict[str, Any]:
         """Get client metrics."""
         metrics = super().get_metrics()
-        metrics.update({
-            "processed_compounds": len(self.processed_compounds),
-            "failed_compounds": len(self.failed_compounds),
-            "success_rate": (
-                len(self.processed_compounds) /
-                (len(self.processed_compounds) + len(self.failed_compounds))
-                if self.processed_compounds or self.failed_compounds
-                else 0
-            ),
-            "source_stats": self.source_stats,
-        })
+        metrics.update(
+            {
+                "processed_compounds": len(self.processed_compounds),
+                "failed_compounds": len(self.failed_compounds),
+                "success_rate": (
+                    len(self.processed_compounds) / (len(self.processed_compounds) + len(self.failed_compounds)) if self.processed_compounds or self.failed_compounds else 0
+                ),
+                "source_stats": self.source_stats,
+            }
+        )
         return metrics

@@ -3,11 +3,12 @@
 ## Overview
 
 The backup strategy needs to cover:
-1. Database Backups
-2. File Backups
-3. Model Backups
-4. Configuration Backups
-5. Recovery Procedures
+1. Database Backups (Priority)
+2. Web Assets Backups (Priority)
+3. File Backups
+4. Model Backups
+5. Configuration Backups
+6. Recovery Procedures
 
 ## Current Structure
 
@@ -20,23 +21,27 @@ backup/
 
 ```
 backup/
-├── database/
-│   ├── full/         # Full database backups
-│   └── incremental/  # Incremental backups
+├── database/         # Database backups (Priority)
+│   ├── full/        # Full database backups
+│   └── incremental/ # Incremental backups
+├── web/             # Web assets (Priority)
+│   ├── static/      # Static assets (CSS, JS, images)
+│   ├── templates/   # HTML templates
+│   └── responsive/  # Responsive design assets
 ├── files/
-│   ├── compounds/    # Compound data files
-│   └── models/       # ML model files
+│   ├── compounds/   # Compound data files
+│   └── models/      # ML model files
 ├── config/
-│   ├── system/       # System configs
-│   └── app/          # App configs
+│   ├── system/      # System configs
+│   └── app/         # App configs
 └── scripts/
-    ├── backup/       # Backup scripts
-    └── restore/      # Restore scripts
+    ├── backup/      # Backup scripts
+    └── restore/     # Restore scripts
 ```
 
 ## Backup Components
 
-### 1. Database Backups
+### 1. Database Backups (Priority)
 
 ```python
 # In backup/database/manager.py
@@ -107,7 +112,96 @@ class DatabaseBackup:
             return backup_file
 ```
 
-### 2. File Backups
+### 2. Web Assets Backups (Priority)
+
+```python
+# In backup/web/manager.py
+class WebAssetsBackup:
+    """Web assets backup management."""
+    def __init__(self):
+        self.config = BackupConfig()
+        self.storage = StorageManager()
+        
+    async def backup_static_assets(self) -> Path:
+        """Backup static web assets."""
+        # Get static files
+        static_dir = self.config.web_dir / "static"
+        
+        # Create archive
+        archive = self.config.backup_dir / f"web_static_{timestamp()}.tar.gz"
+        
+        # Compress files
+        process = await asyncio.create_subprocess_exec(
+            "tar",
+            "-czf", str(archive),
+            "-C", str(static_dir),
+            "."
+        )
+        
+        await process.wait()
+        
+        # Upload to storage
+        await self.storage.upload_file(
+            archive,
+            f"web/static/{archive.name}"
+        )
+        
+        return archive
+        
+    async def backup_templates(self) -> Path:
+        """Backup HTML templates."""
+        # Get template files
+        template_dir = self.config.web_dir / "templates"
+        
+        # Create archive
+        archive = self.config.backup_dir / f"web_templates_{timestamp()}.tar.gz"
+        
+        # Compress files
+        process = await asyncio.create_subprocess_exec(
+            "tar",
+            "-czf", str(archive),
+            "-C", str(template_dir),
+            "."
+        )
+        
+        await process.wait()
+        
+        # Upload to storage
+        await self.storage.upload_file(
+            archive,
+            f"web/templates/{archive.name}"
+        )
+        
+        return archive
+        
+    async def backup_responsive_assets(self) -> Path:
+        """Backup responsive design assets."""
+        # Get responsive design files
+        responsive_dir = self.config.web_dir / "static" / "css" / "responsive"
+        
+        # Create archive
+        archive = self.config.backup_dir / f"web_responsive_{timestamp()}.tar.gz"
+        
+        # Compress files
+        process = await asyncio.create_subprocess_exec(
+            "tar",
+            "-czf", str(archive),
+            "-C", str(responsive_dir),
+            "."
+        )
+        
+        await process.wait()
+        
+        # Upload to storage
+        await self.storage.upload_file(
+            archive,
+            f"web/responsive/{archive.name}"
+        )
+        
+        return archive
+```
+
+### 3. File & Model Backups
 
 ```python
 # In backup/files/manager.py
@@ -172,7 +266,7 @@ class FileBackup:
         return archive
 ```
 
-### 3. Configuration Backups
+### 4. Configuration Backups
 
 ```python
 # In backup/config/manager.py
@@ -213,7 +307,7 @@ class ConfigBackup:
         return archive
 ```
 
-### 4. Recovery Procedures
+### 5. Recovery Procedures
 
 ```python
 # In backup/restore/manager.py
@@ -249,12 +343,12 @@ class RestoreManager:
         if target_time:
             await self.apply_incremental_backups(target_time)
             
-    async def restore_files(
+    async def restore_web_assets(
         self,
         backup_file: Path,
         target_dir: Path
     ) -> None:
-        """Restore files from backup."""
+        """Restore web assets from backup."""
         # Download backup
         local_file = await self.storage.download_file(backup_file)
         
@@ -270,51 +364,65 @@ class RestoreManager:
 
 ## Implementation Steps
 
-### Day 1: Database
-1. Set up backup system
-2. Configure retention
-3. Test full backups
-4. Test incremental
+### Day 1: Priority Backups
+1. Set up database backup system
+2. Configure web assets backup
+3. Test database backups
+4. Test web assets backups
+5. Document procedures
 
-### Day 2: Files
+### Day 2: File & Model Backups
 1. Set up file backup
-2. Configure archiving
+2. Configure model backup
 3. Test compression
 4. Test storage
+5. Document procedures
 
-### Day 3: Recovery
-1. Set up restore
-2. Test database
-3. Test files
-4. Test configs
+### Day 3: Configuration & Recovery
+1. Set up config backup
+2. Configure recovery
+3. Test restore
+4. Document procedures
 
-### Day 4: Automation
+### Day 4: Integration & Automation
 1. Schedule backups
 2. Configure monitoring
 3. Set up alerts
 4. Test automation
 
-### Day 5: Documentation
-1. Document procedures
-2. Create runbooks
-3. Test recovery
+### Day 5: Testing & Documentation
+1. Test all backups
+2. Test all recovery
+3. Update docs
 4. Train team
 
 ## Validation Steps
 
-### 1. Backups
-- [ ] Database backing up
-- [ ] Files backing up
-- [ ] Configs backing up
-- [ ] Storage working
-
-### 2. Recovery
-- [ ] Database restores
-- [ ] Files restore
-- [ ] Configs restore
+### 1. Database Backups (Priority)
+- [ ] Full backups working
+- [ ] Incremental working
+- [ ] Recovery tested
 - [ ] Point-in-time works
 
-### 3. Automation
+### 2. Web Assets (Priority)
+- [ ] Static assets backing up
+- [ ] Templates backing up
+- [ ] Responsive assets backing up
+- [ ] Recovery tested
+
+### 3. File & Model Backups
+- [ ] Files backing up
+- [ ] Models backing up
+- [ ] Recovery tested
+- [ ] Storage working
+
+### 4. Configuration & Recovery
+- [ ] Configs backing up
+- [ ] Recovery working
+- [ ] Procedures documented
+- [ ] Team trained
+
+### 5. Integration & Automation
 - [ ] Schedules running
 - [ ] Monitoring working
 - [ ] Alerts firing
@@ -322,29 +430,70 @@ class RestoreManager:
 
 ## Success Criteria
 
-### 1. Reliability
+### 1. Database Health (Priority)
+- Regular backups
+- Point-in-time recovery
+- Data integrity
+- Fast recovery
+- Good compression
+
+### 2. Web Assets (Priority)
+- Regular backups
+- Fast recovery
+- Asset integrity
+- Style preservation
+- Responsive layouts
+
+### 3. File Management
+- Regular backups
+- Fast recovery
+- Data integrity
+- Good compression
+- Easy access
+
+### 4. Recovery Speed
+- Quick restore
+- Data integrity
+- Asset preservation
+- Easy rollback
+- Clear procedures
+
+### 5. Integration Quality
+- Automated backups
+- Good monitoring
+- Clear alerts
+- Easy management
+- Fast verification
+
+### 6. Reliability
 - Regular backups
 - Verified integrity
 - Fast recovery
 - No data loss
+- Clear procedures
 
-### 2. Performance
+### 7. Performance
 - Minimal impact
 - Fast backups
 - Quick recovery
 - Good compression
+- Efficient storage
 
-### 3. Usability
+### 8. Usability
 - Easy recovery
 - Clear procedures
 - Good monitoring
 - Fast verification
+- Simple management
 
 ## Next Steps
 
-1. Set up infrastructure
-2. Configure backups
-3. Test recovery
-4. Document procedures
-5. Train team
-6. Monitor system
+1. Set up database backups
+2. Configure web assets backups
+3. Add file backups
+4. Set up config backups
+5. Test recovery
+6. Configure automation
+7. Set up monitoring
+8. Document procedures
+9. Train team

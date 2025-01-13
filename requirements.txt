@@ -1,105 +1,140 @@
 # Core dependencies
-numpy>=1.21.0
-pandas>=1.3.0
-scipy>=1.7.0
-scikit-learn>=1.0.0
-pyarrow>=6.0.0
+chembl_webresource_client>=0.10.9
+numpy>=2.2.0
+pandas>=2.1.4
+scipy>=1.11.4
+pyarrow>=14.0.2
 
-# Chemistry tools
-rdkit>=2022.3.1
+# Chemistry and molecular tools
+rdkit>=2023.9.1
 mordred>=1.2.0
-openbabel>=3.1.0
+molvs>=0.1.1
+chemdataextractor>=2.1.2
 
-# Machine learning
-torch>=1.10.0
-torch-geometric>=2.0.0
-transformers>=4.15.0
-pytorch-lightning>=1.5.0
-xgboost>=1.5.0
-lightgbm>=3.3.0
-optuna>=2.10.0
+# Machine learning and deep learning
+scikit-learn>=1.3.2
+torch>=2.1.2
+torch-geometric>=2.4.0
+transformers>=4.36.2
+pytorch-lightning>=2.1.3
+xgboost>=2.0.3
+lightgbm>=4.2.0
+optuna>=3.4.0
+deepchem>=2.7.1
+sentence_transformers>=2.2.2
 
 # Web scraping and APIs
-requests>=2.26.0
-beautifulsoup4>=4.10.0
-selenium>=4.1.0
-aiohttp>=3.8.0
-praw>=7.5.0
-tweepy>=4.4.0
-discord.py>=2.0.0
+requests>=2.31.0
+aiohttp>=3.9.1
+beautifulsoup4>=4.12.2
+lxml>=5.0.0
+selenium>=4.16.0
+webdriver_manager>=4.0.1
+fake_useragent>=1.4.0
+praw>=7.7.1
+tweepy>=4.14.0
+scholarly>=1.7.11
 atproto>=0.0.20
-epo-ops-client>=4.0.0  # Added for Espacenet API access
+epo-ops-client>=4.0.0
+patent-client>=2.2.0
+crawl4ai>=0.4.247
+playwright>=1.49.1
+tf-playwright-stealth>=1.1.0
+aiofiles>=24.1.0
+aiosqlite>=0.20.0
+litellm>=1.57.5
+pyOpenSSL>=24.3.0
+rank-bm25>=0.2.2
+xxhash>=3.5.0
 
-# Web interface
-dash>=2.0.0
-dash-bio>=1.0.0
-dash-bootstrap-components>=1.0.0
-plotly>=5.3.0
-flask>=2.0.0
-flask-caching>=1.10.0
-fastapi>=0.70.0
-uvicorn>=0.15.0
-pydantic>=1.8.0
-starlette>=0.16.0
+# Web interface and visualization
+dash>=2.14.2
+dash-bio>=1.0.2
+dash-bootstrap-components>=1.5.0
+plotly>=5.18.0
+flask>=3.0.0
+flask-restful>=0.3.10
+flask-sqlalchemy>=3.1.1
+flask-cors>=4.0.0
+flask-caching>=2.1.0
+fastapi>=0.109.0
+uvicorn>=0.25.0
+gunicorn>=21.2.0
+starlette>=0.35.1
+pydantic>=2.7.1,<3.0.0
 
-# Data processing
-tqdm>=4.62.0
-joblib>=1.1.0
-dask>=2022.1.0
-distributed>=2022.1.0
-networkx>=2.6.0
-tenacity>=8.0.1
-cachetools>=4.2.4
+# Data processing and analysis
+tqdm>=4.66.1
+python-dateutil>=2.8.2
+joblib>=1.3.2
+dask>=2023.12.1
+distributed>=2023.12.1
+networkx>=3.2.1
+statsmodels>=0.14.1
+tenacity>=8.2.3
+cachetools>=5.3.2
+
+# Natural Language Processing
+nltk>=3.8.1
+spacy>=3.8.3
+gensim>=4.3.2
+scispacy>=0.5.3
+en-core-sci-lg
+
+# Database
+sqlalchemy>=2.0.25
+psycopg2-binary>=2.9.9
+alembic>=1.13.1
 
 # Visualization
-matplotlib>=3.5.0
-seaborn>=0.11.0
+matplotlib>=3.8.2
+seaborn>=0.13.1
 
 # Testing
-pytest>=6.2.5
-pytest-cov>=2.12.0
-pytest-asyncio>=0.16.0
-pytest-mock>=3.6.1
-
-# Development
-black>=21.12b0
-flake8>=4.0.1
-mypy>=0.910
-isort>=5.10.1
-pre-commit>=2.16.0
-bandit>=1.7.0
+pytest>=7.4.4
+pytest-cov>=4.1.0
+pytest-asyncio>=0.23.3
+pytest-mock>=3.12.0
+responses>=0.24.1
+factory-boy>=3.3.0
 
 # Documentation
-sphinx>=4.3.0
-sphinx-rtd-theme>=1.0.0
-sphinx-autodoc-typehints>=1.12.0
-nbsphinx>=0.8.0
+sphinx>=7.1.2
+sphinx-rtd-theme>=1.3.0
+sphinx-autodoc-typehints>=1.25.2
+nbsphinx>=0.9.3
 jupyter>=1.0.0
+myst-parser>=2.0.0
+ipykernel>=6.28.0
+
+# Development tools
+black>=23.12.1
+isort>=5.13.2
+flake8>=7.0.0
+mypy>=1.8.0
+pre-commit>=3.6.0
+bandit>=1.7.6
+jupyterlab>=4.0.10
+ipython>=8.19.0
 
 # Type checking
-types-requests>=2.26.1
-types-beautifulsoup4>=4.9.3
-types-tqdm>=4.62.2
-types-PyYAML>=6.0.1
+types-requests>=2.31.0.10
+types-beautifulsoup4>=4.12.0.7
+types-tqdm>=4.66.0.2
+types-PyYAML>=6.0.12.12
 
 # Utilities
-python-dotenv>=0.19.0
-pyyaml>=6.0.0
-click>=8.0.0
-loguru>=0.5.0
-rich>=10.16.0
-
-# Patent analysis
-patent-client>=2.2.0  # For patent database access
-scispacy>=0.5.1      # For scientific text processing
-en-core-sci-lg       # Scientific language model
-chemdataextractor>=2.1.0  # Chemical entity extraction
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+click>=8.1.7
+loguru>=0.7.2
+rich>=13.7.0
+openpyxl>=3.1.2
 
 # Optional dependencies (uncomment if needed)
-# tensorflow>=2.7.0    # For additional ML models
-# ray>=1.9.0          # For distributed ML
-# horovod>=0.23.0     # For distributed DL
-# wandb>=0.12.9       # For experiment tracking
-# deepchem>=2.6.1     # For additional chemical ML models
-# molvs>=0.1.1        # For molecule validation
-# chemaxon>=21.18.0   # For advanced chemical calculations (requires license)
+tensorflow>=2.15.0
+ray>=2.9.0
+horovod>=0.28.1
+wandb>=0.16.1
+# chemaxon>=23.18.0   
+# For advanced chemical calculations (requires license)

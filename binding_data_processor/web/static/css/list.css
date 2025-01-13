@@ -1,0 +1,521 @@
+/* Enhanced scientific list component styles */
+
+:root {
+    /* Scientific color palette */
+    --primary-blue: #0066cc;
+    --secondary-blue: #003366;
+    --accent-blue: #00aaff;
+    --data-blue: #004d99;
+    --graph-blue: #0088cc;
+
+    --primary-green: #00cc66;
+    --secondary-green: #006633;
+    --accent-green: #00ff80;
+    --data-green: #009933;
+    --graph-green: #00cc33;
+
+    /* Scientific grays */
+    --gray-50: #fafafa;
+    --gray-100: #f5f5f5;
+    --gray-200: #eeeeee;
+    --gray-300: #e0e0e0;
+    --gray-400: #bdbdbd;
+    --gray-500: #9e9e9e;
+    --gray-600: #757575;
+    --gray-700: #616161;
+    --gray-800: #424242;
+    --gray-900: #212121;
+
+    /* Data quality colors */
+    --quality-high: #00c853;
+    --quality-medium: #ffd600;
+    --quality-low: #ff3d00;
+
+    /* Visualization colors */
+    --molecular-bg: rgba(0, 102, 204, 0.05);
+    --quantum-bg: rgba(0, 204, 102, 0.05);
+    --spectral-bg: rgba(0, 170, 255, 0.05);
+    --crystal-bg: rgba(0, 153, 51, 0.05);
+
+    /* Shadows */
+    --card-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --card-shadow-hover: 0 4px 8px rgba(0, 0, 0, 0.15);
+    --molecular-shadow-sm: 0 2px 4px rgba(0, 102, 204, 0.2);
+    --molecular-shadow-md: 0 4px 8px rgba(0, 102, 204, 0.25);
+    --molecular-shadow-lg: 0 6px 12px rgba(0, 102, 204, 0.3);
+    --quantum-glow: 0 0 20px rgba(0, 204, 102, 0.2);
+    --quantum-glow-hover: 0 0 30px rgba(0, 204, 102, 0.3);
+
+    /* Fonts */
+    --heading-font: "Inter", system-ui, -apple-system, sans-serif;
+    --body-font: "Inter", system-ui, -apple-system, sans-serif;
+    --data-font: "JetBrains Mono", "Fira Code", monospace;
+    --chemical-font: "Chemical", "Arial Unicode MS", sans-serif;
+
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+
+    /* Transitions */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Base list styles */
+.list-container {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: var(--spacing-md);
+}
+
+/* List items */
+.list-item {
+    background: var(--gray-50);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    transition: transform var(--transition-normal),
+        box-shadow var(--transition-normal);
+}
+
+.list-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--card-shadow-hover);
+}
+
+/* Scientific data displays */
+.molecular-view {
+    background: var(--molecular-bg);
+    padding: var(--spacing-md);
+    border-radius: 8px;
+    font-family: var(--chemical-font);
+}
+
+.quantum-view {
+    background: var(--quantum-bg);
+    padding: var(--spacing-md);
+    border-radius: 8px;
+    font-family: var(--data-font);
+}
+
+.spectral-view {
+    background: var(--spectral-bg);
+    padding: var(--spacing-md);
+    border-radius: 8px;
+    font-family: var(--data-font);
+}
+
+.crystal-view {
+    background: var(--crystal-bg);
+    padding: var(--spacing-md);
+    border-radius: 8px;
+    font-family: var(--data-font);
+}
+
+/* Quality indicators */
+.quality-indicators {
+    display: flex;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--gray-100);
+    border-radius: 4px;
+}
+
+.quality-score,
+.confidence-level {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-family: var(--data-font);
+    font-size: 0.875rem;
+}
+
+.quality-high {
+    color: var(--quality-high);
+}
+
+.quality-medium {
+    color: var(--quality-medium);
+}
+
+.quality-low {
+    color: var(--quality-low);
+}
+
+/* Scientific metadata */
+.scientific-metadata {
+    background: var(--gray-100);
+    padding: var(--spacing-md);
+    border-radius: 8px;
+    font-family: var(--data-font);
+}
+
+.metadata-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.metadata-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.metadata-item .label {
+    color: var(--gray-600);
+    font-size: 0.875rem;
+}
+
+.metadata-item .value {
+    font-weight: 500;
+}
+
+/* Data visualization */
+.structure-viewer {
+    width: 100%;
+    aspect-ratio: 1;
+    background: var(--gray-100);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.structure-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--gray-200);
+    border-radius: 4px;
+}
+
+/* Properties display */
+.properties-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--spacing-sm);
+}
+
+.property-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm);
+    background: var(--gray-100);
+    border-radius: 4px;
+}
+
+/* Analysis results */
+.analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.analysis-item {
+    padding: var(--spacing-md);
+    background: var(--gray-100);
+    border-radius: 8px;
+}
+
+/* Citations */
+.citations-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.citation-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--gray-100);
+    border-radius: 4px;
+}
+
+/* Tags */
+.tags-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm);
+}
+
+.tag {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--gray-200);
+    border-radius: 16px;
+    font-size: 0.875rem;
+}
+
+/* Quick actions */
+.quick-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--gray-100);
+    border-radius: 4px;
+}
+
+.action-btn {
+    padding: var(--spacing-xs);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: transform var(--transition-fast);
+}
+
+.action-btn:hover {
+    transform: scale(1.1);
+}
+
+/* Export options */
+.export-options {
+    padding: var(--spacing-md);
+    background: var(--gray-100);
+    border-radius: 8px;
+}
+
+.export-btn {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--gray-300);
+    background: var(--gray-50);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.export-btn:hover {
+    background: var(--gray-200);
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+.screen-reader-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* High contrast mode */
+@media (prefers-contrast: more) {
+    :root {
+        --primary-blue: #0000ff;
+        --secondary-blue: #000099;
+        --accent-blue: #0066ff;
+        --data-blue: #000066;
+        --graph-blue: #0033cc;
+    }
+}
+
+/* Print styles */
+@media print {
+    .list-container {
+        padding: 0;
+    }
+
+    .list-item {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .quick-actions,
+    .export-options {
+        display: none;
+    }
+
+    .structure-viewer {
+        page-break-inside: avoid;
+    }
+
+    .scientific-metadata {
+        page-break-inside: avoid;
+    }
+}
+
+/* Responsive design */
+@media screen and (max-width: 768px) {
+
+    .metadata-grid,
+    .properties-grid,
+    .analysis-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .structure-viewer {
+        aspect-ratio: 4/3;
+    }
+}
+
+/* Loading states */
+.loading {
+    position: relative;
+    overflow: hidden;
+}
+
+.loading::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: linear-gradient(90deg,
+            transparent,
+            rgba(255, 255, 255, 0.2),
+            transparent);
+    animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* 3D visualization */
+.visualization-3d {
+    perspective: 1000px;
+    transform-style: preserve-3d;
+}
+
+.rotation-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--gray-200);
+    border-radius: 4px;
+}
+
+/* Data precision */
+.high-precision {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+}
+
+.uncertainty {
+    color: var(--gray-600);
+    font-size: 0.875em;
+}
+
+/* Touch interactions */
+@media (hover: none) {
+    .touch-optimized {
+        --spacing-sm: 0.75rem;
+        --spacing-md: 1.25rem;
+    }
+
+    .action-btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
+
+/* Expert mode */
+.expert-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--gray-100);
+    border-radius: 4px;
+}
+
+.expert-btn {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--gray-300);
+    background: var(--gray-50);
+    border-radius: 4px;
+    font-family: var(--data-font);
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+/* Scientific styling */
+.molecular-formula {
+    font-family: var(--chemical-font);
+    font-weight: 500;
+}
+
+.measurement-value {
+    font-family: var(--data-font);
+    font-variant-numeric: tabular-nums;
+}
+
+.unit {
+    font-family: var(--data-font);
+    color: var(--gray-600);
+}
+
+.confidence-interval {
+    font-family: var(--data-font);
+    color: var(--gray-600);
+    font-size: 0.875em;
+}
+
+/* Quantum styling */
+.quantum-ready {
+    background: var(--quantum-bg);
+    box-shadow: var(--quantum-glow);
+    transition: all var(--transition-slow);
+}
+
+.quantum-ready:hover {
+    box-shadow: var(--quantum-glow-hover);
+    transform: translateY(-4px) scale(1.02);
+}
+
+/* Spectral styling */
+.spectral-plot {
+    width: 100%;
+    height: 200px;
+    background: var(--gray-100);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.wavelength-axis {
+    font-family: var(--data-font);
+    font-size: 0.875rem;
+    color: var(--gray-600);
+}
+
+/* Crystal styling */
+.crystal-structure {
+    width: 100%;
+    aspect-ratio: 1;
+    background: var(--crystal-bg);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.lattice-parameters {
+    font-family: var(--data-font);
+    font-size: 0.875rem;
+}

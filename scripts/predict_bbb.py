@@ -56,6 +56,7 @@ def predict_bbb_permeability(
     compounds: List[CompoundData],
     model_dir: Optional[Path] = None,
     cache_dir: Optional[Path] = None,
+    from_pt: bool = False,
 ) -> None:
     """Make BBB permeability predictions for compounds.
 
@@ -63,11 +64,13 @@ def predict_bbb_permeability(
         compounds: List of compounds to predict
         model_dir: Optional directory containing trained models
         cache_dir: Optional directory for caching
+        from_pt: Whether to load PyTorch weights when TensorFlow model files are not found
     """
     # Initialize predictor
     predictor = BBBPredictorWebEnriched(
         model_dir=str(model_dir) if model_dir else None,
         cache_dir=str(cache_dir) if cache_dir else None,
+        from_pt=from_pt,
     )
 
     # Make predictions
@@ -113,6 +116,11 @@ def main():
         help="Directory for caching",
     )
     parser.add_argument(
+        "--from-pt",
+        action="store_true",
+        help="Load PyTorch weights when TensorFlow model files are not found",
+    )
+    parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
@@ -134,6 +142,7 @@ def main():
             compounds,
             model_dir=args.model_dir,
             cache_dir=args.cache_dir,
+            from_pt=args.from_pt,
         )
 
         # Export predictions

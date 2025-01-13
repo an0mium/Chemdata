@@ -22,15 +22,15 @@ import json
 from bs4 import BeautifulSoup
 from transformers import pipeline
 
-from ....pipeline.infrastructure.circuit_breaker import CircuitConfig
-from .base import BaseWebClient
+from ....pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
+from ....web_enrichment.clients.base import WebClient
 from ...base.core import Compound
 
 if TYPE_CHECKING:
     from .http import HTTPClient
 
 
-class CommunityClient(BaseWebClient):
+class CommunityClient(WebClient):
     """Client for community data sources."""
 
     # API endpoints
@@ -51,11 +51,11 @@ class CommunityClient(BaseWebClient):
         http_client: Optional["HTTPClient"] = None,
         model_dir: Optional[Path] = None,
         cache_dir: Optional[Path] = None,
-        circuit_config: Optional[CircuitConfig] = None,
+        circuit_config: Optional[CircuitBreakerConfig] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize community client.
-        
+
         Args:
             name: Client name for circuit breaker
             http_client: Optional HTTP client to use
@@ -66,9 +66,12 @@ class CommunityClient(BaseWebClient):
         """
         super().__init__(
             name=name,
-            http_client=http_client,
-            model_dir=model_dir,
-            cache_dir=cache_dir,
+            base_url="",  # Base URLs are set per-service
+            data_source="community",
+            requests_per_second=1.0,
+            max_retries=3,
+            timeout=30,
+            cache_ttl=3600,
             circuit_config=circuit_config,
             logger=logger,
         )
@@ -100,7 +103,7 @@ class CommunityClient(BaseWebClient):
         use_cache: bool = True,
     ) -> None:
         """Process list of compounds.
-        
+
         Args:
             compounds: List of compounds to process
             skip_predictions: Whether to skip ML predictions
@@ -115,7 +118,7 @@ class CommunityClient(BaseWebClient):
                 )
                 if data:
                     compound.community_data = data
-                    
+
                     # Add references
                     if "references" in data:
                         for ref in data["references"]:
@@ -141,12 +144,12 @@ class CommunityClient(BaseWebClient):
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Get data for a single compound.
-        
+
         Args:
             name: Compound name
             cas_number: Optional CAS number
             use_cache: Whether to use cached results
-            
+
         Returns:
             Dictionary of compound data or None if not found
         """
@@ -196,11 +199,11 @@ class CommunityClient(BaseWebClient):
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Get data from PsychonautWiki.
-        
+
         Args:
             name: Compound name
             use_cache: Whether to use cached results
-            
+
         Returns:
             Dictionary of PsychonautWiki data or None if not found
         """
@@ -292,16 +295,16 @@ class CommunityClient(BaseWebClient):
         """
 
         try:
-            response = self.http.post(
-                self.PSYCHONAUT_API,
+            response = self.request(
+                method="POST",
+                endpoint=self.PSYCHONAUT_API,
                 json_data={"query": query, "variables": {"query": name}},
                 use_cache=use_cache,
-                fallback=lambda: self._get_cached_psychonaut_data(name),
+                schema_name="psychonaut",
             )
-            data = response.json()
 
-            if "data" in data and "substances" in data["data"]:
-                substances = data["data"]["substances"]
+            if "data" in response and "substances" in response["data"]:
+                substances = response["data"]["substances"]
                 if substances:
                     substance = substances[0]
                     self._validate_response(substance, self.REQUIRED_FIELDS["psychonaut"])
@@ -318,25 +321,25 @@ class CommunityClient(BaseWebClient):
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Get data from TripSit.
-        
+
         Args:
             name: Compound name
             use_cache: Whether to use cached results
-            
+
         Returns:
             Dictionary of TripSit data or None if not found
         """
         try:
-            response = self.http.get(
-                self.TRIPSIT_API,
+            response = self.request(
+                method="GET",
+                endpoint=self.TRIPSIT_API,
                 params={"name": name},
                 use_cache=use_cache,
-                fallback=lambda: self._get_cached_tripsit_data(name),
+                schema_name="tripsit",
             )
-            data = response.json()
 
-            if "data" in data and data["data"]:
-                substance = data["data"][0]
+            if "data" in response and response["data"]:
+                substance = response["data"][0]
                 self._validate_response(substance, self.REQUIRED_FIELDS["tripsit"])
                 return substance
 
@@ -351,22 +354,23 @@ class CommunityClient(BaseWebClient):
         use_cache: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Get data from Erowid.
-        
+
         Args:
             name: Compound name
             use_cache: Whether to use cached results
-            
+
         Returns:
             Dictionary of Erowid data or None if not found
         """
         try:
             # Search for experience reports
             search_url = f"{self.EROWID_BASE}/search.php"
-            response = self.http.get(
-                search_url,
+            response = self.request(
+                method="GET",
+                endpoint=search_url,
                 params={"q": name},
                 use_cache=use_cache,
-                fallback=lambda: self._get_cached_erowid_data(name),
+                schema_name="erowid",
             )
 
             # Parse search results
@@ -388,9 +392,7 @@ class CommunityClient(BaseWebClient):
 
                     # Classify report if model available
                     if self.text_classifier:
-                        classification = self.text_classifier(
-                            report["body_text"][:512]
-                        )[0]
+                        classification = self.text_classifier(report["body_text"][:512])[0]
                         report["classification"] = {
                             "label": classification["label"],
                             "score": classification["score"],
@@ -416,10 +418,10 @@ class CommunityClient(BaseWebClient):
 
     def _get_cached_psychonaut_data(self, name: str) -> Optional[Dict[str, Any]]:
         """Get cached PsychonautWiki data.
-        
+
         Args:
             name: Compound name
-            
+
         Returns:
             Dictionary of cached data or None if not found
         """
@@ -440,10 +442,10 @@ class CommunityClient(BaseWebClient):
 
     def _get_cached_tripsit_data(self, name: str) -> Optional[Dict[str, Any]]:
         """Get cached TripSit data.
-        
+
         Args:
             name: Compound name
-            
+
         Returns:
             Dictionary of cached data or None if not found
         """
@@ -464,10 +466,10 @@ class CommunityClient(BaseWebClient):
 
     def _get_cached_erowid_data(self, name: str) -> Optional[Dict[str, Any]]:
         """Get cached Erowid data.
-        
+
         Args:
             name: Compound name
-            
+
         Returns:
             Dictionary of cached data or None if not found
         """
@@ -486,18 +488,41 @@ class CommunityClient(BaseWebClient):
             self.logger.error(f"Error reading cached Erowid data: {str(e)}")
             return None
 
+    def _validate_response(
+        self,
+        response: Dict[str, Any],
+        required_fields: List[str],
+    ) -> None:
+        """Validate response data.
+
+        Args:
+            response: Response data to validate
+            required_fields: List of required field names
+
+        Raises:
+            ValidationError if validation fails
+        """
+        missing = []
+        for field in required_fields:
+            if field not in response:
+                missing.append(field)
+            elif response[field] is None:
+                missing.append(field)
+
+        if missing:
+            raise ValueError(f"Missing required fields: {', '.join(missing)}")
+
     def get_metrics(self) -> Dict[str, Any]:
         """Get client metrics."""
         metrics = super().get_metrics()
-        metrics.update({
-            "processed_compounds": len(self.processed_compounds),
-            "failed_compounds": len(self.failed_compounds),
-            "success_rate": (
-                len(self.processed_compounds) /
-                (len(self.processed_compounds) + len(self.failed_compounds))
-                if self.processed_compounds or self.failed_compounds
-                else 0
-            ),
-            "source_stats": self.source_stats,
-        })
+        metrics.update(
+            {
+                "processed_compounds": len(self.processed_compounds),
+                "failed_compounds": len(self.failed_compounds),
+                "success_rate": (
+                    len(self.processed_compounds) / (len(self.processed_compounds) + len(self.failed_compounds)) if self.processed_compounds or self.failed_compounds else 0
+                ),
+                "source_stats": self.source_stats,
+            }
+        )
         return metrics

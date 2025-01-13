@@ -7,54 +7,71 @@ This package provides a comprehensive set of tools for predicting nootropic effe
 ```
 nootropic/
 ├── __init__.py          # Package exports
-├── base.py             # Core nootropic prediction functionality
-├── enhanced.py         # Enhanced prediction with ensemble models
+├── base.py             # Core predictor class
+├── features.py         # Feature extraction utilities
+├── model_loading.py    # Model loading and management
+├── prediction.py       # Prediction utilities
 └── tests/             # Test suite
-    ├── test_nootropic.py       # Base predictor tests
-    └── test_nootropic_enhanced.py  # Enhanced predictor tests
+    └── test_nootropic.py  # Comprehensive tests
 ```
 
 ## Features
 
 1. Core Nootropic Prediction
-   - Mechanism of action prediction
-   - Cognitive domain effects
-   - Side effect profiling
-   - Confidence scoring
+   - Mechanism of action prediction with ensemble models
+   - Cognitive domain effects with confidence scoring
+   - Side effect profiling with risk assessment
+   - Comprehensive feature extraction
+   - Model persistence and versioning
 
-2. BBB Integration
+2. Feature Extraction
+   - Molecular fingerprints
+   - Pharmacophore features
+   - Binding site features
+   - Literature-derived features
+   - Community data features
+   - Enhanced descriptors
+
+3. BBB Integration
    - BBB permeability prediction
    - Effect scaling by BBB permeability
-   - Confidence adjustment
    - Transport mechanism analysis
+   - Confidence adjustment
+   - Supporting evidence integration
 
-3. Cognitive Domains
+4. Cognitive Domains
    - Memory enhancement
    - Attention improvement
    - Learning facilitation
    - Executive function
    - Processing speed
    - Mental clarity
+   - Neuroplasticity effects
 
-4. Side Effect Analysis
+5. Side Effect Analysis
    - Physical side effects
    - Cognitive side effects
    - Tolerance development
    - Drug interactions
    - Safety profiling
+   - Risk assessment
+   - Confidence scoring
 
-5. Ensemble Models
+6. Model Ensembles
    - Mechanism prediction ensemble
    - Effect prediction ensembles
    - Side effect prediction ensembles
-   - Model versioning and persistence
+   - Confidence estimation
+   - Model versioning
+   - Feature importance analysis
 
-6. Web Data Enrichment
+7. Web Data Integration
    - Literature analysis
    - Clinical trial data
    - Community reports
    - Safety databases
    - Patent analysis
+   - Evidence weighting
 
 ## Validation Dataset
 
@@ -86,12 +103,10 @@ The package includes a validation dataset with known nootropic compounds:
 ### Basic Usage
 
 ```python
-from binding_data_processor.processors.psychopharm.predictors.nootropic import (
-    NootropicPredictorEnhanced
-)
+from binding_data_processor.processors.psychopharm.predictors.nootropic import NootropicPredictor
 
 # Initialize predictor
-predictor = NootropicPredictorEnhanced(
+predictor = NootropicPredictor(
     model_dir="models/nootropic",
     cache_dir="cache",
 )
@@ -101,13 +116,22 @@ result = predictor.predict(compound)
 print(f"Mechanism: {result.value}")
 print(f"Confidence: {result.confidence:.2f}")
 
-# Get detailed predictions
-mechanisms = predictor.predict_mechanisms(compound)
-effects = predictor._predict_effects(compound)
-side_effects = predictor._predict_side_effects(compound)
+# Get supporting data
+print("\nBBB Data:")
+print(f"  Permeability: {result.supporting_data['bbb_prediction']['value']}")
+print(f"  Confidence: {result.supporting_data['bbb_prediction']['confidence']:.2f}")
 
-# Get prediction statistics
-stats = predictor.get_prediction_statistics()
+# Analyze effects
+for domain, effects in result.supporting_data['effects'].items():
+    print(f"\n{domain.title()} Effects:")
+    for effect, data in effects.items():
+        print(f"  {effect}: score={data['score']:.2f}, confidence={data['confidence']:.2f}")
+
+# Analyze side effects
+for category, effects in result.supporting_data['side_effects'].items():
+    print(f"\n{category.title()} Side Effects:")
+    for effect, data in effects.items():
+        print(f"  {effect}: risk={data['risk']:.2f}, confidence={data['confidence']:.2f}")
 ```
 
 ### Advanced Usage
@@ -128,33 +152,31 @@ side_effects = {
 }
 
 # Initialize with custom configuration
-predictor = NootropicPredictorEnhanced(
+predictor = NootropicPredictor(
     model_dir="models/nootropic",
     cache_dir="cache",
     cognitive_domains=domains,
     side_effects=side_effects,
-    bbb_model_dir="models/bbb",
+    device="cuda" if torch.cuda.is_available() else "cpu",
 )
 
-# Make predictions with BBB integration
-result = predictor.predict(compound)
-print(f"Mechanism: {result.value}")
-print(f"Confidence: {result.confidence:.2f}")
-print("\nBBB Data:")
-print(f"  Permeability: {result.supporting_data['bbb_prediction']['value']}")
-print(f"  Confidence: {result.supporting_data['bbb_prediction']['confidence']:.2f}")
+# Get feature importance
+importances = predictor.get_feature_importance()
+for feature_type, scores in importances.items():
+    print(f"\n{feature_type} Feature Importance:")
+    for feature, score in scores.items():
+        print(f"  {feature}: {score:.3f}")
 
-# Analyze effects by domain
-for domain, effects in result.supporting_data['effects'].items():
-    print(f"\n{domain.title()} Effects:")
-    for effect, data in effects.items():
-        print(f"  {effect}: score={data['score']:.2f}, confidence={data['confidence']:.2f}")
-
-# Analyze side effects
-for category, effects in result.supporting_data['side_effects'].items():
-    print(f"\n{category.title()} Side Effects:")
-    for effect, data in effects.items():
-        print(f"  {effect}: risk={data['risk']:.2f}, confidence={data['confidence']:.2f}")
+# Retrain models
+metrics = predictor.retrain(
+    compounds=training_compounds,
+    labels=mechanism_labels,
+    effects={"memory": {"working_memory": scores}},
+    mechanisms={"cholinergic": scores},
+)
+print("\nTraining Metrics:")
+for metric, value in metrics.items():
+    print(f"  {metric}: {value:.3f}")
 ```
 
 ## Development
@@ -186,7 +208,7 @@ pre-commit install
 pytest binding_data_processor/processors/psychopharm/predictors/nootropic/tests/
 
 # Run specific test class
-pytest binding_data_processor/processors/psychopharm/predictors/nootropic/tests/test_nootropic_enhanced.py::TestNootropicPredictorEnhanced
+pytest binding_data_processor/processors/psychopharm/predictors/nootropic/tests/test_nootropic.py::TestNootropicPredictor
 
 # Run with coverage
 pytest --cov=binding_data_processor.processors.psychopharm.predictors.nootropic tests/

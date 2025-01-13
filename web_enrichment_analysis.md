@@ -13,7 +13,25 @@
 - Data cleaning and extraction utilities
 
 ### Specialized Clients
-1. Swiss Client
+1. Patent Client (✓ Complete)
+   - Google Patents scraping with Crawl4AI ✓
+     * LLM-powered content extraction ✓
+     * Chemical structure recognition ✓
+     * Anti-bot detection avoidance ✓
+     * Screenshot capture ✓
+   - USPTO API integration ✓
+     * Direct API access ✓
+     * Rate limiting ✓
+     * Error handling ✓
+     * Data validation ✓
+   - Features ✓
+     * Structure search ✓
+     * Family lookup ✓
+     * Legal status tracking ✓
+     * Citation network analysis ✓
+     * Analytics ✓
+
+2. Swiss Client
    - SwissTargetPrediction integration
    - SwissADME integration
    - Result polling and validation

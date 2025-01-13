@@ -10,7 +10,7 @@ This module provides a client for accessing the PubChem API with:
 from typing import Dict, Any, Optional, List
 from urllib.parse import quote
 
-from ..web_enrichment.base_client import BaseWebClient
+from ..web_enrichment.clients.base_client import BaseWebClient
 from ..models.compound import Compound
 
 

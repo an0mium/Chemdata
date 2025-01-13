@@ -1,5 +1,30 @@
 # Codebase Status Analysis
 
+## Immediate Priorities
+
+### 0. Data Export (Highest Priority)
+1. Compound List Export
+   - Query BindingDB for compounds
+   - Collect protein/peptide data
+   - Validate structures and data
+   - Generate TSV output
+   - Add metadata and predictions
+
+### 1. Core Infrastructure (Next Highest Priority)
+1. Database Integration
+   - PostgreSQL setup ✓
+   - Schema design ✓
+   - Migration tools needed
+   - Query optimization needed
+   - Search capabilities needed
+
+2. Responsive Design
+   - Initial components added
+   - Mobile-first CSS needed
+   - Touch optimization needed
+   - Viewport optimization needed
+   - Performance tuning needed
+
 ## Core Components
 
 ### Data Models
@@ -21,7 +46,7 @@
 
 2. binding_data_processor/processors/
    - Status: Mixed integration
-   - Action: Consolidate psychopharm processors
+   - Action: Continue consolidating remaining psychopharm processors
    - Priority: High
 
 ### Web Components
@@ -35,33 +60,45 @@
    - Action: Add new data sources
    - Priority: Medium
 
-## Stranded Code
+## Completed Components ✓
 
-### 1. BBB Prediction
+### 1. BBB Prediction ✓
 Location: binding_data_processor/processors/psychopharm/predictors/bbb/
-Status: Partially integrated
+Status: Integrated ✓
 Value: High - Contains valuable ML models and validation
-Action: Integrate into main ML pipeline
+Action: Complete - Integrated into main ML pipeline ✓
 
-### 2. Psychopharm Analysis
-Location: binding_data_processor/processors/psychopharm/
-Status: Not integrated
+### 2. Nootropic Prediction ✓
+Location: binding_data_processor/processors/psychopharm/predictors/nootropic/
+Status: Integrated ✓
 Value: High - Contains specialized analysis tools
-Action: Move to appropriate modules
+Action: Complete - Consolidated with:
+- ✓ Enhanced functionality
+- ✓ BBB integration
+- ✓ Ensemble models
+- ✓ Web enrichment
+- ✓ Comprehensive tests
 
-### 3. Web Enrichment
-Location: web_enrichment/
-Status: Separate module
-Value: Medium - Contains useful utilities
-Action: Move to binding_data_processor/web_enrichment/
+### 3. Patent Integration ✓
+Location: binding_data_processor/web_enrichment/clients/patents/
+Status: Complete ✓
+Value: High - Provides patent search and analysis
+Features:
+- ✓ Google Patents scraping via Crawl4AI
+- ✓ USPTO API integration
+- ✓ LLM-powered content extraction
+- ✓ Chemical structure recognition
+- ✓ Patent family tracking
+- ✓ Citation network analysis
 
 ## Integration Priorities
 
 ### 1. High Priority
+- Export compound data
 - Consolidate compound models
-- Integrate BBB prediction
-- Merge psychopharm analysis
-- Standardize ML pipeline
+- Complete database integration
+- Implement responsive design
+- Continue psychopharm analysis integration
 
 ### 2. Medium Priority
 - Enhance web interface
@@ -82,9 +119,11 @@ Action: Move to binding_data_processor/web_enrichment/
 - binding_data_processor/pipeline/ml.py
 - binding_data_processor/pipeline/web.py
 - binding_data_processor/models/compound/base.py
+- binding_data_processor/processors/psychopharm/predictors/nootropic/ ✓
+- binding_data_processor/processors/psychopharm/predictors/bbb/ ✓
 
 ### 2. Stranded Files (Need Integration)
-- binding_data_processor/processors/psychopharm/**
+- binding_data_processor/processors/psychopharm/** (except nootropic/bbb)
 - web_enrichment/llm_utils.py
 - binding_data_processor/models/compound_*.py
 
@@ -99,17 +138,18 @@ Action: Move to binding_data_processor/web_enrichment/
 
 ## Next Steps
 
-### 1. Model Consolidation
+### 1. Data Export
+1. Set up data collection pipeline
+2. Implement validation checks
+3. Create export format
+4. Generate initial list
+5. Add to database
+
+### 2. Model Consolidation
 1. Move all compound models to models/compound/
 2. Update imports across codebase
 3. Remove duplicate files
 4. Add missing tests
-
-### 2. Pipeline Enhancement
-1. Integrate BBB prediction
-2. Add ChEMBL client
-3. Add PubChem client
-4. Enhance ML pipeline
 
 ### 3. Web Interface
 1. Add structure viewer
@@ -128,19 +168,20 @@ Action: Move to binding_data_processor/web_enrichment/
 ### 1. External APIs
 - ChEMBL API
 - PubChem API
-- Reddit API
-- Twitter API
+- Reddit API (80% complete)
+- Bluelight (70% complete)
 
 ### 2. ML Models
 - Binding prediction
 - Activity prediction
 - Safety prediction
-- BBB prediction
+- BBB prediction ✓
+- Nootropic prediction ✓
 
 ### 3. Web Services
 - Structure visualization
 - Chemical databases
-- Patent databases
+- Patent databases ✓
 - Literature sources
 
 ## Testing Requirements

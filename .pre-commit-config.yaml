@@ -30,13 +30,12 @@ repos:
     hooks:
     -   id: black
         language_version: python3.8
-        args: [--config=setup.cfg]
 
 -   repo: https://github.com/pycqa/isort
     rev: 5.12.0
     hooks:
     -   id: isort
-        args: [--settings-path=setup.cfg]
+        args: [--settings-path=pyproject.toml]
 
 -   repo: https://github.com/pycqa/flake8
     rev: 6.1.0
@@ -50,6 +49,7 @@ repos:
             - flake8-isort
             - flake8-quotes
             - flake8-string-format
+            - flake8-print
         args: [--config=setup.cfg]
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
@@ -63,7 +63,19 @@ repos:
             - types-tqdm
             - types-beautifulsoup4
             - types-python-dateutil
-        args: [--config-file=setup.cfg]
+        args: [
+            --config-file=pyproject.toml,
+            --ignore-missing-imports,
+            --disallow-untyped-defs,
+            --disallow-incomplete-defs,
+            --check-untyped-defs,
+            --disallow-untyped-decorators,
+            --no-implicit-optional,
+            --warn-redundant-casts,
+            --warn-unused-ignores,
+            --warn-return-any,
+            --strict-optional,
+        ]
 
 -   repo: https://github.com/PyCQA/bandit
     rev: 1.7.5
@@ -106,7 +118,10 @@ repos:
             "--cov=binding_data_processor",
             "--cov=web_enrichment",
             "--cov=web",
+            "--cov-report=term-missing",
             "--cov-fail-under=80",
+            "-v",
+            "tests/"
         ]
 
     -   id: check-large-files

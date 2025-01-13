@@ -3,11 +3,13 @@
 ## Overview
 
 The documentation strategy needs to cover:
-1. API Documentation
-2. User Guides
-3. Developer Guides
-4. Architecture Docs
-5. Examples & Tutorials
+1. Database Documentation (Highest Priority)
+2. Mobile Documentation (Highest Priority)
+3. API Documentation
+4. User Guides
+5. Developer Guides
+6. Architecture Docs
+7. Examples & Tutorials
 
 ## Current Structure
 
@@ -20,23 +22,155 @@ docs/
 
 ```
 docs/
+├── database/          # Database docs (Priority)
+│   ├── schema/       # DB schema
+│   ├── migrations/   # Migration docs
+│   └── maintenance/  # DB maintenance
+├── mobile/           # Mobile docs (Priority)
+│   ├── android/      # Android docs
+│   ├── ios/          # iOS docs
+│   └── web/          # Mobile web docs
 ├── api/
-│   ├── reference/     # API reference
-│   └── examples/      # API examples
+│   ├── reference/    # API reference
+│   └── examples/     # API examples
 ├── guides/
-│   ├── user/          # User guides
-│   └── developer/     # Developer guides
+│   ├── user/         # User guides
+│   └── developer/    # Developer guides
 ├── architecture/
-│   ├── overview/      # System overview
-│   └── details/       # Detailed design
+│   ├── overview/     # System overview
+│   └── details/      # Detailed design
 └── tutorials/
-    ├── basic/         # Basic tutorials
-    └── advanced/      # Advanced tutorials
+    ├── basic/        # Basic tutorials
+    └── advanced/     # Advanced tutorials
 ```
 
 ## Documentation Components
 
-### 1. API Documentation
+### 1. Database Documentation (Priority)
+
+```markdown
+# In docs/database/schema/overview.md
+
+# Database Schema
+
+## Overview
+
+The database uses a normalized schema design:
+
+```sql
+-- Compounds table
+CREATE TABLE compounds (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    smiles TEXT NOT NULL,
+    cas_number VARCHAR(50) UNIQUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Properties table
+CREATE TABLE properties (
+    id SERIAL PRIMARY KEY,
+    compound_id INTEGER REFERENCES compounds(id),
+    property_type VARCHAR(50) NOT NULL,
+    value TEXT NOT NULL,
+    source VARCHAR(100),
+    confidence FLOAT
+);
+```
+
+## Indexes
+
+```sql
+-- Compound lookup indexes
+CREATE INDEX idx_compounds_name ON compounds(name);
+CREATE INDEX idx_compounds_cas ON compounds(cas_number);
+
+-- Property lookup indexes
+CREATE INDEX idx_properties_compound ON properties(compound_id);
+CREATE INDEX idx_properties_type ON properties(property_type);
+```
+
+## Migrations
+
+See [Migration Guide](../migrations/guide.md) for:
+- Version history
+- Upgrade steps
+- Rollback procedures
+```
+
+### 2. Mobile Documentation (Priority)
+
+```markdown
+# In docs/mobile/overview.md
+
+# Mobile Applications
+
+## Overview
+
+The system provides three mobile interfaces:
+1. Native Android app
+2. Native iOS app
+3. Progressive Web App
+
+## Features
+
+### Offline Support
+
+```javascript
+// Service worker registration
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker
+        .register('/sw.js')
+        .then(registration => {
+            console.log('SW registered');
+        });
+}
+
+// Cache configuration
+const CACHE_NAME = 'chemdata-v1';
+const CACHE_URLS = [
+    '/',
+    '/index.html',
+    '/styles.css',
+    '/app.js'
+];
+```
+
+### Data Sync
+
+```kotlin
+// Android sync adapter
+class CompoundSyncAdapter : AbstractThreadedSyncAdapter {
+    override fun onPerformSync(
+        account: Account,
+        extras: Bundle,
+        authority: String,
+        provider: ContentProviderClient,
+        syncResult: SyncResult
+    ) {
+        // Sync logic
+    }
+}
+```
+
+### Push Notifications
+
+```swift
+// iOS notification handling
+class NotificationHandler: UNUserNotificationCenterDelegate {
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        // Notification logic
+    }
+}
+```
+```
+
+### 3. API Documentation
 
 ```python
 # In docs/api/reference/compound.py
@@ -95,213 +229,36 @@ def analyze_compound(
     """
     pass
 ```
-
-## Examples
-
-```python
-# Create compound
-compound = CompoundData(
-    name="Caffeine",
-    smiles="CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
-    cas_number="58-08-2"
-)
-
-# Analyze compound
-result = analyze_compound(compound)
-print(result.properties)
-```
 """
-```
-
-### 2. User Guides
-
-```markdown
-# In docs/guides/user/getting_started.md
-
-# Getting Started
-
-## Installation
-
-Install the package:
-
-```bash
-pip install binding-data-processor
-```
-
-## Basic Usage
-
-1. Create a compound:
-
-```python
-from binding_data_processor import CompoundData
-
-compound = CompoundData(
-    name="Caffeine",
-    smiles="CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
-    cas_number="58-08-2"
-)
-```
-
-2. Analyze properties:
-
-```python
-from binding_data_processor import analyze_compound
-
-result = analyze_compound(compound)
-print(result.properties)
-```
-
-3. Export data:
-
-```python
-from binding_data_processor import export_compounds
-
-export_compounds([compound], "compounds.tsv")
-```
-
-## Next Steps
-
-- Read the [API Reference](../api/reference/compound.md)
-- Try the [Tutorials](../tutorials/basic/first_steps.md)
-- Check the [Examples](../api/examples/basic.md)
-```
-
-### 3. Developer Guides
-
-```markdown
-# In docs/guides/developer/architecture.md
-
-# System Architecture
-
-## Overview
-
-The system consists of several key components:
-
-1. Data Processing Pipeline
-2. ML Models
-3. Web Interface
-4. API Layer
-
-## Components
-
-### Data Processing Pipeline
-
-```python
-class Pipeline:
-    def __init__(self):
-        self.processors = []
-        self.validators = []
-        
-    def process(self, data):
-        # Process data
-        pass
-```
-
-### ML Models
-
-```python
-class Model:
-    def __init__(self):
-        self.features = []
-        self.weights = []
-        
-    def predict(self, data):
-        # Make prediction
-        pass
-```
-
-## Integration
-
-Components interact through well-defined interfaces:
-
-1. Data flows from Pipeline to Models
-2. Models provide predictions to API
-3. API serves Web Interface
-
-## Extension
-
-Add new components by:
-
-1. Implementing interface
-2. Registering with system
-3. Adding configuration
-```
-
-### 4. Architecture Documentation
-
-```markdown
-# In docs/architecture/overview/system.md
-
-# System Architecture
-
-## Overview
-
-The system uses a layered architecture:
-
-```
-+----------------+
-|  Web Interface |
-+----------------+
-|      API       |
-+----------------+
-|  ML Pipeline   |
-+----------------+
-|     Data       |
-+----------------+
-```
-
-## Components
-
-### Data Layer
-
-- Database storage
-- File storage
-- Caching system
-
-### ML Pipeline
-
-- Data processing
-- Model training
-- Predictions
-
-### API Layer
-
-- REST endpoints
-- GraphQL interface
-- WebSocket updates
-
-### Web Interface
-
-- React components
-- Data visualization
-- User interaction
 ```
 
 ## Implementation Steps
 
-### Day 1: API Docs
-1. Document classes
+### Day 1: Database Docs (Priority)
+1. Document schema
+2. Document migrations
+3. Document maintenance
+4. Add examples
+5. Test procedures
+
+### Day 2: Mobile Docs (Priority)
+1. Document Android
+2. Document iOS
+3. Document web
+4. Add examples
+5. Test procedures
+
+### Day 3: Core Docs
+1. Document API
 2. Add examples
 3. Include types
 4. Test docs
 
-### Day 2: User Guides
+### Day 4: User Guides
 1. Write tutorials
 2. Add examples
 3. Include screenshots
 4. Test guides
-
-### Day 3: Developer Docs
-1. Document architecture
-2. Add patterns
-3. Include diagrams
-4. Test examples
-
-### Day 4: Architecture
-1. Document design
-2. Add rationale
-3. Include diagrams
-4. Test accuracy
 
 ### Day 5: Integration
 1. Link documents
@@ -311,39 +268,61 @@ The system uses a layered architecture:
 
 ## Validation Steps
 
-### 1. API Docs
+### 1. Database Docs (Priority)
+- [ ] Schema documented
+- [ ] Migrations documented
+- [ ] Maintenance documented
+- [ ] Examples included
+- [ ] Procedures tested
+
+### 2. Mobile Docs (Priority)
+- [ ] Android documented
+- [ ] iOS documented
+- [ ] Web documented
+- [ ] Examples included
+- [ ] Features covered
+
+### 3. API Docs
 - [ ] All classes documented
 - [ ] All methods documented
 - [ ] Examples included
 - [ ] Types specified
 
-### 2. User Guides
+### 4. User Guides
 - [ ] Clear tutorials
 - [ ] Good examples
 - [ ] Error handling
 - [ ] Troubleshooting
 
-### 3. Developer Docs
-- [ ] Architecture clear
-- [ ] Patterns explained
-- [ ] Examples working
-- [ ] Setup complete
-
 ## Success Criteria
 
-### 1. Completeness
+### 1. Database Coverage (Priority)
+- Complete schema docs
+- Migration guides
+- Maintenance procedures
+- Performance tips
+- Security guidelines
+
+### 2. Mobile Coverage (Priority)
+- Platform guides
+- Feature docs
+- API integration
+- Offline support
+- Push notifications
+
+### 3. Completeness
 - All features documented
 - Clear examples
 - Good coverage
 - Up to date
 
-### 2. Usability
+### 4. Usability
 - Easy to navigate
 - Clear structure
 - Good search
 - Fast access
 
-### 3. Maintainability
+### 5. Maintainability
 - Easy to update
 - Version controlled
 - Well organized
@@ -351,9 +330,9 @@ The system uses a layered architecture:
 
 ## Next Steps
 
-1. Set up tooling
-2. Write API docs
-3. Create guides
-4. Add tutorials
-5. Build examples
+1. Document database
+2. Document mobile
+3. Write API docs
+4. Create guides
+5. Add tutorials
 6. Test documentation

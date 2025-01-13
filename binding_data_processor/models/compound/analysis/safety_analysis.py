@@ -21,30 +21,39 @@ from ..types import (
 )
 
 
-@dataclass
-class SafetyAnalysisMixin:
-    """Mixin providing comprehensive safety analysis capabilities."""
+def default_safety_analysis() -> Dict:
+    """Default empty safety analysis dictionary."""
+    return {}
 
-    # Core safety data
-    _safety_analysis: Dict = field(default_factory=dict)
-    safety_alerts: Dict[str, RiskLevel] = field(default_factory=dict)
-    contraindications: Set[str] = field(default_factory=set)
-    interaction_risks: Dict[str, Tuple[str, RiskLevel]] = field(default_factory=dict)
-    
-    # Risk thresholds
-    risk_thresholds: Dict[str, float] = {
+
+def default_safety_alerts() -> Dict[str, RiskLevel]:
+    """Default empty safety alerts dictionary."""
+    return {}
+
+
+def default_contraindications() -> Set[str]:
+    """Default empty contraindications set."""
+    return set()
+
+
+def default_interaction_risks() -> Dict[str, Tuple[str, RiskLevel]]:
+    """Default empty interaction risks dictionary."""
+    return {}
+
+
+def default_risk_thresholds() -> Dict[str, float]:
+    """Default risk thresholds dictionary."""
+    return {
         "cardiotoxicity": 0.7,
-        "neurotoxicity": 0.6,
-        "hepatotoxicity": 0.8,
-        "nephrotoxicity": 0.8,
-        "respiratory": 0.7,
+        "neurotoxicity": 0.8,
+        "respiratory": 0.9,
         "addiction": 0.6,
-        "psychosis": 0.7,
-        "serotonin_syndrome": 0.8,
     }
-    
-    # Drug class interactions
-    interaction_matrix: Dict[str, Dict[str, RiskLevel]] = {
+
+
+def default_interaction_matrix() -> Dict[str, Dict[str, RiskLevel]]:
+    """Default interaction matrix with predefined drug interactions."""
+    return {
         "SSRI": {
             "MAOI": RiskLevel.SEVERE,
             "MDMA": RiskLevel.SEVERE,
@@ -53,24 +62,51 @@ class SafetyAnalysisMixin:
         },
         "MAOI": {
             "SSRI": RiskLevel.SEVERE,
-            "DRI": RiskLevel.SEVERE,
-            "TCA": RiskLevel.SEVERE,
-            "SRA": RiskLevel.SEVERE,
+            "MDMA": RiskLevel.SEVERE,
+            "DRI": RiskLevel.HIGH,
+            "TCA": RiskLevel.HIGH,
+            "Tryptamine": RiskLevel.SEVERE,
         },
         "DRI": {
+            "MAOI": RiskLevel.HIGH,
+            "SSRI": RiskLevel.HIGH,
+            "TCA": RiskLevel.MODERATE,
+        },
+        "TCA": {
+            "MAOI": RiskLevel.HIGH,
+            "SSRI": RiskLevel.HIGH,
+            "DRI": RiskLevel.MODERATE,
+        },
+        "MDMA": {
+            "MAOI": RiskLevel.SEVERE,
+            "SSRI": RiskLevel.SEVERE,
+            "DRI": RiskLevel.HIGH,
+        },
+        "Tryptamine": {
             "MAOI": RiskLevel.SEVERE,
             "SSRI": RiskLevel.HIGH,
-            "TCA": RiskLevel.HIGH,
-        },
-        "NMDA_antagonist": {
-            "CNS_depressant": RiskLevel.HIGH,
-            "respiratory_depressant": RiskLevel.SEVERE,
-        },
-        "CNS_depressant": {
-            "respiratory_depressant": RiskLevel.SEVERE,
-            "NMDA_antagonist": RiskLevel.HIGH,
         },
     }
+
+
+@dataclass
+class SafetyAnalyzer:
+    """Analyzer for compound safety data."""
+
+    # Core safety data
+    _safety_analysis: Dict = field(default_factory=default_safety_analysis)
+    safety_alerts: Dict[str, RiskLevel] = field(default_factory=default_safety_alerts)
+    contraindications: Set[str] = field(default_factory=default_contraindications)
+    interaction_risks: Dict[str, Tuple[str, RiskLevel]] = field(default_factory=default_interaction_risks)
+    risk_thresholds: Dict[str, float] = field(
+        default_factory=lambda: {
+            "cardiotoxicity": 0.7,
+            "neurotoxicity": 0.8,
+            "respiratory": 0.9,
+            "addiction": 0.6,
+        }
+    )
+    interaction_matrix: Dict[str, Dict[str, RiskLevel]] = field(default_factory=default_interaction_matrix)
 
     def analyze_safety(self) -> Dict:
         """Analyze safety data to identify risks and interactions."""
@@ -80,12 +116,10 @@ class SafetyAnalysisMixin:
             "safety_patterns": self._analyze_safety_patterns(),
             "interactions": self._analyze_interactions(),
             "contraindications": self._analyze_contraindications(),
-            
             # Psychopharm safety analysis
             "binding_risks": self._analyze_binding_risks(),
             "activity_risks": self._analyze_activity_risks(),
             "interaction_risks": self._analyze_interaction_risks(),
-            
             # Overall assessment
             "risk_assessment": self._analyze_risk_assessment(),
             "recommendations": self._generate_safety_recommendations(),
@@ -100,33 +134,39 @@ class SafetyAnalysisMixin:
         # Structure-based alerts
         if hasattr(self, "structural_alerts"):
             for alert in self.structural_alerts:
-                risks.append({
-                    "type": "structural",
-                    "alert": alert["description"],
-                    "severity": alert.get("severity", "unknown"),
-                    "confidence": alert.get("confidence", 0.5),
-                })
+                risks.append(
+                    {
+                        "type": "structural",
+                        "alert": alert["description"],
+                        "severity": alert.get("severity", "unknown"),
+                        "confidence": alert.get("confidence", 0.5),
+                    }
+                )
 
         # Target-based risks
         for target in self.targets:
             if "toxicity" in target.assay_details:
-                risks.append({
-                    "type": "target",
-                    "target": target.common_name,
-                    "risk": target.assay_details["toxicity"],
-                    "severity": target.assay_details.get("severity", "unknown"),
-                    "confidence": target.confidence,
-                })
+                risks.append(
+                    {
+                        "type": "target",
+                        "target": target.common_name,
+                        "risk": target.assay_details["toxicity"],
+                        "severity": target.assay_details.get("severity", "unknown"),
+                        "confidence": target.confidence,
+                    }
+                )
 
         # Known risks
         if hasattr(self, "safety_profile"):
             for risk in self.safety_profile.get("known_risks", []):
-                risks.append({
-                    "type": "known",
-                    "risk": risk["description"],
-                    "severity": risk.get("severity", "unknown"),
-                    "confidence": risk.get("confidence", 0.8),
-                })
+                risks.append(
+                    {
+                        "type": "known",
+                        "risk": risk["description"],
+                        "severity": risk.get("severity", "unknown"),
+                        "confidence": risk.get("confidence", 0.8),
+                    }
+                )
 
         return risks
 
@@ -156,12 +196,7 @@ class SafetyAnalysisMixin:
                 pattern = {
                     "type": alert_type,
                     "count": len(alerts),
-                    "severity": max(
-                        (a.get("severity", "unknown") for a in alerts),
-                        key=lambda s: RiskLevel[s.upper()].value
-                        if s.upper() in RiskLevel.__members__
-                        else 0
-                    ),
+                    "severity": max((a.get("severity", "unknown") for a in alerts), key=lambda s: RiskLevel[s.upper()].value if s.upper() in RiskLevel.__members__ else 0),
                     "confidence": sum(a.get("confidence", 0.5) for a in alerts) / len(alerts),
                 }
                 patterns.append(pattern)
@@ -188,10 +223,7 @@ class SafetyAnalysisMixin:
             pattern = {
                 "type": safety_type,
                 "count": len(targets),
-                "avg_affinity": sum(
-                    t.affinity_value for t in targets
-                    if t.affinity_value > 0
-                ) / len(targets),
+                "avg_affinity": sum(t.affinity_value for t in targets if t.affinity_value > 0) / len(targets),
                 "confidence": sum(t.confidence for t in targets) / len(targets),
             }
             patterns.append(pattern)
@@ -219,12 +251,7 @@ class SafetyAnalysisMixin:
             pattern = {
                 "type": int_type,
                 "count": len(interactions),
-                "severity": max(
-                    (i.get("severity", "unknown") for i in interactions),
-                    key=lambda s: RiskLevel[s.upper()].value
-                    if s.upper() in RiskLevel.__members__
-                    else 0
-                ),
+                "severity": max((i.get("severity", "unknown") for i in interactions), key=lambda s: RiskLevel[s.upper()].value if s.upper() in RiskLevel.__members__ else 0),
                 "confidence": sum(i.get("confidence", 0.5) for i in interactions) / len(interactions),
             }
             patterns.append(pattern)
@@ -235,7 +262,7 @@ class SafetyAnalysisMixin:
         """Analyze risks based on receptor binding patterns."""
         risks = {}
         max_risk = RiskLevel.UNKNOWN
-        
+
         # Check each receptor for risky binding patterns
         for receptor, (affinity, confidence, activity) in self.receptor_profiles.items():
             if affinity <= 100:  # Only consider strong binding
@@ -248,7 +275,7 @@ class SafetyAnalysisMixin:
                         "confidence": confidence,
                     }
                     max_risk = max(max_risk, RiskLevel.SEVERE)
-                    
+
                 elif "NMDA" in receptor and activity == "antagonist":
                     risks["neurotoxicity"] = {
                         "risk_level": RiskLevel.HIGH.value,
@@ -257,7 +284,7 @@ class SafetyAnalysisMixin:
                         "confidence": confidence,
                     }
                     max_risk = max(max_risk, RiskLevel.HIGH)
-                    
+
                 elif "D2" in receptor and activity == "agonist":
                     risks["addiction"] = {
                         "risk_level": RiskLevel.HIGH.value,
@@ -266,17 +293,17 @@ class SafetyAnalysisMixin:
                         "confidence": confidence,
                     }
                     max_risk = max(max_risk, RiskLevel.HIGH)
-                    
+
         if risks:
             risks["risk_level"] = max_risk.value
-            
+
         return risks
 
     def _analyze_activity_risks(self) -> Dict:
         """Analyze risks based on activity patterns."""
         risks = {}
         max_risk = RiskLevel.UNKNOWN
-        
+
         # Check psychoactive class risks
         if self.psychoactive_class != PsychoactiveClass.UNKNOWN:
             class_risks = {
@@ -293,7 +320,7 @@ class SafetyAnalysisMixin:
                     ("dependence", RiskLevel.HIGH),
                 ],
             }
-            
+
             if self.psychoactive_class in class_risks:
                 for risk_type, risk_level in class_risks[self.psychoactive_class]:
                     risks[risk_type] = {
@@ -301,7 +328,7 @@ class SafetyAnalysisMixin:
                         "mechanism": f"{self.psychoactive_class.value}_class",
                     }
                     max_risk = max(max_risk, risk_level)
-                    
+
         # Check mechanism-based risks
         for mechanism in self.nootropic_mechanisms:
             if mechanism == NootropicMechanism.GLUTAMATERGIC:
@@ -310,10 +337,10 @@ class SafetyAnalysisMixin:
                     "mechanism": "glutamate_modulation",
                 }
                 max_risk = max(max_risk, RiskLevel.MODERATE)
-                
+
         if risks:
             risks["risk_level"] = max_risk.value
-            
+
         return risks
 
     def _analyze_interactions(self) -> List[Dict]:
@@ -326,23 +353,27 @@ class SafetyAnalysisMixin:
                 continue
 
             for interaction in target.assay_details["interactions"]:
-                interactions.append({
-                    "type": "target",
-                    "target": target.common_name,
-                    "interaction": interaction["description"],
-                    "severity": interaction.get("severity", "unknown"),
-                    "confidence": target.confidence,
-                })
+                interactions.append(
+                    {
+                        "type": "target",
+                        "target": target.common_name,
+                        "interaction": interaction["description"],
+                        "severity": interaction.get("severity", "unknown"),
+                        "confidence": target.confidence,
+                    }
+                )
 
         # Known interactions
         if hasattr(self, "safety_profile"):
             for interaction in self.safety_profile.get("known_interactions", []):
-                interactions.append({
-                    "type": "known",
-                    "interaction": interaction["description"],
-                    "severity": interaction.get("severity", "unknown"),
-                    "confidence": interaction.get("confidence", 0.8),
-                })
+                interactions.append(
+                    {
+                        "type": "known",
+                        "interaction": interaction["description"],
+                        "severity": interaction.get("severity", "unknown"),
+                        "confidence": interaction.get("confidence", 0.8),
+                    }
+                )
 
         return interactions
 
@@ -356,30 +387,34 @@ class SafetyAnalysisMixin:
                 continue
 
             for ci in target.assay_details["contraindications"]:
-                contraindications.append({
-                    "type": "target",
-                    "target": target.common_name,
-                    "contraindication": ci["description"],
-                    "severity": ci.get("severity", "unknown"),
-                    "confidence": target.confidence,
-                })
+                contraindications.append(
+                    {
+                        "type": "target",
+                        "target": target.common_name,
+                        "contraindication": ci["description"],
+                        "severity": ci.get("severity", "unknown"),
+                        "confidence": target.confidence,
+                    }
+                )
 
         # Known contraindications
         if hasattr(self, "safety_profile"):
             for ci in self.safety_profile.get("contraindications", []):
-                contraindications.append({
-                    "type": "known",
-                    "contraindication": ci["description"],
-                    "severity": ci.get("severity", "unknown"),
-                    "confidence": ci.get("confidence", 0.8),
-                })
+                contraindications.append(
+                    {
+                        "type": "known",
+                        "contraindication": ci["description"],
+                        "severity": ci.get("severity", "unknown"),
+                        "confidence": ci.get("confidence", 0.8),
+                    }
+                )
 
         return contraindications
 
     def _get_drug_classes(self) -> Set[str]:
         """Determine compound's drug classes based on receptor profiles."""
         drug_classes = set()
-        
+
         # Define class detection rules
         class_rules = {
             "SSRI": lambda r: r.startswith("SERT"),
@@ -388,22 +423,22 @@ class SafetyAnalysisMixin:
             "NMDA_antagonist": lambda r: r.startswith("NMDA"),
             "CNS_depressant": lambda r: r.startswith("GABA"),
         }
-        
+
         # Apply rules to receptor profiles
         for class_name, rule in class_rules.items():
             if any(rule(r) for r in self.receptor_profiles):
                 drug_classes.add(class_name)
-                
+
         return drug_classes
 
     def _analyze_interaction_risks(self) -> Dict:
         """Analyze potential drug interaction risks."""
         risks = {}
         max_risk = RiskLevel.UNKNOWN
-        
+
         # Get compound's drug classes
         drug_classes = self._get_drug_classes()
-            
+
         # Analyze interactions for each drug class
         for drug_class in drug_classes:
             if drug_class in self.interaction_matrix:
@@ -414,16 +449,16 @@ class SafetyAnalysisMixin:
                         "mechanism": f"{drug_class}_{target}_interaction",
                     }
                     max_risk = max(max_risk, risk_level)
-                    
+
                 if class_risks:
                     risks[drug_class] = {
                         "interactions": class_risks,
                         "risk_level": max_risk.value,
                     }
-                    
+
         if risks:
             risks["risk_level"] = max_risk.value
-            
+
         return risks
 
     def _analyze_risk_assessment(self) -> Dict:
@@ -440,11 +475,7 @@ class SafetyAnalysisMixin:
 
         # Structural risks
         if hasattr(self, "structural_alerts"):
-            risks.extend(
-                RiskLevel[a.get("severity", "UNKNOWN").upper()].value
-                for a in self.structural_alerts
-                if a.get("severity", "").upper() in RiskLevel.__members__
-            )
+            risks.extend(RiskLevel[a.get("severity", "UNKNOWN").upper()].value for a in self.structural_alerts if a.get("severity", "").upper() in RiskLevel.__members__)
 
         # Target risks
         for target in self.targets:
@@ -456,9 +487,7 @@ class SafetyAnalysisMixin:
         # Known risks
         if hasattr(self, "safety_profile"):
             risks.extend(
-                RiskLevel[r.get("severity", "UNKNOWN").upper()].value
-                for r in self.safety_profile.get("known_risks", [])
-                if r.get("severity", "").upper() in RiskLevel.__members__
+                RiskLevel[r.get("severity", "UNKNOWN").upper()].value for r in self.safety_profile.get("known_risks", []) if r.get("severity", "").upper() in RiskLevel.__members__
             )
 
         if not risks:
@@ -483,34 +512,40 @@ class SafetyAnalysisMixin:
         # Structural risk factors
         if hasattr(self, "structural_alerts"):
             for alert in self.structural_alerts:
-                factors.append({
-                    "type": "structural",
-                    "factor": alert["description"],
-                    "severity": alert.get("severity", "unknown"),
-                    "confidence": alert.get("confidence", 0.5),
-                })
+                factors.append(
+                    {
+                        "type": "structural",
+                        "factor": alert["description"],
+                        "severity": alert.get("severity", "unknown"),
+                        "confidence": alert.get("confidence", 0.5),
+                    }
+                )
 
         # Target risk factors
         for target in self.targets:
             if "risk_factors" in target.assay_details:
                 for factor in target.assay_details["risk_factors"]:
-                    factors.append({
-                        "type": "target",
-                        "target": target.common_name,
-                        "factor": factor["description"],
-                        "severity": factor.get("severity", "unknown"),
-                        "confidence": target.confidence,
-                    })
+                    factors.append(
+                        {
+                            "type": "target",
+                            "target": target.common_name,
+                            "factor": factor["description"],
+                            "severity": factor.get("severity", "unknown"),
+                            "confidence": target.confidence,
+                        }
+                    )
 
         # Known risk factors
         if hasattr(self, "safety_profile"):
             for factor in self.safety_profile.get("risk_factors", []):
-                factors.append({
-                    "type": "known",
-                    "factor": factor["description"],
-                    "severity": factor.get("severity", "unknown"),
-                    "confidence": factor.get("confidence", 0.8),
-                })
+                factors.append(
+                    {
+                        "type": "known",
+                        "factor": factor["description"],
+                        "severity": factor.get("severity", "unknown"),
+                        "confidence": factor.get("confidence", 0.8),
+                    }
+                )
 
         return factors
 
@@ -522,23 +557,27 @@ class SafetyAnalysisMixin:
         for target in self.targets:
             if "risk_mitigation" in target.assay_details:
                 for strategy in target.assay_details["risk_mitigation"]:
-                    strategies.append({
-                        "type": "target",
-                        "target": target.common_name,
-                        "strategy": strategy["description"],
-                        "effectiveness": strategy.get("effectiveness", "unknown"),
-                        "confidence": target.confidence,
-                    })
+                    strategies.append(
+                        {
+                            "type": "target",
+                            "target": target.common_name,
+                            "strategy": strategy["description"],
+                            "effectiveness": strategy.get("effectiveness", "unknown"),
+                            "confidence": target.confidence,
+                        }
+                    )
 
         # Known strategies
         if hasattr(self, "safety_profile"):
             for strategy in self.safety_profile.get("risk_mitigation", []):
-                strategies.append({
-                    "type": "known",
-                    "strategy": strategy["description"],
-                    "effectiveness": strategy.get("effectiveness", "unknown"),
-                    "confidence": strategy.get("confidence", 0.8),
-                })
+                strategies.append(
+                    {
+                        "type": "known",
+                        "strategy": strategy["description"],
+                        "effectiveness": strategy.get("effectiveness", "unknown"),
+                        "confidence": strategy.get("confidence", 0.8),
+                    }
+                )
 
         return strategies
 
@@ -562,29 +601,25 @@ class SafetyAnalysisMixin:
                 "monitoring": ["Regular assessment of dependence risk"],
             },
         }
-        
+
         return risk_recommendations.get(risk_type, {})
 
     def _analyze_risk_patterns(self, risks: Dict) -> List[str]:
         """Analyze patterns in risk data using numpy."""
         if not risks:
             return []
-            
+
         # Convert risk levels to numerical scores
-        risk_scores = [
-            RiskLevel[risk["risk_level"].upper()].value
-            for risk in risks.values()
-            if "risk_level" in risk
-        ]
-        
+        risk_scores = [RiskLevel[risk["risk_level"].upper()].value for risk in risks.values() if "risk_level" in risk]
+
         if not risk_scores:
             return []
-            
+
         # Calculate risk statistics
         mean_risk = np.mean(risk_scores)
         std_risk = np.std(risk_scores)
         max_risk = np.max(risk_scores)
-        
+
         # Generate insights
         insights = []
         if max_risk >= RiskLevel.SEVERE.value:
@@ -593,97 +628,68 @@ class SafetyAnalysisMixin:
             insights.append("Overall high risk profile")
         if std_risk < 1.0 and mean_risk > RiskLevel.MODERATE.value:
             insights.append("Consistently high risk across multiple domains")
-            
+
         return insights
 
-    def _process_risk_recommendations(
-        self,
-        risks: Dict,
-        valid_types: Set[str],
-        recommendations: Dict[str, List[str]]
-    ) -> None:
+    def _process_risk_recommendations(self, risks: Dict, valid_types: Set[str], recommendations: Dict[str, List[str]]) -> None:
         """Process recommendations for given risks."""
         if not risks:
             return
-            
+
         for risk_type in risks:
             if risk_type in valid_types:
                 risk_recs = self._get_risk_recommendations(risk_type)
                 for category, recs in risk_recs.items():
                     recommendations[category].extend(recs)
 
-    def _process_interaction_recommendations(
-        self,
-        interaction_risks: Dict,
-        recommendations: Dict[str, List[str]]
-    ) -> None:
+    def _process_interaction_recommendations(self, interaction_risks: Dict, recommendations: Dict[str, List[str]]) -> None:
         """Process recommendations for interaction risks."""
         if not interaction_risks:
             return
-            
+
         for drug_class, data in interaction_risks.items():
             if "interactions" in data:
                 for target, risk in data["interactions"].items():
                     if risk["risk_level"] == RiskLevel.SEVERE.value:
-                        recommendations["contraindications"].append(
-                            f"Contraindicated with {target}"
-                        )
+                        recommendations["contraindications"].append(f"Contraindicated with {target}")
                     elif risk["risk_level"] == RiskLevel.HIGH.value:
-                        recommendations["precautions"].append(
-                            f"Use with extreme caution with {target}"
-                        )
+                        recommendations["precautions"].append(f"Use with extreme caution with {target}")
 
     def _generate_safety_recommendations(self) -> Dict:
         """Generate safety recommendations based on risk analysis."""
         recommendations = defaultdict(list)
-        
+
         # Process binding risks
         binding_risks = self._analyze_binding_risks()
-        self._process_risk_recommendations(
-            binding_risks,
-            {"cardiotoxicity", "neurotoxicity"},
-            recommendations
-        )
-        
+        self._process_risk_recommendations(binding_risks, {"cardiotoxicity", "neurotoxicity"}, recommendations)
+
         # Process activity risks
         activity_risks = self._analyze_activity_risks()
-        self._process_risk_recommendations(
-            activity_risks,
-            {"respiratory", "addiction"},
-            recommendations
-        )
-        
+        self._process_risk_recommendations(activity_risks, {"respiratory", "addiction"}, recommendations)
+
         # Process interaction risks
         interaction_risks = self._analyze_interaction_risks()
         self._process_interaction_recommendations(interaction_risks, recommendations)
-        
+
         # Add risk pattern insights
-        risk_patterns = self._analyze_risk_patterns({
-            **binding_risks,
-            **activity_risks,
-            **(interaction_risks.get("interactions", {}))
-        })
+        risk_patterns = self._analyze_risk_patterns({**binding_risks, **activity_risks, **(interaction_risks.get("interactions", {}))})
         if risk_patterns:
             recommendations["risk_patterns"] = risk_patterns
-            
+
         return dict(recommendations)
 
-    def merge_safety_data(self, other: "SafetyAnalysisMixin") -> None:
+    def merge_safety_data(self, other: "SafetyAnalyzer") -> None:
         """Merge safety data from another instance."""
         # Merge alerts with highest risk level
         for alert, level in other.safety_alerts.items():
             if alert not in self.safety_alerts:
                 self.safety_alerts[alert] = level
             else:
-                self.safety_alerts[alert] = max(
-                    self.safety_alerts[alert],
-                    level,
-                    key=lambda x: x.value
-                )
-                
+                self.safety_alerts[alert] = max(self.safety_alerts[alert], level, key=lambda x: x.value)
+
         # Merge contraindications
         self.contraindications.update(other.contraindications)
-        
+
         # Merge interaction risks with highest risk level
         for drug, (mechanism, level) in other.interaction_risks.items():
             if drug not in self.interaction_risks:

@@ -41,7 +41,7 @@ from ..processors.structure.ml.models.ensemble import EnsembleModel
 @dataclass
 class ModelConfig:
     """ML model configuration."""
-    
+
     # Model paths
     receptor_model: str = "models/receptor"
     psychoactive_model: str = "models/psychoactive"
@@ -49,16 +49,16 @@ class ModelConfig:
     abuse_model: str = "models/abuse"
     toxicity_model: str = "models/toxicity"
     bbb_model: str = "models/bbb"
-    
+
     # Pipeline models
     text_classifier: str = "models/pipeline/compound_classifier"
     activity_classifier: str = "models/pipeline/activity_classifier"
     safety_classifier: str = "models/pipeline/safety_classifier"
     mechanism_classifier: str = "models/pipeline/mechanism_classifier"
-    
+
     # Transformer models
     similarity_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    
+
     # Prediction settings
     confidence_threshold: float = 0.5
     batch_size: int = 32
@@ -69,19 +69,19 @@ class ModelConfig:
 @dataclass
 class PredictionStats:
     """ML prediction statistics."""
-    
+
     # Prediction counts
     total_predictions: int = 0
     successful_predictions: int = 0
     failed_predictions: int = 0
     cached_predictions: int = 0
-    
+
     # Model stats
     model_stats: Dict[str, Dict[str, float]] = field(default_factory=dict)
-    
+
     # Error tracking
     errors: List[Dict[str, Any]] = field(default_factory=list)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert stats to dictionary format."""
         return {
@@ -95,7 +95,7 @@ class PredictionStats:
             "models": self.model_stats,
             "errors": self.errors,
         }
-    
+
     def _get_success_rate(self) -> Optional[float]:
         """Get prediction success rate."""
         if not self.total_predictions:
@@ -113,7 +113,7 @@ class MLManager:
         config: Optional[ModelConfig] = None,
     ):
         """Initialize ML manager.
-        
+
         Args:
             model_dir: Directory containing ML models
             cache_dir: Optional directory for caching
@@ -123,13 +123,13 @@ class MLManager:
         self.model_dir = Path(model_dir)
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.config = config or ModelConfig()
-        
+
         # Initialize models
         self._init_models()
-        
+
         # Initialize cache
         self._prediction_cache: Dict[str, Dict] = {}
-        
+
         # Initialize stats
         self.stats = PredictionStats()
 
@@ -163,36 +163,38 @@ class MLManager:
                     device=self.config.device,
                 ),
             }
-            
+
             # Pipeline models
             self.pipelines = {
                 "text": pipeline(
                     "text-classification",
                     model=self.model_dir / self.config.text_classifier,
                     device=self.config.device,
+                    from_pt=True,
                 ),
                 "activity": pipeline(
                     "text-classification",
                     model=self.model_dir / self.config.activity_classifier,
                     device=self.config.device,
+                    from_pt=True,
                 ),
                 "safety": pipeline(
                     "text-classification",
                     model=self.model_dir / self.config.safety_classifier,
                     device=self.config.device,
+                    from_pt=True,
                 ),
                 "mechanism": pipeline(
                     "text-classification",
                     model=self.model_dir / self.config.mechanism_classifier,
                     device=self.config.device,
+                    from_pt=True,
                 ),
             }
-            
+
             # Transformer models
-            self.similarity_model = SentenceTransformer(
-                self.config.similarity_model
-            ).to(self.config.device)
-            
+            self.similarity_model = SentenceTransformer(self.config.similarity_model).to(self.config.device)
+
             # Ensemble models
             self.ensembles = {
                 "activity": EnsembleModel(
@@ -210,9 +212,9 @@ class MLManager:
                     weights=[0.5, 0.5],
                 ),
             }
-            
+
             self.logger.info("Successfully initialized ML models")
-            
+
         except Exception as e:
             self.logger.error(f"Failed to initialize ML models: {str(e)}")
             raise
@@ -223,24 +225,24 @@ class MLManager:
         use_cache: Optional[bool] = None,
     ) -> CompoundData:
         """Generate predictions for a compound.
-        
+
         Args:
             compound: CompoundData instance to generate predictions for
             use_cache: Whether to use prediction cache
-            
+
         Returns:
             CompoundData with predictions
         """
         try:
             self.stats.total_predictions += 1
-            
+
             # Check cache
-            if (use_cache if use_cache is not None else self.config.use_cache):
+            if use_cache if use_cache is not None else self.config.use_cache:
                 cached = self._get_cached_predictions(compound)
                 if cached:
                     self.stats.cached_predictions += 1
                     return self._apply_cached_predictions(compound, cached)
-            
+
             # Run base predictions
             for name, predictor in self.predictors.items():
                 try:
@@ -248,15 +250,15 @@ class MLManager:
                     compound.set_prediction(name, result)
                     self._update_model_stats(name, result)
                 except Exception as e:
-                    self.logger.error(
-                        f"Failed to run {name} prediction: {str(e)}"
+                    self.logger.error(f"Failed to run {name} prediction: {str(e)}")
+                    self.stats.errors.append(
+                        {
+                            "type": f"{name}_prediction_error",
+                            "compound": compound.name,
+                            "error": str(e),
+                        }
                     )
-                    self.stats.errors.append({
-                        "type": f"{name}_prediction_error",
-                        "compound": compound.name,
-                        "error": str(e),
-                    })
-            
+
             # Run ensemble predictions
             for name, ensemble in self.ensembles.items():
                 try:
@@ -264,32 +266,32 @@ class MLManager:
                     compound.set_prediction(f"{name}_ensemble", result)
                     self._update_model_stats(f"{name}_ensemble", result)
                 except Exception as e:
-                    self.logger.error(
-                        f"Failed to run {name} ensemble: {str(e)}"
+                    self.logger.error(f"Failed to run {name} ensemble: {str(e)}")
+                    self.stats.errors.append(
+                        {
+                            "type": f"{name}_ensemble_error",
+                            "compound": compound.name,
+                            "error": str(e),
+                        }
                     )
-                    self.stats.errors.append({
-                        "type": f"{name}_ensemble_error",
-                        "compound": compound.name,
-                        "error": str(e),
-                    })
-            
+
             # Cache predictions
             if self.config.use_cache:
                 self._cache_predictions(compound)
-            
+
             self.stats.successful_predictions += 1
             return compound
-            
+
         except Exception as e:
-            self.logger.error(
-                f"Failed to generate predictions for {compound.name}: {str(e)}"
-            )
+            self.logger.error(f"Failed to generate predictions for {compound.name}: {str(e)}")
             self.stats.failed_predictions += 1
-            self.stats.errors.append({
-                "type": "prediction_error",
-                "compound": compound.name,
-                "error": str(e),
-            })
+            self.stats.errors.append(
+                {
+                    "type": "prediction_error",
+                    "compound": compound.name,
+                    "error": str(e),
+                }
+            )
             raise
 
     def _get_cached_predictions(
@@ -328,7 +330,7 @@ class MLManager:
                 "confidence_sum": 0,
                 "high_confidence": 0,
             }
-        
+
         stats = self.stats.model_stats[model]
         stats["total"] += 1
         stats["confidence_sum"] += result.get("confidence", 0)
@@ -338,18 +340,18 @@ class MLManager:
     def get_model_versions(self) -> Dict[str, str]:
         """Get model version information."""
         versions = {}
-        
+
         # Base predictors
         for name, predictor in self.predictors.items():
             versions[name] = predictor.version
-        
+
         # Pipeline models
         for name, pipeline in self.pipelines.items():
             versions[f"{name}_pipeline"] = pipeline.model.config.version
-        
+
         # Transformer models
         versions["similarity"] = self.similarity_model.get_version()
-        
+
         return versions
 
     def clear_cache(self) -> None:

@@ -90,6 +90,43 @@ def test_basic_prediction(
         assert 0 <= confidence <= 1
 
 
+def test_pytorch_weight_loading(
+    tmp_path: Path,
+    test_compounds: List[CompoundData],
+):
+    """Test loading PyTorch weights when TensorFlow models aren't found."""
+    # Create predictor with from_pt=True
+    predictor = BBBPermeabilityPredictor(
+        model_dir=str(tmp_path / "models"),
+        cache_dir=str(tmp_path / "cache"),
+        log_level=logging.DEBUG,
+        from_pt=True,
+    )
+
+    # Train predictor (this will save PyTorch weights)
+    predictor.train(test_compounds[:2], [1.0, 0.9])
+    predictor.train(test_compounds[2:], [0.1, 0.1])
+
+    # Create new predictor and load PyTorch weights
+    new_predictor = BBBPermeabilityPredictor(
+        model_dir=str(tmp_path / "models"),
+        cache_dir=str(tmp_path / "new_cache"),
+        from_pt=True,
+    )
+
+    # Compare predictions
+    for compound in test_compounds:
+        score1, conf1 = predictor.predict(compound)
+        score2, conf2 = new_predictor.predict(compound)
+        assert abs(score1 - score2) < 1e-6
+        assert abs(conf1 - conf2) < 1e-6
+
+        mech1 = predictor.predict_mechanisms(compound)
+        mech2 = new_predictor.predict_mechanisms(compound)
+        assert set(mech1.keys()) == set(mech2.keys())
+        assert all(abs(mech1[k] - mech2[k]) < 1e-6 for k in mech1)
+
+
 def test_mechanism_prediction(
     bbb_predictor: BBBPermeabilityPredictor,
     test_compounds: List[CompoundData],

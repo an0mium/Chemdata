@@ -9,7 +9,7 @@ from rdkit.Chem import (
     AllChem,
     Descriptors,
     rdMolDescriptors,
-    rdDecomposition,
+    Scaffolds,
 )
 
 from .base import MLProcessor
@@ -24,8 +24,8 @@ class DescriptorGenerator(MLProcessor):
             "description": "Basic molecular properties",
             "functions": [
                 (Descriptors.ExactMolWt, "molecular_weight"),
-                (Descriptors.NumAtoms, "num_atoms"),
-                (Descriptors.NumBonds, "num_bonds"),
+                (rdMolDescriptors.CalcNumAtoms, "num_atoms"),
+                (lambda mol: mol.GetNumBonds(), "num_bonds"),
                 (Descriptors.NumRotatableBonds, "num_rotatable_bonds"),
                 (Descriptors.NumHAcceptors, "num_h_acceptors"),
                 (Descriptors.NumHDonors, "num_h_donors"),
@@ -78,7 +78,7 @@ class DescriptorGenerator(MLProcessor):
             "functions": [
                 (rdMolDescriptors.CalcNumSpiroAtoms, "num_spiro_atoms"),
                 (rdMolDescriptors.CalcNumBridgeheadAtoms, "num_bridgehead_atoms"),
-                (rdDecomposition.GetScaffoldForMol, "scaffold"),
+                (Scaffolds.MurckoScaffold.GetScaffoldForMol, "scaffold"),
             ],
         },
     }
@@ -117,13 +117,9 @@ class DescriptorGenerator(MLProcessor):
         self.descriptors = {}
         for desc_type in self.descriptor_types:
             if desc_type in self.DESCRIPTOR_TYPES:
-                if not self.include_3d and self.DESCRIPTOR_TYPES[desc_type].get(
-                    "requires_3d", False
-                ):
+                if not self.include_3d and self.DESCRIPTOR_TYPES[desc_type].get("requires_3d", False):
                     continue
-                self.descriptors[desc_type] = self.DESCRIPTOR_TYPES[desc_type][
-                    "functions"
-                ]
+                self.descriptors[desc_type] = self.DESCRIPTOR_TYPES[desc_type]["functions"]
 
     def generate(
         self,
@@ -158,15 +154,11 @@ class DescriptorGenerator(MLProcessor):
                                     else:
                                         values.append(0.0)
                                 except Exception as e:
-                                    self.logger.debug(
-                                        f"Error calculating descriptor {func.__name__}: {str(e)}"
-                                    )
+                                    self.logger.debug(f"Error calculating descriptor {func.__name__}: {str(e)}")
                                     values.append(0.0)
                             desc_values.append(values)
                         except Exception as e:
-                            self.logger.debug(
-                                f"Error processing molecule for {desc_type}: {str(e)}"
-                            )
+                            self.logger.debug(f"Error processing molecule for {desc_type}: {str(e)}")
                             desc_values.append([0.0] * len(self.descriptors[desc_type]))
                     descriptors[desc_type] = np.array(desc_values)
 
@@ -183,13 +175,8 @@ class DescriptorGenerator(MLProcessor):
             if desc_type in self.DESCRIPTOR_TYPES:
                 info[desc_type] = {
                     "description": self.DESCRIPTOR_TYPES[desc_type]["description"],
-                    "names": [
-                        name
-                        for _, name in self.DESCRIPTOR_TYPES[desc_type]["functions"]
-                    ],
-                    "requires_3d": self.DESCRIPTOR_TYPES[desc_type].get(
-                        "requires_3d", False
-                    ),
+                    "names": [name for _, name in self.DESCRIPTOR_TYPES[desc_type]["functions"]],
+                    "requires_3d": self.DESCRIPTOR_TYPES[desc_type].get("requires_3d", False),
                 }
         return info
 

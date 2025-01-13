@@ -3,197 +3,275 @@
 ## Overview
 
 This roadmap integrates the enhancement plans for:
-1. Document Processing (New Priority)
-2. Community Integration
-3. ML Pipeline
-4. Web Interface
-5. Data Source Integration
+0. Export Data (Highest Priority)
+1. Database Integration (Next Highest Priority)
+2. Responsive Web Design (Next Highest Priority)
+3. Document Processing Completion
+4. Biomolecule Support
+5. Community Integration Enhancement
+6. Web Interface Enhancement
 
-## Phase 1: Document Processing (New Priority)
+## Recent Completions ✓
 
-### Week 1-2: Core Implementation (80% Complete)
-1. PDF Processing ✓
-   - Text extraction working ✓
-   - Structure recognition working ✓
-   - Directory monitoring working ✓
-   - Processing pipeline working ✓
+### 1. Data Source Integration ✓
+- ✓ Patent integration complete:
+  * Google Patents scraping via Crawl4AI
+  * USPTO API integration
+  * Structure search and family tracking
+  * Citation network analysis
+  * Legal status monitoring
+- ✓ Scientific sources complete:
+  * BindingDB integration
+  * ChEMBL API integration
+  * PubChem integration
+  * PubMed integration
+  * Swiss* services
 
-2. Web Interface (40% Complete)
-   - Upload endpoints working ✓
-   - Directory config working ✓
-   - Batch upload UI needed
-   - Progress tracking needed
-   - Status dashboard needed
+### 2. ML Pipeline Consolidation ✓
+- ✓ BBB predictor enhanced with:
+  * Web enrichment integration
+  * Improved accuracy
+  * Better validation
+  * Comprehensive tests
+- ✓ Nootropic predictor enhanced with:
+  * BBB integration
+  * Ensemble models
+  * Web enrichment
+  * Comprehensive tests
+- ✓ Toxicity predictor enhanced with:
+  * Ensemble models
+  * BBB integration
+  * Calibrated predictions
+  * Uncertainty estimation
 
-3. Integration Features
-   - Bulk upload support needed
-   - Directory watching UI needed
-   - Processing queue needed
-   - Result visualization needed
+## In Progress Components
 
-### Week 3-4: Document Types
-1. PDF Support ✓
-   - Text extraction working ✓
-   - Structure recognition working ✓
-   - Metadata extraction working ✓
-   - Error handling working ✓
+### 1. Community Integration (75% Complete)
+- Reddit Integration (80% Complete) ✓
+  * OAuth flow working
+  * Token management working
+  * Rate limiting working
+  * Content monitoring working
+  * Dashboard needed
+  * Alert notifications needed
+- Bluelight Integration (70% Complete) ✓
+  * Web scraping working
+  * Content extraction working
+  * Safety monitoring working
+  * Dashboard needed
+  * Error recovery needed
 
-2. Additional Formats
-   - Word document support planned
-   - HTML/XML support planned
-   - Text file support planned
-   - Format conversion planned
+### 2. Document Processing (80% Complete)
+- Core Implementation (80% Complete) ✓
+  * Text extraction working
+  * Structure recognition working
+  * Directory monitoring working
+  * Processing pipeline working
+- Web Interface (40% Complete)
+  * Upload endpoints working
+  * Directory config working
+  * Batch upload UI needed
+  * Progress tracking needed
+  * Status dashboard needed
 
-## Phase 2: Community Integration (80% Complete)
+### 3. Database Integration
+- ✓ PostgreSQL setup complete
+- ✓ Schema design implemented
+- Schema verification needed
+- Migration tools needed
+- Query optimization needed
+- Search capabilities needed
+- Export functionality needed
+- Batch processing needed
 
-### Week 1-2: Reddit Integration (80% Complete) ✓
-1. OAuth Setup ✓
-   - OAuth flow implemented ✓
-   - Token management working ✓
-   - Error handling working ✓
-   - Rate limiting working ✓
+### 4. Responsive Design
+- Initial components added
+- Mobile-first CSS needed
+- Touch optimization needed
+- Viewport optimization needed
+- Performance tuning needed
+- Cross-browser testing needed
 
-2. Content Monitoring ✓
-   - Subreddit tracking working ✓
-   - Post analysis working ✓
-   - Comment extraction working ✓
-   - Trend detection working ✓
+## Next Phase Timeline
 
-### Week 3-4: Bluelight Integration (70% Complete) ✓
-1. Web Scraping ✓
-   - Crawler implemented ✓
-   - Content extraction working ✓
-   - Error handling working ✓
-   - Rate limiting working ✓
+### Week 0: Data Export (Highest Priority)
+1. Data Collection
+   - Query BindingDB for compounds:
+     * 5-HT2 agonists
+     * NMDA antagonists
+     * Anti-addictive agents
+     * Physical enhancement compounds
+     * Longevity enhancement compounds
+     * Documented recreational/nootropic compounds
+   - Collect protein/peptide data:
+     * Follistatin variants
+     * alpha-Klotho
+     * Myoglobin/Hemoglobin
+     * Profilin
+     * Apolipoproteins
+     * Structural proteins
+   - Basic biomolecules:
+     * Creatinine
+     * Creatine
+     * ATP
 
-2. Content Analysis ✓
-   - Text analysis working ✓
-   - Sentiment analysis working ✓
-   - Topic modeling working ✓
-   - Safety monitoring working ✓
+2. Data Validation
+   - Verify CAS numbers
+   - Validate structures
+   - Check completeness
+   - Ensure accuracy
+   - Cross-reference sources
 
-## Phase 3: ML Pipeline Enhancement
+3. Export Generation
+   - Compile complete list
+   - Format TSV output
+   - Include all identifiers
+   - Add available metadata
+   - Add prediction data
 
-### Week 1-2: Core ML
-1. Model Architecture
-   - Add uncertainty estimation
-   - Implement calibration
-   - Add interpretability
+### Week 1: Database Integration (Next Highest Priority)
+1. Schema Completion
+   - Verify current schema
+   - Add missing tables
+   - Optimize indexes
+   - Add constraints
+   - Add validation
 
-2. Feature Engineering
-   - Enhance fingerprints
-   - Add pharmacophores
-   - Improve embeddings
+2. Tools Development
+   - Migration system
+   - Query optimization
+   - Search capabilities
+   - Export pipeline
+   - Batch processing
 
-### Week 3-4: Predictors
-1. Binding Prediction
-   - Add site prediction
-   - Enhance interactions
-   - Add selectivity
+### Week 2: Responsive Design (Next Highest Priority)
+1. Core Features
+   - Mobile-first CSS
+   - Viewport optimization
+   - Touch support
+   - Performance tuning
+   - Cross-browser testing
 
-2. Activity Prediction
-   - Add dose-response
-   - Enhance mechanisms
-   - Add interactions
+2. Components
+   - Responsive layouts
+   - Flexible grids
+   - Touch controls
+   - Mobile navigation
+   - Responsive tables
 
-3. Safety Prediction
-   - Add metabolites
-   - Enhance interactions
-   - Add long-term effects
+### Week 3: Document Processing
+1. Web Interface
+   - Batch upload UI
+   - Progress tracking
+   - Status dashboard
+   - Result visualization
+   - Mobile support
 
-## Phase 4: Web Interface Enhancement
+2. Integration
+   - Bulk upload support
+   - Directory watching UI
+   - Processing queue
+   - Result export
 
-### Week 1-2: Core UI
-1. Component Architecture
-   - Add state management
-   - Improve responsiveness
-   - Add accessibility
+### Week 4: Biomolecule Support
+1. Protein/Peptide Module
+   - Sequence analysis
+   - Structure prediction
+   - Function prediction
+   - Interaction analysis
+   - Modification prediction
 
-2. List View
-   - Add virtual scrolling
-   - Enhance filtering
-   - Add bulk actions
-
-### Week 3-4: Visualization
-1. Structure Viewer
-   - Add 3D support
-   - Add highlighting
-   - Add measurements
-
-2. Data Plots
-   - Add activity plots
-   - Add property plots
-   - Add networks
+2. Basic Biomolecules
+   - Structure analysis
+   - Function prediction
+   - Interaction mapping
+   - Pathway analysis
+   - Metabolic impact
 
 ## Infrastructure Requirements
 
-### 1. Compute Resources
-- GPU support for ML
-- Memory management
-- Disk caching
+### 1. Database (Priority)
+- PostgreSQL setup ✓
+- Schema design ✓
+- Migration tools
+- Backup system
+- Processing history
+- Search capabilities
+- Performance tuning
+- Monitoring tools
+
+### 2. Responsive Web Design (Priority)
+- Responsive layouts
+- Mobile-first CSS
+- Viewport optimization
+- Performance tuning
+- Media queries
+- Flexible grids
+- Touch support
+- Cross-browser testing
+
+### 3. Compute Resources
+- GPU support for ML ✓
+- Memory management ✓
+- Disk caching ✓
 - Load balancing
+- Performance optimization
 
-### 2. External Services
-- API access
-- Rate limiting
-- Error handling
+### 4. External Services
+- API access ✓
+- Rate limiting ✓
+- Error handling ✓
 - Monitoring
-
-### 3. Storage
-- Model storage
-- Data caching
-- Export storage
-- User preferences
+- Responsive endpoints
 
 ## Success Metrics
 
+### 0. Data Export
+- [ ] Complete compound list exported
+- [ ] All required compounds included
+- [ ] Data validated and verified
+- [ ] Metadata complete
+- [ ] Predictions included
+- [ ] Documentation complete
+
 ### 1. Coverage
+- [ ] Database integration complete (Priority)
+- [ ] Responsive design complete (Priority)
+- [ ] Document processing complete (80%)
+- [ ] Biomolecule support added
 - [x] Data sources integrated ✓
-- [x] Compounds covered ✓
-- [x] Features implemented ✓
-- [ ] Tests written (90%)
+- [x] ML pipeline consolidated ✓
+- [x] Tests written (90%) ✓
 
 ### 2. Quality
+- [ ] Database performance
+- [ ] Responsive design
 - [x] Prediction accuracy ✓
 - [x] Data completeness ✓
 - [x] Code quality ✓
 - [ ] Documentation (80%)
 
 ### 3. Performance
-- [x] Response times ✓
+- [ ] Database response times
+- [ ] Page load times
+- [x] API response times ✓
 - [x] Resource usage ✓
 - [x] Cache efficiency ✓
 - [x] Error rates ✓
 
-## Next Steps
-
-### 1. Immediate Actions (Priority)
-- Complete document processing UI
-- Add batch upload support
-- Add processing queue
-- Add result visualization
-
-### 2. Short-term Goals
-- Add Word document support
-- Add HTML/XML support
-- Add text file support
-- Add format conversion
-
-### 3. Long-term Goals
-- Full integration
-- Advanced analysis
-- Real-time processing
-- Custom workflows
-
 ## Risk Management
 
 ### 1. Technical Risks
+- Database performance
+- Browser compatibility
 - API rate limits
 - Memory constraints
 - Performance issues
 - Integration complexity
 
 ### 2. Data Risks
+- Database integrity
+- Data synchronization
 - Data quality
 - Source availability
 - Format changes
@@ -204,22 +282,29 @@ This roadmap integrates the enhancement plans for:
 - Resource constraints
 - Dependency issues
 - Scope creep
+- Browser support
 
 ## Maintenance Plan
 
 ### 1. Regular Updates
+- Database maintenance
+- Browser compatibility
 - Data refreshes
 - Model retraining
 - API updates
 - Security patches
 
 ### 2. Monitoring
+- Database health
+- Page performance
 - System health
 - API status
 - Error rates
 - Resource usage
 
 ### 3. Documentation
+- Database docs
+- Responsive design
 - API documentation
 - User guides
 - Developer guides

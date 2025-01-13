@@ -3,13 +3,14 @@
 import logging
 from pathlib import Path
 from typing import Optional
+from uuid import UUID
 
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 
 from ...pipeline.infrastructure.monitoring import Monitor
 from ...processors.document.monitor import DirectoryMonitor
 from ...processors.document.pdf import PDFProcessor
-from .document_routes import DocumentRouteHandlers
+from .document_routes import DocumentRouteHandlers, BatchUploadStatus, ProcessingStatus
 
 
 class DocumentUploadComponent:
@@ -69,10 +70,25 @@ class DocumentUploadComponent:
         Args:
             app: FastAPI application instance
         """
+        # Single file upload
         app.post("/documents/upload")(self.route_handlers.handle_upload)
+
+        # Batch upload
+        app.post("/documents/batch-upload")(
+            lambda files, process, background_tasks: self.route_handlers.handle_batch_upload(
+                files=files,
+                process=process,
+                background_tasks=background_tasks,
+            )
+        )
+
+        # Status endpoints
+        app.get("/documents/status/{file_path:path}")(self.route_handlers.get_processing_status)
+        app.get("/documents/batch-status/{batch_id}")(lambda batch_id: self.route_handlers.get_batch_status(UUID(batch_id)))
+
+        # Directory monitoring
         app.post("/documents/monitor")(self.route_handlers.handle_monitor_config)
         app.delete("/documents/monitor")(self.route_handlers.handle_monitor_removal)
-        app.get("/documents/status/{file_path:path}")(self.route_handlers.get_processing_status)
 
     async def __aenter__(self):
         """Enter async context."""

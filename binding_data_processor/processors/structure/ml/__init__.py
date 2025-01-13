@@ -1,17 +1,18 @@
-"""Machine learning models for chemical structure analysis.
+"""Machine learning module for structure processing.
 
-This module provides ML models for:
+This module provides comprehensive ML capabilities for:
+
 1. Activity prediction
-- Binding affinity prediction
+- Binding affinity prediction 
 - Target prediction
 - Activity classification
 - Structure-activity relationships
 
-2. Toxicity prediction
-- Toxicity classification
-- Side effect prediction
-- Drug-drug interactions
-- Metabolism prediction
+2. Structure analysis
+- Molecular fingerprints
+- Graph representations
+- Pharmacophore detection
+- Structural similarity
 
 3. Property prediction
 - Physicochemical properties
@@ -21,55 +22,122 @@ This module provides ML models for:
 
 4. Deep learning
 - Graph neural networks
-- Molecular fingerprints
 - Attention mechanisms
 - Transfer learning
+- Uncertainty estimation
 
 5. Model interpretation
 - Feature importance
-- Attention visualization
-- Uncertainty estimation
+- Attention visualization 
+- Uncertainty quantification
 - Model explanation
 """
 
 import logging
-from typing import Dict, List, Optional, Union
-
-from .activity import ActivityPredictor
-from .toxicity import ToxicityPredictor
-from .property import PropertyPredictor
-from .graph import GraphNeuralNetwork
-from .deepchem import DeepChemModel
-from .base import BaseMLModel
-from .utils import (
-    ModelRegistry,
-    DataPreprocessor,
-    FeatureExtractor,
-    ModelEvaluator,
-    UncertaintyEstimator,
-)
+from typing import Dict, List, Optional, Set, Tuple, Union, Any
+import numpy as np
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Export public interface
-__all__ = [
-    # Models
-    "ActivityPredictor",
-    "ToxicityPredictor",
-    "PropertyPredictor",
-    "GraphNeuralNetwork",
-    "DeepChemModel",
-    "BaseMLModel",
-    # Utilities
-    "ModelRegistry",
-    "DataPreprocessor",
-    "FeatureExtractor",
-    "ModelEvaluator",
-    "UncertaintyEstimator",
-]
+# Selectively import DeepChem components to avoid DGL dependencies
+from deepchem.models.sklearn_models import SklearnModel
+from deepchem.models.torch_models.layers import get_activation
+from deepchem.data import Dataset
+from deepchem.feat import Featurizer
+from deepchem.models import Model as DCModel
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+from xgboost import XGBRegressor
 
-# Default model configurations
+
+# Try importing DGL
+try:
+    import dgl
+    import dgl.graphbolt
+
+    HAS_DGL = True
+except ImportError:
+    logger.warning("DGL not available. Graph-based models will not be available.")
+    HAS_DGL = False
+
+
+class DeepChemModel:
+    """Wrapper around DeepChem model functionality.
+
+    This class provides a standardized interface for using DeepChem models
+    within the binding_data_processor framework.
+    """
+
+    def __init__(
+        self,
+        model_type: str,
+        model_params: Optional[Dict] = None,
+        featurizer: Optional[dc.feat.Featurizer] = None,
+    ):
+        """Initialize DeepChem model wrapper.
+
+        Args:
+            model_type: Type of DeepChem model to use
+            model_params: Optional model parameters
+            featurizer: Optional DeepChem featurizer
+        """
+        self.model_type = model_type
+        self.model_params = model_params or {}
+        self.featurizer = featurizer
+        self.model = self._init_model()
+
+    def _init_model(self) -> DCModel:
+        """Initialize the underlying DeepChem model."""
+        if self.model_type in ["graph_conv", "mpnn", "attentive_fp"]:
+            logger.warning(f"Graph-based models not available. Falling back to RandomForest for {self.model_type}")
+            return SklearnModel(model=RandomForestRegressor(**self.model_params))
+        elif self.model_type == "rf":
+            return SklearnModel(model=RandomForestRegressor(**self.model_params))
+        elif self.model_type == "xgb":
+            return SklearnModel(model=XGBRegressor(**self.model_params))
+        elif self.model_type == "svm":
+            return SklearnModel(model=SVR(**self.model_params))
+        else:
+            raise ValueError(f"Unsupported model type: {self.model_type}. Available types: rf, xgb, svm")
+
+    def fit(self, dataset: dc.data.Dataset, **kwargs) -> None:
+        """Train the model on a dataset."""
+        self.model.fit(dataset, **kwargs)
+
+    def predict(self, dataset: dc.data.Dataset, **kwargs) -> np.ndarray:
+        """Generate predictions for a dataset."""
+        return self.model.predict(dataset, **kwargs)
+
+    def save(self, model_dir: str) -> None:
+        """Save model to directory."""
+        self.model.save_checkpoint(model_dir=model_dir)
+
+    def load(self, model_dir: str) -> None:
+        """Load model from directory."""
+        self.model.restore(model_dir=model_dir)
+
+
+# Core functionality
+from .base import MLProcessor, MLPredictorConfig
+
+# Activity prediction
+from .activity.binding import BindingPredictor, BindingSitePredictor, BindingModePredictor
+from .activity.protein import ProteinPredictor, ProteinStructureAnalyzer
+from .activity.interaction import InteractionPredictor
+from .activity.base import ActivityPredictor, ActivityPredictorConfig
+
+# Property prediction
+from .property import PropertyPredictor
+
+# Toxicity prediction
+from .toxicity import ToxicityPredictor
+
+# Graph Neural Networks
+from .models.gnn import EnhancedGNN as GraphNeuralNetwork
+from .models.gnn import EnhancedGNN  # Also export under original name
+
+# Default configurations for various model types
 DEFAULT_MODEL_CONFIGS = {
     "activity": {
         "model_type": "graph",
@@ -82,151 +150,53 @@ DEFAULT_MODEL_CONFIGS = {
         "early_stopping": True,
         "patience": 10,
     },
-    "toxicity": {
+    "property": {
         "model_type": "ensemble",
         "base_models": ["rf", "xgb", "lgb"],
         "meta_model": "lr",
         "cv_folds": 5,
         "use_probabilities": True,
     },
-    "property": {
-        "model_type": "deepchem",
-        "featurizer": "graph_conv",
-        "splitter": "random",
-        "transformers": ["normalization"],
-        "model_dir": "models/property",
+    "toxicity": {
+        "model_type": "ensemble",
+        "base_models": ["rf", "xgb", "svm"],
+        "meta_model": "lr",
+        "cv_folds": 5,
+        "use_probabilities": True,
+        "endpoints": [
+            "acute_toxicity",
+            "carcinogenicity",
+            "mutagenicity",
+            "reproductive_toxicity",
+            "hepatotoxicity",
+            "cardiotoxicity",
+            "neurotoxicity",
+        ],
     },
 }
 
-
-def get_model(
-    model_type: str, config: Optional[Dict] = None, pretrained: bool = True, **kwargs
-) -> Union[
-    ActivityPredictor,
-    ToxicityPredictor,
-    PropertyPredictor,
-    GraphNeuralNetwork,
-    DeepChemModel,
-]:
-    """
-    Get ML model instance.
-
-    Args:
-        model_type: Type of model to create
-            - activity: Activity prediction
-            - toxicity: Toxicity prediction
-            - property: Property prediction
-            - graph: Graph neural networks
-            - deepchem: DeepChem models
-        config: Model configuration
-        pretrained: Whether to load pretrained weights
-        **kwargs: Additional model arguments
-
-    Returns:
-        ML model instance
-
-    Raises:
-        ValueError: If model_type is unknown
-    """
-    # Get default config
-    model_config = DEFAULT_MODEL_CONFIGS.get(model_type, {}).copy()
-    if config:
-        model_config.update(config)
-
-    # Add config to kwargs
-    kwargs["config"] = model_config
-
-    # Map model types to classes
-    models = {
-        "activity": ActivityPredictor,
-        "toxicity": ToxicityPredictor,
-        "property": PropertyPredictor,
-        "graph": GraphNeuralNetwork,
-        "deepchem": DeepChemModel,
-    }
-
-    if model_type not in models:
-        raise ValueError(
-            f"Unknown model type: {model_type}. "
-            f"Available types: {list(models.keys())}"
-        )
-
-    try:
-        model = models[model_type](**kwargs)
-        if pretrained:
-            model.load_pretrained()
-        return model
-    except Exception as e:
-        logger.error(f"Error creating {model_type} model: {str(e)}")
-        raise
-
-
-def get_all_models(
-    config: Optional[Dict] = None, pretrained: bool = True, **kwargs
-) -> Dict[
-    str,
-    Union[
-        ActivityPredictor,
-        ToxicityPredictor,
-        PropertyPredictor,
-        GraphNeuralNetwork,
-        DeepChemModel,
-    ],
-]:
-    """
-    Get instances of all available models.
-
-    Args:
-        config: Model configuration
-        pretrained: Whether to load pretrained weights
-        **kwargs: Additional model arguments
-
-    Returns:
-        Dictionary mapping model names to instances
-    """
-    return {
-        name: get_model(name, config, pretrained, **kwargs)
-        for name in [
-            "activity",
-            "toxicity",
-            "property",
-            "graph",
-            "deepchem",
-        ]
-    }
-
-
-# Model registry instance
-registry = ModelRegistry()
-
-
-def register_model(
-    name: str, model_class: type, config: Optional[Dict] = None, **kwargs
-) -> None:
-    """
-    Register a new model type.
-
-    Args:
-        name: Model name
-        model_class: Model class
-        config: Default configuration
-        **kwargs: Additional registration arguments
-    """
-    registry.register(name, model_class, config, **kwargs)
-
-
-def get_registered_model(
-    name: str, config: Optional[Dict] = None, **kwargs
-) -> BaseMLModel:
-    """
-    Get registered model instance.
-
-    Args:
-        name: Model name
-        config: Model configuration
-        **kwargs: Additional model arguments
-
-    Returns:
-        Model instance
-    """
-    return registry.get(name, config, **kwargs)
+__all__ = [
+    # Base classes
+    "MLPredictor",
+    "MLPredictorConfig",
+    "MLProcessor",
+    # Activity prediction
+    "ActivityPredictor",
+    "ActivityPredictorConfig",
+    "BindingPredictor",
+    "BindingSitePredictor",
+    "BindingModePredictor",
+    "InteractionPredictor",
+    # Protein prediction and analysis
+    "ProteinPredictor",
+    "ProteinStructureAnalyzer",
+    # Property prediction
+    "PropertyPredictor",
+    # Toxicity prediction
+    "ToxicityPredictor",
+    # Graph Neural Networks
+    "GraphNeuralNetwork",
+    "EnhancedGNN",
+    # DeepChem integration
+    "DeepChemModel",
+]

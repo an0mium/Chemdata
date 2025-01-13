@@ -22,8 +22,13 @@ from rich.logging import RichHandler
 __version__ = "0.2.0"
 
 # Import core components
-from .models.compound import Compound, CompoundData, CompoundType, LegalStatus
-from .models.psychopharm import PsychoactiveCompound
+from .models.compound import (
+    Compound,
+    BaseCompound as CompoundData,
+    CompoundType,
+    LegalStatus,
+)
+from .models.psychopharm import PsychopharmCompound
 from .pipeline.base import PipelineManager
 from .web_enrichment.manager import WebEnrichmentManager
 from .processors.patent import PatentProcessor
@@ -42,12 +47,7 @@ from .utils.checkpoints import CheckpointManager
 from logger import LogManager
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-    datefmt="[%X]",
-    handlers=[RichHandler(rich_tracebacks=True)]
-)
+logging.basicConfig(level=logging.INFO, format="%(message)s", datefmt="[%X]", handlers=[RichHandler(rich_tracebacks=True)])
 
 # Suppress noisy third-party loggers
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -65,18 +65,21 @@ logger.info(f"Binding Data Processor v{__version__}")
 # Import optional dependencies
 try:
     import rdkit
+
     logger.debug("RDKit available for structure processing")
 except ImportError:
     logger.warning("RDKit not available - structure processing will be limited")
 
 try:
     import torch
+
     logger.debug("PyTorch available for ML models")
 except ImportError:
     logger.warning("PyTorch not available - ML functionality will be limited")
 
 try:
     import dash
+
     logger.debug("Dash available for web interface")
 except ImportError:
     logger.warning("Dash not available - web interface will be disabled")
@@ -141,12 +144,7 @@ class BindingDataProcessor:
             binding_data = self.bindingdb.load_data(clean_name, smiles)
 
             # Create compound object
-            compound = CompoundData(
-                name=clean_name,
-                smiles=smiles,
-                compound_type=CompoundType.OTHER,
-                binding_data=binding_data
-            )
+            compound = CompoundData(name=clean_name, smiles=smiles, compound_type=CompoundType.OTHER, binding_data=binding_data)
 
             # Validate structure if SMILES provided
             if smiles:
@@ -186,25 +184,19 @@ class BindingDataProcessor:
 
             # Get compounds from BindingDB
             self.logger.info("Gathering compounds from BindingDB...")
-            bindingdb_compounds = self.bindingdb.gather_ligands(
-                target_pattern, use_checkpoints=use_checkpoints
-            )
+            bindingdb_compounds = self.bindingdb.gather_ligands(target_pattern, use_checkpoints=use_checkpoints)
             compounds.extend(bindingdb_compounds)
 
             # Search patents if API key provided
             if llm_api_key and self.patent:
                 self.logger.info("Searching patents for compounds...")
-                patent_compounds = self.patent.search_compounds(
-                    target_pattern, llm_api_key, use_checkpoints=use_checkpoints
-                )
+                patent_compounds = self.patent.search_compounds(target_pattern, llm_api_key, use_checkpoints=use_checkpoints)
                 compounds.extend(patent_compounds)
 
             # Search PubMed
             if self.pubmed:
                 self.logger.info("Searching PubMed for compounds...")
-                pubmed_compounds = self.pubmed.search_compounds(
-                    target_pattern, use_checkpoints=use_checkpoints
-                )
+                pubmed_compounds = self.pubmed.search_compounds(target_pattern, use_checkpoints=use_checkpoints)
                 compounds.extend(pubmed_compounds)
 
             # Deduplicate compounds
@@ -218,9 +210,7 @@ class BindingDataProcessor:
                     try:
                         self.swiss.enrich_compound(compound)
                     except Exception as e:
-                        self.logger.error(
-                            f"Error enriching compound {compound.name}: {str(e)}"
-                        )
+                        self.logger.error(f"Error enriching compound {compound.name}: {str(e)}")
 
             return unique_compounds
 
@@ -228,9 +218,7 @@ class BindingDataProcessor:
             self.logger.error(f"Error gathering ligands: {str(e)}")
             return []
 
-    def _deduplicate_compounds(
-        self, compounds: List[CompoundData]
-    ) -> List[CompoundData]:
+    def _deduplicate_compounds(self, compounds: List[CompoundData]) -> List[CompoundData]:
         """Deduplicate compounds by InChI Key."""
         unique_compounds = []
         seen_keys = set()
@@ -277,10 +265,8 @@ class BindingDataProcessor:
 
             for compound in compounds:
                 if compound.primary_activity:
-                    activity_types[compound.primary_activity] = (
-                        activity_types.get(compound.primary_activity, 0) + 1
-                    )
-                if hasattr(compound, 'data_sources'):
+                    activity_types[compound.primary_activity] = activity_types.get(compound.primary_activity, 0) + 1
+                if hasattr(compound, "data_sources"):
                     sources.update(compound.data_sources)
                 if compound.cas_number:
                     with_cas += 1
@@ -291,8 +277,7 @@ class BindingDataProcessor:
                 f"Data sources used: {', '.join(sources)}\n"
                 f"Compounds with CAS numbers: {with_cas}\n"
                 f"Compounds with patent data: {with_patents}\n"
-                f"Activity type distribution:\n"
-                + "\n".join(f" {k}: {v}" for k, v in activity_types.items())
+                f"Activity type distribution:\n" + "\n".join(f" {k}: {v}" for k, v in activity_types.items())
             )
 
         except Exception as e:
@@ -306,7 +291,7 @@ __all__ = [
     "CompoundData",
     "CompoundType",
     "LegalStatus",
-    "PsychoactiveCompound",
+    "PsychopharmCompound",
     "PipelineManager",
     "WebEnrichmentManager",
     "PatentProcessor",

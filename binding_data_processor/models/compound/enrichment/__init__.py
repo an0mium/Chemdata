@@ -6,6 +6,6 @@ This module provides web enrichment capabilities:
 - Community data aggregation
 """
 
-from .web import EnrichedCompound
+from .web import EnrichedCompound, WebEnrichmentMixin
 
-__all__ = ['EnrichedCompound']
+__all__ = ["EnrichedCompound", "WebEnrichmentMixin"]

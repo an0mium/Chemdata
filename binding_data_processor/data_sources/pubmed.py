@@ -14,7 +14,7 @@ import time
 from bs4 import BeautifulSoup
 from ratelimit import limits, sleep_and_retry
 
-from ..web_enrichment.base_client import BaseWebClient
+from ..web_enrichment.clients.base_client import BaseWebClient
 from ..models.compound import Compound
 
 
@@ -285,9 +285,7 @@ class PubMedClient(BaseWebClient):
                     analysis["affinity_types"][affinity_type] += 1
 
             # Extract key findings
-            findings = re.findall(
-                r"([^.]*(?:Ki|IC50|EC50|Kd)\s*[=~]\s*\d+(?:\.\d+)?\s*(?:nM|µM|pM|mM)[^.]*\.)", abstract_text
-            )
+            findings = re.findall(r"([^.]*(?:Ki|IC50|EC50|Kd)\s*[=~]\s*\d+(?:\.\d+)?\s*(?:nM|µM|pM|mM)[^.]*\.)", abstract_text)
             if findings:
                 analysis["key_findings"].extend(findings)
 
@@ -412,9 +410,7 @@ class PubMedClient(BaseWebClient):
 
             # Look for binding data
             if re.search(r"bind|affinity|Ki|IC50|EC50|Kd", abstract, re.I):
-                findings = re.findall(
-                    r"([^.]*(?:Ki|IC50|EC50|Kd)\s*[=~]\s*\d+(?:\.\d+)?\s*(?:nM|µM|pM|mM)[^.]*\.)", abstract
-                )
+                findings = re.findall(r"([^.]*(?:Ki|IC50|EC50|Kd)\s*[=~]\s*\d+(?:\.\d+)?\s*(?:nM|µM|pM|mM)[^.]*\.)", abstract)
                 if findings:
                     data["binding_data"].extend(findings)
 

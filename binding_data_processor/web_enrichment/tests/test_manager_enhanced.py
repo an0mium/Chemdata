@@ -28,7 +28,7 @@ from ..manager_enhanced import (
     EnrichmentResult,
 )
 from ...models.compound import Compound
-from ...pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ...pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 
 
 # Import paths
@@ -109,7 +109,7 @@ def config(tmp_path):
         twitter_bearer_token="test_token",
         model_dir=tmp_path / "models",
         cache_dir=tmp_path / "cache",
-        circuit_config=CircuitConfig(
+        circuit_config=CircuitBreakerConfig(
             failure_threshold=2,
             failure_timeout=1,
             reset_timeout=1,

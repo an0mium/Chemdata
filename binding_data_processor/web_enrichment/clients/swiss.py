@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Set
 from .base import WebClient, WebClientError, ValidationError
 from ..validation.schema import DataSource, ValidationLevel
 from ..validation.data import ValidationConfig
-from ...pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ...pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 
 
 class SwissValidationError(ValidationError):
@@ -25,7 +25,7 @@ class SwissValidationError(ValidationError):
         tool: str,
     ):
         """Initialize error.
-        
+
         Args:
             message: Error message
             issues: Validation issues
@@ -70,12 +70,12 @@ class SwissClient(WebClient):
         max_retries: int = 3,
         timeout: int = 30,
         cache_ttl: int = 3600,
-        circuit_config: Optional[CircuitConfig] = None,
+        circuit_config: Optional[CircuitBreakerConfig] = None,
         validation_level: ValidationLevel = ValidationLevel.NORMAL,
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize Swiss client.
-        
+
         Args:
             base_url: Base URL for Swiss tools API
             requests_per_second: Maximum requests per second
@@ -105,7 +105,7 @@ class SwissClient(WebClient):
 
     def _get_validation_config(self) -> ValidationConfig:
         """Get validation configuration.
-        
+
         Returns:
             Validation configuration
         """
@@ -118,15 +118,15 @@ class SwissClient(WebClient):
         use_cache: bool = True,
     ) -> Dict[str, Any]:
         """Predict protein targets for compound.
-        
+
         Args:
             smiles: Compound SMILES
             threshold: Probability threshold
             use_cache: Whether to use cache
-            
+
         Returns:
             Target predictions
-            
+
         Raises:
             SwissValidationError: For validation errors
             WebClientError: For other errors
@@ -174,14 +174,14 @@ class SwissClient(WebClient):
         use_cache: bool = True,
     ) -> Dict[str, Any]:
         """Calculate ADME properties for compound.
-        
+
         Args:
             smiles: Compound SMILES
             use_cache: Whether to use cache
-            
+
         Returns:
             ADME properties
-            
+
         Raises:
             SwissValidationError: For validation errors
             WebClientError: For other errors
@@ -227,15 +227,15 @@ class SwissClient(WebClient):
         use_cache: bool = True,
     ) -> Dict[str, Any]:
         """Compare compound structures.
-        
+
         Args:
             smiles: Query compound SMILES
             reference_smiles: Reference compound SMILES
             use_cache: Whether to use cache
-            
+
         Returns:
             Similarity scores
-            
+
         Raises:
             SwissValidationError: For validation errors
             WebClientError: For other errors
@@ -279,13 +279,15 @@ class SwissClient(WebClient):
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get client metrics.
-        
+
         Returns:
             Client metrics
         """
         metrics = super().get_metrics()
-        metrics.update({
-            "processed_compounds": len(self.processed_compounds),
-            "failed_compounds": len(self.failed_compounds),
-        })
+        metrics.update(
+            {
+                "processed_compounds": len(self.processed_compounds),
+                "failed_compounds": len(self.failed_compounds),
+            }
+        )
         return metrics

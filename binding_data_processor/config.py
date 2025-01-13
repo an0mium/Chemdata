@@ -20,6 +20,10 @@ DEFAULT_DATA_DIR = Path("../data")
 DEFAULT_MODEL_DIR = Path("../models")
 DEFAULT_CONFIG_FILE = Path("~/.config/chemdata/config.json").expanduser()
 
+# Cache settings
+CACHE_DIR = Path("~/.cache/chemdata").expanduser()
+CACHE_EXPIRY = 3600  # 1 hour in seconds
+
 # Default processing settings
 DEFAULT_SETTINGS = {
     "workers": 4,
@@ -183,18 +187,10 @@ class Config:
         self.config = self._load_config()
 
         # Set directories
-        self.data_dir = Path(
-            data_dir or self.config.get("data_dir") or DEFAULT_DATA_DIR
-        )
-        self.model_dir = Path(
-            model_dir or self.config.get("model_dir") or DEFAULT_MODEL_DIR
-        )
-        self.cache_dir = Path(
-            self.config.get("cache_dir") or DEFAULT_SETTINGS["cache_dir"]
-        ).expanduser()
-        self.log_dir = Path(
-            self.config.get("log_dir") or DEFAULT_SETTINGS["log_dir"]
-        ).expanduser()
+        self.data_dir = Path(data_dir or self.config.get("data_dir") or DEFAULT_DATA_DIR)
+        self.model_dir = Path(model_dir or self.config.get("model_dir") or DEFAULT_MODEL_DIR)
+        self.cache_dir = Path(self.config.get("cache_dir") or DEFAULT_SETTINGS["cache_dir"]).expanduser()
+        self.log_dir = Path(self.config.get("log_dir") or DEFAULT_SETTINGS["log_dir"]).expanduser()
 
         # Ensure directories exist
         self._ensure_dirs()
@@ -248,9 +244,7 @@ class Config:
             if key in DEFAULT_SETTINGS:
                 expected_type = type(DEFAULT_SETTINGS[key])
                 if not isinstance(value, expected_type):
-                    self.logger.warning(
-                        f"Invalid type for setting {key}: expected {expected_type}, got {type(value)}"
-                    )
+                    self.logger.warning(f"Invalid type for setting {key}: expected {expected_type}, got {type(value)}")
                     self.settings[key] = DEFAULT_SETTINGS[key]
 
         # Validate credentials
@@ -267,9 +261,7 @@ class Config:
                         self.logger.warning(f"Missing ML config key {key} for {model}")
                         config[key] = value
                     elif not isinstance(config[key], type(value)):
-                        self.logger.warning(
-                            f"Invalid type for ML config {key} in {model}"
-                        )
+                        self.logger.warning(f"Invalid type for ML config {key} in {model}")
                         config[key] = value
 
     def save(self) -> None:
@@ -383,10 +375,7 @@ class Config:
             Dictionary mapping source types to lists of sources
         """
         config_sources = self.config.get("social_sources", {})
-        return {
-            source_type: list(set(sources + config_sources.get(source_type, [])))
-            for source_type, sources in SOCIAL_SOURCES.items()
-        }
+        return {source_type: list(set(sources + config_sources.get(source_type, []))) for source_type, sources in SOCIAL_SOURCES.items()}
 
     def get_ml_config(self, model_type: str) -> Dict[str, Any]:
         """Get ML model configuration.

@@ -27,10 +27,10 @@ from tqdm import tqdm
 
 from .http_client_enhanced import HTTPClientEnhanced
 from .swiss_client import SwissClient
-from .community_client import CommunityClient
+from .clients.community import CommunityClient
 from .social_client import SocialClient
 from .crawl4ai_client import Crawl4AIClient, ResearchData, PatentData, CommunityData
-from ..pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ..pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 
 
 @dataclass
@@ -54,7 +54,7 @@ class EnrichmentConfig:
     cache_dir: Optional[Path] = None
 
     # Circuit breaker settings
-    circuit_config: Optional[CircuitConfig] = None
+    circuit_config: Optional[CircuitBreakerConfig] = None
 
 
 @dataclass

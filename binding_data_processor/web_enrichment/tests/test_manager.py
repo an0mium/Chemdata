@@ -16,7 +16,7 @@ from ..clients.swiss import SwissClient
 from ..clients.community import CommunityClient
 from ..clients.social import SocialClient
 from ...models.compound import Compound
-from ...pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ...pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 from ...pipeline.infrastructure.monitoring import MetricsCollector
 
 
@@ -66,7 +66,7 @@ def config():
         batch_size=10,
         model_dir=Path("/tmp/models"),
         cache_dir=Path("/tmp/cache"),
-        circuit_config=CircuitConfig(
+        circuit_config=CircuitBreakerConfig(
             failure_threshold=3,
             recovery_timeout=60,
         ),
@@ -190,9 +190,7 @@ def test_enrich_compounds_success(manager, test_compounds):
 
         # Check metadata
         assert "timestamp" in compound.enrichment_metadata
-        timestamp = datetime.fromisoformat(
-            compound.enrichment_metadata["timestamp"]
-        )
+        timestamp = datetime.fromisoformat(compound.enrichment_metadata["timestamp"])
         assert start_time <= timestamp <= datetime.now()
         assert timestamp - start_time < timedelta(seconds=10)
 
@@ -326,12 +324,8 @@ def test_cleanup(manager):
     """Test manager cleanup."""
     with patch.object(manager.executor, "shutdown") as mock_executor_close:
         with patch.object(manager.clients["swiss"], "close") as mock_swiss_close:
-            with patch.object(
-                manager.clients["community"], "close"
-            ) as mock_community_close:
-                with patch.object(
-                    manager.clients["social"], "close"
-                ) as mock_social_close:
+            with patch.object(manager.clients["community"], "close") as mock_community_close:
+                with patch.object(manager.clients["social"], "close") as mock_social_close:
                     manager.close()
 
     mock_executor_close.assert_called_once()

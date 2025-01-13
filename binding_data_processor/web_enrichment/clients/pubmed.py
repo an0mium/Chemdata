@@ -23,43 +23,65 @@ This module provides a comprehensive PubMed client that:
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Dict, List, Optional, Any
+
+
+@dataclass
+class ResearchData:
+    """Research data from PubMed."""
+
+    pmid: str
+    title: str
+    abstract: Optional[str] = None
+    authors: List[str] = field(default_factory=list)
+    journal: Optional[str] = None
+    year: Optional[int] = None
+    doi: Optional[str] = None
+    citations: int = 0
+    compounds: List[str] = field(default_factory=list)
+    effects: List[str] = field(default_factory=list)
+    mechanisms: List[str] = field(default_factory=list)
+    safety_notes: List[str] = field(default_factory=list)
+    methods: List[str] = field(default_factory=list)
+    results: List[str] = field(default_factory=list)
+    conclusions: List[str] = field(default_factory=list)
+    binding_data: List[Dict[str, Any]] = field(default_factory=list)
+    confidence: float = 0.0
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
 
 import aiohttp
 from bs4 import BeautifulSoup
-from crawl4ai import AsyncWebCrawler, Config
+from crawl4ai import AsyncWebCrawler, BrowserConfig
 from crawl4ai.extraction_strategy import (
     JsonCssExtractionStrategy,
     LLMExtractionStrategy,
     CosineStrategy,
 )
-from crawl4ai.chunking import (
-    NlpSentenceChunking,
-    SlidingWindowChunking,
-)
 from pydantic import BaseModel, Field
 
 from ...models.core import CompoundData
-from ..base_client import WebClient, WebClientError
-from ..validation.schema import DataSource, ResearchData
+from .base import WebClient, WebClientError, ValidationError
+from ..validation.schema import DataSource, ValidationLevel
+from ..validation.data import ValidationConfig, ValidationRule
 from ..validation.enhanced import EnhancedValidator
 from ..llm_utils import NootropicLLMExtractor
 from ...pipeline.infrastructure.rate_limiter import RateLimiter, RateLimit
 from ...pipeline.infrastructure.circuit_breaker import CircuitBreaker, ErrorCode, McpError
 
 # API Rate Limits
-# 3 requests per second for authenticated users
-AUTH_RATE_LIMIT = RateLimit(requests=3, period=1)
-# 1 request per second for non-authenticated users
-UNAUTH_RATE_LIMIT = RateLimit(requests=1, period=1)
-# 1 request per second for web scraping
-SCRAPE_RATE_LIMIT = RateLimit(requests=1, period=1)
+AUTH_RATE_LIMIT = RateLimit(requests=3, period=1)  # 3 requests per second
+UNAUTH_RATE_LIMIT = RateLimit(requests=1, period=1)  # 1 request per second
+SCRAPE_RATE_LIMIT = RateLimit(requests=1, period=1)  # 1 request per second
 
 # Circuit Breaker Config
 CIRCUIT_FAILURE_THRESHOLD = 5
 CIRCUIT_RESET_TIMEOUT = 300  # 5 minutes
 CIRCUIT_HALF_OPEN_TIMEOUT = 60  # 1 minute
+
+logger = logging.getLogger(__name__)
 
 
 class PubMedArticleSchema(BaseModel):
@@ -101,8 +123,103 @@ class PubMedArticle:
     metadata: Dict[str, Any] = None
 
 
-class EnhancedPubMedClient(WebClient):
+class PubmedClient(WebClient):
     """Enhanced PubMed client combining API access and web scraping."""
+
+    def _get_validation_config(self) -> ValidationConfig:
+        """Get validation configuration.
+
+        Returns:
+            Validation configuration
+        """
+        return ValidationConfig(
+            level=ValidationLevel.NORMAL,
+            rules=[
+                ValidationRule(
+                    field="pmid",
+                    required=True,
+                    min_length=1,
+                ),
+                ValidationRule(
+                    field="title",
+                    required=True,
+                    min_length=1,
+                    max_length=1000,
+                ),
+                ValidationRule(
+                    field="abstract",
+                    required=False,
+                    min_length=10,
+                    max_length=10000,
+                ),
+                ValidationRule(
+                    field="authors",
+                    required=True,
+                    min_items=1,
+                ),
+                ValidationRule(
+                    field="journal",
+                    required=False,
+                    min_length=1,
+                ),
+                ValidationRule(
+                    field="year",
+                    required=False,
+                    min_value=1800,
+                    max_value=2100,
+                ),
+                ValidationRule(
+                    field="doi",
+                    required=False,
+                    min_length=1,
+                ),
+                ValidationRule(
+                    field="citations",
+                    required=False,
+                    min_value=0,
+                ),
+                ValidationRule(
+                    field="compounds",
+                    required=False,
+                    min_items=0,
+                ),
+                ValidationRule(
+                    field="effects",
+                    required=False,
+                    min_items=0,
+                ),
+                ValidationRule(
+                    field="mechanisms",
+                    required=False,
+                    min_items=0,
+                ),
+                ValidationRule(
+                    field="safety_notes",
+                    required=False,
+                    min_items=0,
+                ),
+                ValidationRule(
+                    field="methods",
+                    required=False,
+                    min_items=0,
+                ),
+                ValidationRule(
+                    field="results",
+                    required=False,
+                    min_items=0,
+                ),
+                ValidationRule(
+                    field="conclusions",
+                    required=False,
+                    min_items=0,
+                ),
+                ValidationRule(
+                    field="binding_data",
+                    required=False,
+                    min_items=0,
+                ),
+            ],
+        )
 
     BASE_URL = "https://pubmed.ncbi.nlm.nih.gov"
     ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
@@ -232,6 +349,7 @@ class EnhancedPubMedClient(WebClient):
             }
         )
 
+        # Configure LLM strategy with chunking according to crawl4ai docs
         self.llm_strategy = LLMExtractionStrategy(
             input_format="html",
             provider=llm_provider,
@@ -250,9 +368,13 @@ class EnhancedPubMedClient(WebClient):
             """,
             temperature=0,
             chunking={
-                "strategy": "sliding_window",
+                "type": "sliding_window",
                 "window_size": 1000,
-                "step": 500,
+                "step_size": 500,
+                "overlap": 0.5,
+                "min_chunk_size": 100,
+                "preprocessing": {"remove_html": True, "normalize_whitespace": True, "preserve_sentences": True},
+                "postprocessing": {"merge_strategy": "union", "dedup_threshold": 0.9, "min_confidence": 0.7},
             },
         )
 
@@ -264,14 +386,9 @@ class EnhancedPubMedClient(WebClient):
             top_k=2,
         )
 
-        # Configure chunking strategies
-        self.sentence_chunker = NlpSentenceChunking()
-        self.sliding_chunker = SlidingWindowChunking(window_size=1000, step=500)
-
         # Configure Crawl4AI
-        self.crawler_config = Config(
-            magic=True,  # Enable anti-bot protection
-            javascript=Config.JavaScript(
+        self.crawler_config = BrowserConfig(
+            javascript=BrowserConfig.JavaScript(
                 enabled=True,
                 wait_for_network=True,
                 wait_for_selectors=[
@@ -281,13 +398,34 @@ class EnhancedPubMedClient(WebClient):
                 ],
                 stealth_mode=True,  # Enable stealth mode
             ),
-            screenshot=Config.Screenshot(enabled=True, full_page=True),
-            proxy=Config.Proxy(
+            screenshot=BrowserConfig.Screenshot(enabled=True, full_page=True),
+            extraction=BrowserConfig.Extraction(
+                llm=BrowserConfig.LLM(
+                    provider=llm_provider,
+                    api_token=api_token,
+                    prompts={
+                        "compounds": "Extract mentioned chemical compounds:",
+                        "effects": "Extract described effects and outcomes:",
+                        "mechanisms": "Extract mechanisms of action:",
+                        "safety": "Extract safety information and warnings:",
+                    },
+                ),
+                css={
+                    "title": ".docsum-title",
+                    "abstract": ".abstract-content",
+                    "authors": ".authors-list",
+                    "journal": ".journal-title",
+                    "year": ".publication-date",
+                    "citations": ".citation-count",
+                    "doi": ".article-doi",
+                },
+            ),
+            proxy=BrowserConfig.Proxy(
                 enabled=proxy_enabled,
                 rotation=proxy_rotation,
                 retry_count=proxy_retry_count,
             ),
-            rate_limit=Config.RateLimit(
+            rate_limit=BrowserConfig.RateLimit(
                 requests_per_minute=rate_limit,
                 delay_after_failure=rate_limit_delay,
             ),
@@ -334,6 +472,63 @@ class EnhancedPubMedClient(WebClient):
 
         except Exception as e:
             raise WebClientError(f"Error searching PubMed papers: {str(e)}")
+
+    async def get_compound_data(
+        self,
+        name: str,
+        cas_number: Optional[str] = None,
+        use_cache: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """Get research data for a compound.
+
+        Args:
+            name: Compound name
+            cas_number: Optional CAS number
+            use_cache: Whether to use cached results
+
+        Returns:
+            Dictionary of research data or None if not found
+        """
+        # Build query
+        query = self._build_compound_query(name, cas_number)
+
+        # Search papers
+        try:
+            papers = await self.search_papers(query)
+            if papers:
+                return {
+                    "papers": papers,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            return None
+        except Exception as e:
+            self.logger.error(f"Error getting compound data: {str(e)}")
+            return None
+
+    async def process_compounds(
+        self,
+        compounds: List[CompoundData],
+        skip_predictions: bool = False,
+        use_cache: bool = True,
+    ) -> None:
+        """Process list of compounds.
+
+        Args:
+            compounds: List of compounds to process
+            skip_predictions: Whether to skip ML predictions
+            use_cache: Whether to use cached results
+        """
+        for compound in compounds:
+            # Get compound data
+            data = await self.get_compound_data(
+                name=compound.name,
+                cas_number=compound.cas_number,
+                use_cache=use_cache,
+            )
+
+            if data:
+                # Update compound with research data
+                compound.research_data = data
 
     async def _search_api(
         self,
@@ -491,63 +686,6 @@ class EnhancedPubMedClient(WebClient):
         except Exception as e:
             raise WebClientError(f"Error getting paper details for PMID {pmid}: {str(e)}")
 
-    async def process_compounds(
-        self,
-        compounds: List[CompoundData],
-        skip_predictions: bool = False,
-        use_cache: bool = True,
-    ) -> None:
-        """Process list of compounds.
-
-        Args:
-            compounds: List of compounds to process
-            skip_predictions: Whether to skip ML predictions
-            use_cache: Whether to use cached results
-        """
-        for compound in compounds:
-            # Get compound data
-            data = await self.get_compound_data(
-                name=compound.name,
-                cas_number=compound.cas_number,
-                use_cache=use_cache,
-            )
-
-            if data:
-                # Update compound with research data
-                compound.research_data = data
-
-    async def get_compound_data(
-        self,
-        name: str,
-        cas_number: Optional[str] = None,
-        use_cache: bool = True,
-    ) -> Optional[Dict[str, Any]]:
-        """Get research data for a compound.
-
-        Args:
-            name: Compound name
-            cas_number: Optional CAS number
-            use_cache: Whether to use cached results
-
-        Returns:
-            Dictionary of research data or None if not found
-        """
-        # Build query
-        query = self._build_compound_query(name, cas_number)
-
-        # Search papers
-        try:
-            papers = await self.search_papers(query)
-            if papers:
-                return {
-                    "papers": papers,
-                    "timestamp": datetime.now().isoformat(),
-                }
-            return None
-        except Exception as e:
-            self.logger.error(f"Error getting compound data: {str(e)}")
-            return None
-
     async def _get_article_data(
         self,
         pmid: str,
@@ -701,20 +839,27 @@ class EnhancedPubMedClient(WebClient):
         try:
             result = await crawler.arun(
                 url=f"{self.BASE_URL}/{pmid}/citations/",
-                config=Config(
-                    javascript=Config.JavaScript(enabled=True),
-                    extraction_strategy=JsonCssExtractionStrategy(
-                        schema={
-                            "baseSelector": ".citation-count",
-                            "fields": [
-                                {
-                                    "name": "citations",
-                                    "selector": "",
-                                    "type": "text",
-                                    "regex": r"(\d+)",
-                                }
-                            ],
-                        }
+                config=BrowserConfig(
+                    javascript=BrowserConfig.JavaScript(
+                        enabled=True,
+                        wait_for_network=True,
+                        wait_for_selectors=[".citation-count"],
+                        stealth_mode=True,
+                    ),
+                    screenshot=BrowserConfig.Screenshot(enabled=True, full_page=True),
+                    extraction=BrowserConfig.Extraction(
+                        css={
+                            "citations": ".citation-count",
+                        },
+                    ),
+                    proxy=BrowserConfig.Proxy(
+                        enabled=True,
+                        rotation=True,
+                        retry_count=3,
+                    ),
+                    rate_limit=BrowserConfig.RateLimit(
+                        requests_per_minute=10,
+                        delay_after_failure=60,
                     ),
                 ),
             )
@@ -732,7 +877,7 @@ class EnhancedPubMedClient(WebClient):
         self,
         crawler: AsyncWebCrawler,
         doi: str,
-        config: Config,
+        config: BrowserConfig,
     ) -> Optional[str]:
         """Get full text from DOI if available.
 
@@ -754,11 +899,10 @@ class EnhancedPubMedClient(WebClient):
             )
 
             if result.extracted_content:
-                # Extract full text using sentence chunking
+                # Extract full text
                 text = result.extracted_content[0].get("full_text", "")
                 if text:
-                    chunks = self.sentence_chunker.chunk(text)
-                    return "\n".join(chunks)
+                    return text
 
             return None
 

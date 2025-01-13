@@ -1,397 +1,296 @@
-"""Base nootropic predictor.
+"""Nootropic effects prediction.
 
-This module provides the core functionality for predicting nootropic properties
-of chemical compounds. It handles:
-1. Model loading and management
-2. Feature extraction and scaling
-3. Basic nootropic predictions
-4. Prediction history tracking
-5. BBB permeability integration
-6. Ensemble model support
+This module provides prediction of nootropic effects for chemical compounds,
+including:
+1. Cognitive enhancement prediction
+2. Memory effects prediction
+3. Focus/attention effects
+4. Neuroprotective effects
+5. Side effect profiling
+6. Mechanism of action prediction
+7. BBB permeability integration
+8. Literature evidence integration
 """
 
 import logging
+import os
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Any, Tuple
 
-import pandas as pd
+import numpy as np
+import torch
+from rdkit import Chem
+from rdkit.Chem import AllChem, Descriptors
 
-from .....models.core import CompoundData
-from .....models.psychopharm import NootropicMechanism
-from ...base import PredictorBase
-from . import model_loading, prediction, features
+from .....models.core import CompoundData, PredictionResult
+from ..base import BasePredictor
+from .features import extract_nootropic_features
+from .model_loading import load_nootropic_models
 
 
-class NootropicPredictorBase(PredictorBase):
-    """Base class for nootropic prediction."""
-
-    # Cognitive domains and specific effects
-    COGNITIVE_DOMAINS = {
-        "memory": {
-            "working_memory",
-            "long_term_memory",
-            "memory_formation",
-            "memory_recall",
-            "memory_consolidation",
-            "spatial_memory",
-            "verbal_memory",
-            "episodic_memory",
-            "procedural_memory",
-        },
-        "attention": {
-            "sustained_attention",
-            "divided_attention",
-            "selective_attention",
-            "attention_switching",
-            "focus",
-            "concentration",
-            "alertness",
-            "vigilance",
-            "mental_clarity",
-        },
-        "learning": {
-            "skill_acquisition",
-            "pattern_recognition",
-            "associative_learning",
-            "cognitive_flexibility",
-            "neuroplasticity",
-            "learning_speed",
-            "error_correction",
-            "habit_formation",
-        },
-        "executive_function": {
-            "planning",
-            "decision_making",
-            "problem_solving",
-            "abstract_thinking",
-            "cognitive_control",
-            "inhibition",
-            "task_switching",
-            "working_memory_updating",
-        },
-        "processing": {
-            "processing_speed",
-            "mental_processing",
-            "cognitive_throughput",
-            "information_processing",
-            "reaction_time",
-            "mental_speed",
-            "cognitive_efficiency",
-        },
-    }
-
-    # Side effect categories
-    SIDE_EFFECTS = {
-        "physical": {
-            "headache",
-            "insomnia",
-            "anxiety",
-            "jitters",
-            "nausea",
-            "appetite_changes",
-            "blood_pressure_changes",
-            "heart_rate_changes",
-        },
-        "cognitive": {
-            "brain_fog",
-            "confusion",
-            "memory_issues",
-            "attention_problems",
-            "mood_changes",
-            "irritability",
-            "mental_fatigue",
-        },
-        "tolerance": {
-            "acute_tolerance",
-            "chronic_tolerance",
-            "withdrawal_effects",
-            "dependence_risk",
-            "rebound_effects",
-        },
-    }
+class NootropicPredictor(BasePredictor):
+    """Predictor for nootropic effects of compounds."""
 
     def __init__(
         self,
-        model_dir: Optional[str] = None,
+        model_dir: str = "../models/nootropic",
         cache_dir: Optional[str] = None,
+        device: str = "cuda" if torch.cuda.is_available() else "cpu",
         log_level: int = logging.INFO,
-        cognitive_domains: Optional[Dict[str, Set[str]]] = None,
-        side_effects: Optional[Dict[str, Set[str]]] = None,
     ):
         """Initialize nootropic predictor.
 
         Args:
-            model_dir: Directory containing model files
-            cache_dir: Directory for caching predictions
+            model_dir: Directory containing trained models
+            cache_dir: Optional directory for caching results
+            device: Device to run models on
             log_level: Logging level
-            cognitive_domains: Custom cognitive domain categories
-            side_effects: Custom side effect categories
         """
-        # Setup logging
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.setLevel(log_level)
-
-        # Add file handler if model_dir provided
-        if model_dir:
-            log_path = Path(model_dir) / "nootropic_predictor.log"
-            fh = logging.FileHandler(log_path)
-            fh.setLevel(log_level)
-            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-            fh.setFormatter(formatter)
-            self.logger.addHandler(fh)
-
-        # Use custom categories if provided
-        self.cognitive_domains = cognitive_domains or self.COGNITIVE_DOMAINS
-        self.side_effects = side_effects or self.SIDE_EFFECTS
-
-        # Initialize base class
         super().__init__(
             model_dir=model_dir,
             cache_dir=cache_dir,
-            feature_types=["fingerprints", "descriptors", "enhanced"],
+            device=device,
+            log_level=log_level,
         )
 
-        # Initialize models and scalers
-        self.models = model_loading.load_models(
-            model_dir=self.model_dir,
-            cognitive_domains=self.cognitive_domains,
-            side_effects=self.side_effects,
-            logger=self.logger,
-        )
-        self.scalers = model_loading.initialize_scalers(
-            feature_types=self.feature_types,
-            cognitive_domains=self.cognitive_domains,
-            side_effects=self.side_effects,
-            logger=self.logger,
+        # Load models
+        self.models = load_nootropic_models(
+            model_dir=model_dir,
+            device=device,
         )
 
-        # Initialize prediction history
-        self.prediction_history = pd.DataFrame(
-            columns=[
-                "compound_name",
-                "nootropic_class",
-                "class_confidence",
-                "domain",
-                "effect",
-                "effect_score",
-                "effect_confidence",
-                "side_effect_category",
-                "side_effect",
-                "risk_score",
-                "risk_confidence",
-                "bbb_permeability",
-                "bbb_confidence",
-                "timestamp",
-            ]
-        )
+        # Initialize feature extraction
+        self.feature_types = ["molecular", "pharmacophore", "binding", "literature", "community"]
 
-        self.logger.info("NootropicPredictorBase initialized successfully")
+        # Effect categories
+        self.effect_categories = {
+            "cognitive": ["memory", "focus", "learning", "reasoning"],
+            "neuroprotective": ["antioxidant", "anti_inflammatory", "neuroplasticity", "neurogenesis"],
+            "side_effects": ["headache", "insomnia", "anxiety", "tolerance"],
+        }
 
-    def predict(self, compound: CompoundData) -> Dict:
-        """Generate nootropic predictions for a compound.
+        # Mechanism categories
+        self.mechanism_types = ["cholinergic", "glutamatergic", "dopaminergic", "serotonergic", "nootropic_unknown"]
 
-        Args:
-            compound: Compound to predict nootropic effects for
-
-        Returns:
-            Dictionary containing:
-            - nootropic_class: Overall nootropic classification
-            - class_confidence: Confidence in classification
-            - cognitive: Predicted cognitive effects
-            - side_effects: Predicted side effects
-            - bbb_prediction: BBB permeability prediction
-        """
-        self.logger.debug(f"Generating predictions for {compound.name}")
-
-        try:
-            # Extract features
-            compound_features = {}
-            for feature_type in self.feature_types:
-                compound_features[feature_type] = features.extract_features(compound, feature_type)
-                shape = compound_features[feature_type].shape
-                feat_msg = f"Extracted {feature_type} features: shape={shape}"
-                self.logger.debug(feat_msg)
-
-            # Predict nootropic class
-            noot_class, class_confidence = prediction.predict_class(
-                self.models["class"],
-                compound_features,
-                self.feature_types,
-                self.scalers,
-                self.logger,
-            )
-            class_msg = f"Nootropic class: {noot_class} (confidence: {class_confidence:.3f})"
-            self.logger.debug(class_msg)
-
-            # Get BBB prediction
-            bbb_result = prediction.predict_bbb(compound, self.logger)
-            pred_part = f"BBB prediction: {bbb_result.value.value}"
-            conf_part = f"(confidence: {bbb_result.confidence:.3f})"
-            self.logger.debug(f"{pred_part} {conf_part}")
-
-            # Predict cognitive effects with BBB integration
-            effect_predictions = prediction.predict_all_effects(
-                compound,
-                self.models,
-                self.cognitive_domains,
-                self.feature_types,
-                self.scalers,
-                noot_class,
-                class_confidence,
-                bbb_result,
-                self.logger,
-            )
-
-            # Predict side effects with BBB integration
-            side_effect_predictions = prediction.predict_all_side_effects(
-                compound,
-                self.models,
-                self.side_effects,
-                self.feature_types,
-                self.scalers,
-                noot_class,
-                class_confidence,
-                bbb_result,
-                self.logger,
-            )
-
-            # Update prediction history
-            self._update_history(
-                compound,
-                noot_class,
-                class_confidence,
-                effect_predictions,
-                side_effect_predictions,
-                bbb_result,
-            )
-
-            return {
-                "nootropic_class": NootropicMechanism(noot_class),
-                "class_confidence": class_confidence,
-                "cognitive": effect_predictions,
-                "side_effects": side_effect_predictions,
-                "bbb_prediction": {
-                    "value": bbb_result.value.value,
-                    "confidence": bbb_result.confidence,
-                    **bbb_result.supporting_data,
-                },
-            }
-
-        except Exception as e:
-            error_msg = f"Error predicting nootropic effects for {compound.name}: {str(e)}"
-            self.logger.error(error_msg, exc_info=True)
-            return {
-                "nootropic_class": NootropicMechanism.UNKNOWN,
-                "class_confidence": 0.0,
-                "error": str(e),
-            }
-
-    def _update_history(
+    def predict(
         self,
         compound: CompoundData,
-        noot_class: str,
-        class_confidence: float,
-        effect_predictions: Dict,
-        side_effect_predictions: Dict,
-        bbb_result: Dict,
-    ) -> None:
-        """Update prediction history with new predictions."""
-        # Add cognitive effect predictions
-        for domain, effects in effect_predictions.items():
-            for effect, data in effects.items():
-                self.prediction_history = pd.concat(
-                    [
-                        self.prediction_history,
-                        pd.DataFrame(
-                            [
-                                {
-                                    "compound_name": compound.name,
-                                    "nootropic_class": noot_class,
-                                    "class_confidence": class_confidence,
-                                    "domain": domain,
-                                    "effect": effect,
-                                    "effect_score": data["score"],
-                                    "effect_confidence": data["confidence"],
-                                    "side_effect_category": None,
-                                    "side_effect": None,
-                                    "risk_score": None,
-                                    "risk_confidence": None,
-                                    "bbb_permeability": bbb_result.value.value,
-                                    "bbb_confidence": bbb_result.confidence,
-                                    "timestamp": pd.Timestamp.now(),
-                                }
-                            ]
-                        ),
-                    ],
-                    ignore_index=True,
-                )
+        include_features: bool = False,
+    ) -> PredictionResult:
+        """Predict nootropic effects for a compound.
 
-        # Add side effect predictions
-        for category, effects in side_effect_predictions.items():
-            for effect, data in effects.items():
-                self.prediction_history = pd.concat(
-                    [
-                        self.prediction_history,
-                        pd.DataFrame(
-                            [
-                                {
-                                    "compound_name": compound.name,
-                                    "nootropic_class": noot_class,
-                                    "class_confidence": class_confidence,
-                                    "domain": None,
-                                    "effect": None,
-                                    "effect_score": None,
-                                    "effect_confidence": None,
-                                    "side_effect_category": category,
-                                    "side_effect": effect,
-                                    "risk_score": data["risk"],
-                                    "risk_confidence": data["confidence"],
-                                    "bbb_permeability": bbb_result.value.value,
-                                    "bbb_confidence": bbb_result.confidence,
-                                    "timestamp": pd.Timestamp.now(),
-                                }
-                            ]
-                        ),
-                    ],
-                    ignore_index=True,
-                )
+        Args:
+            compound: Compound to make predictions for
+            include_features: Whether to include extracted features in result
 
-    def get_prediction_statistics(self) -> pd.DataFrame:
-        """Get statistics about predictions made so far."""
-        stats = pd.DataFrame()
+        Returns:
+            Prediction results including effects and confidence scores
+        """
+        try:
+            # Extract features
+            features = extract_nootropic_features(compound, feature_types=self.feature_types, models=self.models, device=self.device)
 
-        # Nootropic class distribution
-        nootropic_counts = self.prediction_history["nootropic_class"].value_counts(normalize=True)
-        stats["class_dist"] = nootropic_counts
+            # Make predictions
+            predictions = {}
+            confidences = {}
 
-        # Average class confidence
-        class_conf = self.prediction_history.groupby("nootropic_class")["class_confidence"].mean()
-        stats["class_confidence"] = class_conf
+            # Predict effects
+            for category, effects in self.effect_categories.items():
+                predictions[category] = {}
+                confidences[category] = {}
 
-        # Effect score distribution
-        effect_groups = ["domain", "effect"]
-        effect_scores = self.prediction_history.groupby(effect_groups)["effect_score"].mean()
-        stats["effect_score"] = effect_scores
+                for effect in effects:
+                    if category in self.models and effect in self.models[category]:
+                        model = self.models[category][effect]
+                        pred, conf = model.predict(features)
+                        predictions[category][effect] = float(pred)
+                        confidences[category][effect] = float(conf)
 
-        # Effect confidence distribution
-        effect_conf = self.prediction_history.groupby(effect_groups)["effect_confidence"].mean()
-        stats["effect_confidence"] = effect_conf
+            # Predict mechanism
+            mechanism_preds = []
+            mechanism_confs = []
+            for mtype in self.mechanism_types:
+                if "mechanism" in self.models and mtype in self.models["mechanism"]:
+                    model = self.models["mechanism"][mtype]
+                    pred, conf = model.predict(features)
+                    mechanism_preds.append((mtype, float(pred)))
+                    mechanism_confs.append(float(conf))
 
-        # Side effect risk distribution
-        side_effect_groups = ["side_effect_category", "side_effect"]
-        risk_scores = self.prediction_history.groupby(side_effect_groups)["risk_score"].mean()
-        stats["risk_score"] = risk_scores
+            # Get top mechanism prediction
+            if mechanism_preds:
+                top_mechanism = max(mechanism_preds, key=lambda x: x[1])
+                mechanism_confidence = np.mean(mechanism_confs)
+            else:
+                top_mechanism = ("nootropic_unknown", 0.0)
+                mechanism_confidence = 0.0
 
-        # Side effect confidence distribution
-        risk_conf = self.prediction_history.groupby(side_effect_groups)["risk_confidence"].mean()
-        stats["risk_confidence"] = risk_conf
+            # Construct result
+            result = PredictionResult(
+                value=top_mechanism[0],
+                confidence=float(mechanism_confidence),
+                supporting_data={
+                    "effects": predictions,
+                    "effect_confidences": confidences,
+                    "mechanism_probabilities": dict(mechanism_preds),
+                },
+            )
 
-        # BBB permeability distribution
-        bbb_counts = self.prediction_history["bbb_permeability"].value_counts(normalize=True)
-        stats["bbb_permeability"] = bbb_counts
+            if include_features:
+                result.supporting_data["features"] = features
 
-        # Average BBB confidence
-        bbb_conf = self.prediction_history.groupby("bbb_permeability")["bbb_confidence"].mean()
-        stats["bbb_confidence"] = bbb_conf
+            return result
 
-        return stats
+        except Exception as e:
+            self.logger.error(f"Error predicting nootropic effects: {str(e)}")
+            return PredictionResult(value="ERROR", confidence=0.0, supporting_data={"error": str(e)})
+
+    def get_feature_importance(
+        self,
+        effect: Optional[str] = None,
+        mechanism: Optional[str] = None,
+    ) -> Dict[str, float]:
+        """Get feature importance scores.
+
+        Args:
+            effect: Optional specific effect to get importances for
+            mechanism: Optional specific mechanism to get importances for
+
+        Returns:
+            Dictionary of feature names to importance scores
+        """
+        try:
+            importances = {}
+
+            if effect:
+                # Get importance for specific effect
+                category = None
+                for cat, effects in self.effect_categories.items():
+                    if effect in effects:
+                        category = cat
+                        break
+
+                if category and category in self.models and effect in self.models[category]:
+                    model = self.models[category][effect]
+                    importances = model.feature_importance()
+
+            elif mechanism:
+                # Get importance for specific mechanism
+                if mechanism in self.mechanism_types:
+                    if "mechanism" in self.models and mechanism in self.models["mechanism"]:
+                        model = self.models["mechanism"][mechanism]
+                        importances = model.feature_importance()
+
+            else:
+                # Get average importance across all models
+                all_importances = []
+
+                # Effect models
+                for category, effects in self.effect_categories.items():
+                    if category in self.models:
+                        for effect in effects:
+                            if effect in self.models[category]:
+                                model = self.models[category][effect]
+                                all_importances.append(model.feature_importance())
+
+                # Mechanism models
+                if "mechanism" in self.models:
+                    for mtype in self.mechanism_types:
+                        if mtype in self.models["mechanism"]:
+                            model = self.models["mechanism"][mtype]
+                            all_importances.append(model.feature_importance())
+
+                # Average importances
+                if all_importances:
+                    features = set().union(*[set(imp.keys()) for imp in all_importances])
+                    importances = {}
+                    for feature in features:
+                        scores = [imp.get(feature, 0.0) for imp in all_importances]
+                        importances[feature] = float(np.mean(scores))
+
+            return importances
+
+        except Exception as e:
+            self.logger.error(f"Error getting feature importance: {str(e)}")
+            return {}
+
+    def retrain(
+        self,
+        compounds: List[CompoundData],
+        labels: List[str],
+        effects: Dict[str, Dict[str, List[float]]],
+        mechanisms: Optional[Dict[str, List[float]]] = None,
+    ) -> Dict[str, float]:
+        """Retrain models with new data.
+
+        Args:
+            compounds: List of compounds to train on
+            labels: List of mechanism labels
+            effects: Dictionary of effect categories to effects to scores
+            mechanisms: Optional dictionary of mechanism types to scores
+
+        Returns:
+            Dictionary of metric names to scores
+        """
+        try:
+            metrics = {}
+
+            # Extract features
+            features = []
+            for compound in compounds:
+                feat = extract_nootropic_features(compound, feature_types=self.feature_types, models=self.models, device=self.device)
+                features.append(feat)
+
+            # Train effect models
+            for category, effect_dict in effects.items():
+                if category not in self.models:
+                    self.models[category] = {}
+
+                for effect, scores in effect_dict.items():
+                    if effect not in self.models[category]:
+                        self.models[category][effect] = self._create_model()
+
+                    model = self.models[category][effect]
+                    score = model.train(features, scores)
+                    metrics[f"{category}_{effect}_score"] = float(score)
+
+            # Train mechanism models
+            if mechanisms:
+                if "mechanism" not in self.models:
+                    self.models["mechanism"] = {}
+
+                for mtype, scores in mechanisms.items():
+                    if mtype not in self.models["mechanism"]:
+                        self.models["mechanism"][mtype] = self._create_model()
+
+                    model = self.models["mechanism"][mtype]
+                    score = model.train(features, scores)
+                    metrics[f"mechanism_{mtype}_score"] = float(score)
+
+            # Save updated models
+            self._save_models()
+
+            return metrics
+
+        except Exception as e:
+            self.logger.error(f"Error retraining models: {str(e)}")
+            return {"error": str(e)}
+
+    def _create_model(self):
+        """Create a new model instance."""
+        raise NotImplementedError
+
+    def _save_models(self):
+        """Save all models to disk."""
+        try:
+            os.makedirs(self.model_dir, exist_ok=True)
+
+            for category, models in self.models.items():
+                category_dir = os.path.join(self.model_dir, category)
+                os.makedirs(category_dir, exist_ok=True)
+
+                for name, model in models.items():
+                    model_path = os.path.join(category_dir, f"{name}.pt")
+                    torch.save(model.state_dict(), model_path)
+
+        except Exception as e:
+            self.logger.error(f"Error saving models: {str(e)}")

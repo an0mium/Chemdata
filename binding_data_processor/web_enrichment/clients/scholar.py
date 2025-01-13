@@ -18,10 +18,10 @@ import re
 import asyncio
 from collections import deque
 
-from crawl4ai import AsyncWebCrawler, Config
+from crawl4ai import AsyncWebCrawler, BrowserConfig
 from bs4 import BeautifulSoup
 
-from ..base_client import BaseClient
+from ..clients.base import WebClient  # Updated import path
 from ..validation.enhanced import EnhancedValidator
 from ...models.compound import CompoundData
 
@@ -120,7 +120,7 @@ class SessionManager:
             await asyncio.sleep(delay)
 
 
-class EnhancedScholarClient(BaseClient):
+class EnhancedScholarClient(WebClient):  # Updated parent class
     """Enhanced Google Scholar client with anti-bot detection."""
 
     BASE_URL = "https://scholar.google.com"
@@ -163,8 +163,8 @@ class EnhancedScholarClient(BaseClient):
         )
 
         # Configure Crawl4AI with anti-bot detection avoidance
-        self.config = Config(
-            javascript=Config.JavaScript(
+        self.config = BrowserConfig(
+            javascript=BrowserConfig.JavaScript(
                 enabled=True,
                 wait_for_network=True,
                 wait_for_selectors=[
@@ -174,9 +174,9 @@ class EnhancedScholarClient(BaseClient):
                 ],
                 stealth_mode=True,  # Enable stealth mode
             ),
-            screenshot=Config.Screenshot(enabled=True, full_page=True),
-            extraction=Config.Extraction(
-                llm=Config.LLM(
+            screenshot=BrowserConfig.Screenshot(enabled=True, full_page=True),
+            extraction=BrowserConfig.Extraction(
+                llm=BrowserConfig.LLM(
                     provider=llm_provider,
                     api_token=api_token,
                     prompts={
@@ -195,12 +195,12 @@ class EnhancedScholarClient(BaseClient):
                     "citations": ".gs_fl a:contains('Cited by')",
                 },
             ),
-            proxy=Config.Proxy(
+            proxy=BrowserConfig.Proxy(
                 enabled=proxy_enabled,
                 rotation=proxy_rotation,
                 retry_count=proxy_retry_count,
             ),
-            rate_limit=Config.RateLimit(
+            rate_limit=BrowserConfig.RateLimit(
                 requests_per_minute=rate_limit,
                 delay_after_failure=rate_limit_delay,
             ),
@@ -598,8 +598,7 @@ class EnhancedScholarClient(BaseClient):
             # Check if compound is mentioned
             if not any(
                 name.lower() in article.abstract.lower()
-                for name in [compound.name, compound.cas_number, compound.iupac_name]
-                + [compound.common_name_1, compound.common_name_2, compound.common_name_3]
+                for name in [compound.name, compound.cas_number, compound.iupac_name] + [compound.common_name_1, compound.common_name_2, compound.common_name_3]
                 if name and name != "N/A"
             ):
                 return False

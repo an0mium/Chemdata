@@ -1,0 +1,414 @@
+/* Enhanced Responsive CSS Framework for Scientific Applications */
+
+/* Custom Properties for Scientific/Technical UI */
+:root {
+    /* Breakpoints */
+    --breakpoint-xs: 0;
+    --breakpoint-sm: 576px;
+    --breakpoint-md: 768px;
+    --breakpoint-lg: 992px;
+    --breakpoint-xl: 1200px;
+
+    /* Containers */
+    --container-xs: 100%;
+    --container-sm: 540px;
+    --container-md: 720px;
+    --container-lg: 960px;
+    --container-xl: 1140px;
+
+    /* Scientific Data Display */
+    --data-font: "JetBrains Mono", "Fira Code", monospace;
+    --chart-aspect-ratio: 16/9;
+    --plot-line-width: 1.5px;
+    --axis-line-width: 1px;
+    --grid-line-width: 0.5px;
+
+    /* Technical UI Colors */
+    --color-data-primary: rgb(0, 82, 204);
+    --color-data-secondary: rgb(106, 27, 154);
+    --color-data-tertiary: rgb(0, 121, 107);
+    --color-graph-grid: rgba(0, 0, 0, 0.1);
+    --color-annotation: rgba(0, 0, 0, 0.7);
+}
+
+/* High-Performance Container */
+.container {
+    width: 100%;
+    margin-right: auto;
+    margin-left: auto;
+    padding-right: 1rem;
+    padding-left: 1rem;
+    contain: layout style;
+    /* CSS containment for performance */
+}
+
+/* Optimized Media Queries */
+@media (min-width: 576px) {
+    .container {
+        max-width: var(--container-sm);
+        contain: layout style;
+    }
+}
+
+@media (min-width: 768px) {
+    .container {
+        max-width: var(--container-md);
+    }
+}
+
+@media (min-width: 992px) {
+    .container {
+        max-width: var(--container-lg);
+    }
+}
+
+@media (min-width: 1200px) {
+    .container {
+        max-width: var(--container-xl);
+    }
+}
+
+/* Enhanced Grid System with Scientific Data Support */
+.grid {
+    display: grid;
+    gap: 1rem;
+    contain: layout style;
+}
+
+/* Data-Optimized Grid Columns */
+.grid-cols-1 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.grid-cols-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.grid-cols-8 {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.grid-cols-12 {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+/* Scientific Data Grid Layouts */
+.data-grid {
+    display: grid;
+    gap: 1.5rem;
+    font-family: var(--data-font);
+}
+
+.chart-grid {
+    aspect-ratio: var(--chart-aspect-ratio);
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+}
+
+/* Responsive Grid with Performance Optimization */
+@media (min-width: 576px) {
+    .sm\:grid-cols-1 {
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+
+    .sm\:grid-cols-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .sm\:grid-cols-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .sm\:grid-cols-4 {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .sm\:grid-cols-6 {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .sm\:grid-cols-8 {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+    }
+
+    .sm\:grid-cols-12 {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
+}
+
+/* Enhanced Spacing System */
+.gap-0 {
+    gap: 0;
+}
+
+.gap-1 {
+    gap: 0.25rem;
+}
+
+.gap-2 {
+    gap: 0.5rem;
+}
+
+.gap-3 {
+    gap: 0.75rem;
+}
+
+.gap-4 {
+    gap: 1rem;
+}
+
+.gap-6 {
+    gap: 1.5rem;
+}
+
+.gap-8 {
+    gap: 2rem;
+}
+
+.gap-12 {
+    gap: 3rem;
+}
+
+.gap-16 {
+    gap: 4rem;
+}
+
+/* Scientific Data Display Utilities */
+.data-mono {
+    font-family: var(--data-font);
+}
+
+.data-tabular {
+    font-variant-numeric: tabular-nums;
+}
+
+.data-scientific {
+    font-variant-numeric: scientific;
+}
+
+/* Optimized Flex Utilities */
+.flex {
+    display: flex;
+}
+
+.flex-col {
+    flex-direction: column;
+}
+
+.flex-row {
+    flex-direction: row;
+}
+
+.flex-wrap {
+    flex-wrap: wrap;
+}
+
+.flex-nowrap {
+    flex-wrap: nowrap;
+}
+
+.flex-1 {
+    flex: 1 1 0%;
+}
+
+.flex-auto {
+    flex: 1 1 auto;
+}
+
+.flex-initial {
+    flex: 0 1 auto;
+}
+
+.flex-none {
+    flex: none;
+}
+
+/* Enhanced Alignment System */
+.items-start {
+    align-items: flex-start;
+}
+
+.items-center {
+    align-items: center;
+}
+
+.items-end {
+    align-items: flex-end;
+}
+
+.items-stretch {
+    align-items: stretch;
+}
+
+.items-baseline {
+    align-items: baseline;
+}
+
+.justify-start {
+    justify-content: flex-start;
+}
+
+.justify-center {
+    justify-content: center;
+}
+
+.justify-end {
+    justify-content: flex-end;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
+
+.justify-around {
+    justify-content: space-around;
+}
+
+.justify-evenly {
+    justify-content: space-evenly;
+}
+
+/* Scientific Data Visualization Support */
+.chart-container {
+    position: relative;
+    width: 100%;
+    contain: layout size style;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--data-font);
+    font-variant-numeric: tabular-nums;
+}
+
+.data-cell {
+    padding: 0.5rem;
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* Touch Device Optimization */
+@media (hover: none) and (pointer: coarse) {
+    .touch-target {
+        min-height: 44px;
+        min-width: 44px;
+        padding: 0.75rem 1rem;
+    }
+
+    .touch-spacing {
+        gap: 1rem;
+        padding: 1rem;
+    }
+
+    .data-cell {
+        padding: 0.75rem;
+        /* Larger touch targets */
+    }
+}
+
+/* High-DPI Screen Support */
+@media (-webkit-min-device-pixel-ratio: 2),
+(min-resolution: 192dpi) {
+    .chart-container {
+        transform: translateZ(0);
+        /* Force GPU rendering */
+    }
+
+    .data-visualization {
+        image-rendering: crisp-edges;
+    }
+}
+
+/* Print Optimization */
+@media print {
+    .container {
+        max-width: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .grid {
+        display: block;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+
+    .data-table {
+        page-break-inside: avoid;
+        border: 1px solid #000;
+    }
+
+    .chart-container {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+}
+
+/* Accessibility Enhancements */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+    :root {
+        --color-data-primary: #000000;
+        --color-data-secondary: #505050;
+        --color-data-tertiary: #808080;
+        --color-graph-grid: #000000;
+        --color-annotation: #000000;
+    }
+}
+
+/* Performance Optimizations */
+.gpu {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+}
+
+.content-visibility-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 500px;
+}
+
+/* Scientific Data Visualization Enhancements */
+.plot-line {
+    stroke-width: var(--plot-line-width);
+    vector-effect: non-scaling-stroke;
+}
+
+.axis-line {
+    stroke-width: var(--axis-line-width);
+    shape-rendering: crispEdges;
+}
+
+.grid-line {
+    stroke-width: var(--grid-line-width);
+    stroke: var(--color-graph-grid);
+}
+
+.data-annotation {
+    font-family: var(--data-font);
+    fill: var(--color-annotation);
+    font-size: 0.875rem;
+}

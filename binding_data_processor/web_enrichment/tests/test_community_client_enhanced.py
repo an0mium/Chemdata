@@ -8,9 +8,9 @@ from datetime import datetime
 
 import responses
 
-from ..community_client_enhanced import CommunityClientEnhanced
+from ..clients.community import CommunityClient as CommunityClientEnhanced
 from ...models.compound import Compound
-from ...pipeline.infrastructure.circuit_breaker import CircuitConfig
+from ...pipeline.infrastructure.circuit_breaker import CircuitBreakerConfig
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def client(tmp_path):
     """Create test client."""
     return CommunityClientEnhanced(
         cache_dir=tmp_path / "cache",
-        circuit_config=CircuitConfig(
+        circuit_config=CircuitBreakerConfig(
             failure_threshold=2,
             failure_timeout=1,
             reset_timeout=1,
@@ -185,7 +185,7 @@ def test_get_cached_psychonaut_data(client, compound, tmp_path):
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
     cache_file = cache_dir / f"psychonaut_{compound.name}.json"
-    
+
     data = {
         "name": "Test Compound",
         "effects": ["Test Effect"],
@@ -210,7 +210,7 @@ def test_get_cached_tripsit_data(client, compound, tmp_path):
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
     cache_file = cache_dir / f"tripsit_{compound.name}.json"
-    
+
     data = {
         "name": "Test Compound",
         "properties": {"test": "value"},
@@ -235,7 +235,7 @@ def test_get_cached_erowid_data(client, compound, tmp_path):
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
     cache_file = cache_dir / f"erowid_{compound.name}.json"
-    
+
     data = {
         "reports": [
             {
